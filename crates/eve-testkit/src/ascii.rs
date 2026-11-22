@@ -1,7 +1,8 @@
 //! ASCII の Frame (docs/09 §3.4)。シナリオのスナップショットに使う、`Frame` の読みやすい文字列表現。
 //!
 //! 各行を 1 行の文字列にする。全角など幅 2 以上の文字は 1 文字として出し、継続セルは出さない。
-//! 反転表示 (選択) の連続は `«` `»` で囲む。ガターは `show_gutter` で出す。末尾は主カーソルの位置 `cursor: (col,row)`。
+//! 反転表示 (選択) の連続は `«` `»` で囲む。ガターは `show_gutter` で出す。末尾は主カーソルの位置 `cursor: (col,row)` と、
+//! フォーカスのペインに主でないカーソルがあるときの `secondary: (col,row) …` (03 §4.5.5)。
 
 use eve_view::{Frame, StyleMods};
 
@@ -12,7 +13,7 @@ pub struct AsciiOptions {
     pub show_gutter: bool,
     /// 反転表示 (選択) の連続を `«` `»` で囲む。
     pub mark_selection: bool,
-    /// 末尾に主カーソルの位置 `cursor: (col,row)` の行を出す。
+    /// 末尾に主カーソルの位置 `cursor: (col,row)` の行と、主でないカーソルの `secondary:` の行 (あれば) を出す。
     pub show_cursor: bool,
     /// ステータス・ヒント・メッセージ行を末尾に出す。
     pub show_chrome: bool,
@@ -520,6 +521,38 @@ pub fn render_ascii(frame: &Frame, opts: AsciiOptions) -> String {
     {
         out.push_str(&format!("cursor: ({},{})\n", c.pos.col, c.pos.row));
     }
+    if opts.show_cursor {
+        let secondary = secondary_cursors(frame);
+        if !secondary.is_empty() {
+            let cells: Vec<String> = secondary
+                .iter()
+                .map(|p| format!("({},{})", p.col, p.row))
+                .collect();
+            out.push_str(&format!("secondary: {}\n", cells.join(" ")));
+        }
+    }
+    out
+}
+
+/// フォーカスのペインの主でないカーソル (03 §4.5.5)。`PaneFrame.cursors` に `rect` の位置を足した編集面の座標で、
+/// `primary_cursor` に当たるものを除き、行・列の順に並べる。オーバーレイ・検索バーの間 (`focused` が偽) は出さない
+/// (TUI がカーソルを描かないのと同じ)。
+pub fn secondary_cursors(frame: &Frame) -> Vec<eve_view::CellPos> {
+    let primary = frame.primary_cursor.map(|c| c.pos);
+    let mut out: Vec<eve_view::CellPos> = frame
+        .panes
+        .iter()
+        .filter(|p| p.focused)
+        .flat_map(|p| {
+            p.cursors.iter().map(move |c| eve_view::CellPos {
+                col: p.rect.col.saturating_add(c.col),
+                row: p.rect.row.saturating_add(c.row),
+            })
+        })
+        .filter(|c| Some(*c) != primary)
+        .collect();
+    out.sort_by_key(|c| (c.row, c.col));
+    out.dedup();
     out
 }
 
@@ -645,6 +678,52 @@ mod tests {
             render_ascii(&f, AsciiOptions::default()),
             "ab   wxyz\n     q\n"
         );
+    }
+
+    #[test]
+    fn 主でないカーソルは_secondary_の行に編集面の座標で行と列の順に出す() {
+        let pane = |view, col, cursors: Vec<CellPos>, focused| PaneFrame {
+            view: ViewId(view),
+            rect: CellRect {
+                col,
+                row: 1,
+                cols: 4,
+                rows: 2,
+            },
+            revision: Default::default(),
+            gutter_width: 0,
+            rows: vec![row(vec![]), row(vec![])],
+            cursors,
+            focused,
+            active: focused,
+            bar: None,
+        };
+        let at = |col, row| CellPos { col, row };
+        let mut f = frame(vec![]);
+        f.size = CellSize { cols: 9, rows: 3 };
+        // フォーカスのペイン (列 5 から): 主は (6,2) = ペインの (1,1)。ほかのペインのカーソルは出さない
+        f.panes = vec![
+            pane(1, 0, vec![at(0, 0)], false),
+            pane(2, 5, vec![at(2, 1), at(1, 1), at(3, 0)], true),
+        ];
+        f.primary_cursor.as_mut().expect("主のカーソル").pos = at(6, 2);
+        let out = render_ascii(&f, AsciiOptions::default());
+        assert!(
+            out.ends_with("cursor: (6,2)\nsecondary: (8,1) (7,2)\n"),
+            "{out}"
+        );
+        // 主が画面の外でも出す
+        f.primary_cursor = None;
+        let out = render_ascii(&f, AsciiOptions::default());
+        assert!(out.ends_with("secondary: (8,1) (6,2) (7,2)\n"), "{out}");
+        // オーバーレイの間 (`focused` が偽) と、主でないカーソルが無いときは出さない
+        f.panes[1].focused = false;
+        assert!(!render_ascii(&f, AsciiOptions::default()).contains("secondary"));
+        f.panes[1].focused = true;
+        f.panes[1].cursors = vec![at(1, 1)];
+        f.primary_cursor = frame(vec![]).primary_cursor;
+        f.primary_cursor.as_mut().expect("主のカーソル").pos = at(6, 2);
+        assert!(!render_ascii(&f, AsciiOptions::default()).contains("secondary"));
     }
 
     #[test]

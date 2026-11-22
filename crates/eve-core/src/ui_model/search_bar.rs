@@ -1037,7 +1037,7 @@ impl EditorState {
     }
 
     /// 探さない理由をメッセージ行に text と hint で出す (03 §12.3.1、04 §8.4)。
-    fn show_limit_message(&mut self, l: ScanLimit) {
+    pub(crate) fn show_limit_message(&mut self, l: ScanLimit) {
         let (key, _, args) = limit_message(l);
         let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
         self.show_message(MessageLevel::Warn, key, &args);

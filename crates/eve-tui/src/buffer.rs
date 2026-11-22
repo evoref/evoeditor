@@ -276,6 +276,34 @@ fn mark_cursors(w: &mut Writer<'_>, pane: &PaneFrame, top: u16) {
     }
 }
 
+/// フォーカスのペイン `pane` の主でないカーソル (03 §4.5.5、04 §9) のセルの反転を切り替え、下線を足す。`primary` は
+/// `Frame.primary_cursor` の位置 (編集面の座標)。それに当たるセルは主のカーソル (ハードウェアカーソル) なので描かない。
+/// 下線は、前向きの選択の `head` (選択の直後のセル) の反転が、無色の段で選択の続きに見えないようにするため。
+fn mark_secondary_cursors(
+    w: &mut Writer<'_>,
+    pane: &PaneFrame,
+    primary: Option<CellPos>,
+    top: u16,
+) {
+    let r = pane.rect;
+    for c in &pane.cursors {
+        if c.col >= r.cols || c.row >= r.rows {
+            continue;
+        }
+        let at = CellPos {
+            col: r.col + c.col,
+            row: r.row + c.row,
+        };
+        if Some(at) == primary {
+            continue;
+        }
+        if let Some(cell) = w.buf.cell_mut((at.col, top + at.row)) {
+            cell.modifier.toggle(Modifier::REVERSED);
+            cell.modifier.insert(Modifier::UNDERLINED);
+        }
+    }
+}
+
 /// Frame の編集面を Buffer に書く (端末の大きさが分からないとき。行の割り当ては `ScreenLayout::for_frame` で推す)。
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
     render_panes_in(frame, ScreenLayout::for_frame(frame), depth, glyphs)
@@ -323,6 +351,9 @@ pub fn render_panes_in(
             if !pane.active {
                 // フォーカスの無いペインのカーソルは反転のセルで示す (ハードウェアカーソルはフォーカスのペインだけ、04 §9)
                 mark_cursors(&mut w, pane, top);
+            } else if pane.focused {
+                // フォーカスのペインの主でないカーソルは反転と下線 (オーバーレイ・検索バーの間は描かない、04 §9)
+                mark_secondary_cursors(&mut w, pane, frame.primary_cursor.map(|c| c.pos), top);
             }
             // 見出し (ペインが 2 つ以上のとき、04 §3.4 (f))
             crate::chrome::pane_bar::render_pane_bar(&mut w, pane, top, &theme, glyphs);

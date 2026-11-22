@@ -312,9 +312,25 @@ title = "Search Workspace"
 description = "Toggle searching only within the selection made before opening the search bar."
 title = "Toggle In Selection"
 
+[cmd.select.add_cursor_above]
+description = "Add a cursor on the line above the topmost cursor."
+title = "Add Cursor Above"
+
+[cmd.select.add_cursor_below]
+description = "Add a cursor on the line below the bottommost cursor."
+title = "Add Cursor Below"
+
+[cmd.select.add_next_match]
+description = "Add the next occurrence of the selected text as another cursor (selects the word first if nothing is selected)."
+title = "Add Next Match to Selection"
+
 [cmd.select.all]
 description = "Select the whole document."
 title = "Select All"
+
+[cmd.select.all_matches]
+description = "Select every occurrence of the selected text, with a cursor at each."
+title = "Select All Matches"
 
 [cmd.select.extend_down]
 description = "Extend the selection down one line."
@@ -470,8 +486,11 @@ reload_unchanged = "Reloaded the settings (nothing changed)"
 reloaded = "Reloaded the settings. {count} items changed: {keys}"
 unsupported = "{item} is not supported in this version and was ignored"
 
+[info.cursor]
+limit = "Up to {limit} cursors; selection unchanged"
+
 [info.eol]
-converted = "Converted {count} line endings to {eol} (undo restores them)"
+converted ="Converted {count} line endings to {eol} (undo restores them)"
 unchanged = "Line endings are already {eol}"
 
 [info.goto_line]
@@ -556,8 +575,13 @@ done = "Saved {saved} documents"
 done_skipped = "Saved {saved} documents. {skipped} untitled or read-only documents were not saved"
 none = "No documents to save"
 
+[info.select]
+no_more_matches = "No more matches"
+no_word = "No word at the cursor"
+too_many_matches = "More than {limit} matches; selection unchanged"
+
 [info.search]
-no_selection = "There is no selection. Select text, then open the search bar"
+no_selection ="There is no selection. Select text, then open the search bar"
 replace_empty_query = "Enter the text to search for"
 replace_no_match = "Nothing to replace"
 replaced = "Replaced {count} matches (undo restores them)"
@@ -729,6 +753,10 @@ text = "There is no text key named {item}"
 [msg.config.locale_unreadable]
 hint = "Check that it is a readable file"
 text = "This language file is not used because it cannot be read: {reason}"
+
+[msg.config.multi_cursor_always]
+hint = "To turn them off, set the keys of the add commands to \"none\" in keymap.toml"
+text = "editor.multi_cursor is not supported; multiple cursors are always available"
 
 [msg.config.out_of_range]
 hint = "Specify a value in {range}. This item uses {default}"
@@ -1529,6 +1557,7 @@ compat_yen_key = "The Â¥ key often types \\ (U+005C), which is not folded with Â
 ime = "While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter"
 chord = "Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels"
 alt = "On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives"
+multi_cursor_paste = "To paste one line per cursor, use Ctrl+K V (a short terminal paste cannot be split per cursor)"
 stdin_keys = "When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input"
 stdin_redraw = "If the writer's error output garbles the screen, redraw it with {key:ui.redraw}"
 stdin_powershell = "Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\""

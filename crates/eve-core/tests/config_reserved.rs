@@ -8,7 +8,9 @@
 
 use std::collections::BTreeSet;
 
-use eve_config::reserved::{CONDITIONAL_SECTIONS, RESERVED_KEYS, RESERVED_SECTIONS};
+use eve_config::reserved::{
+    ALWAYS_ON_KEYS, CONDITIONAL_SECTIONS, RESERVED_KEYS, RESERVED_SECTIONS,
+};
 use eve_docs_tables::{identifiers, section, strip_parentheticals, tables_in};
 
 const DOC: &str = include_str!("../../../docs/07-config-extensibility.md");
@@ -91,7 +93,15 @@ fn 公開前のキーは_07_の_5_の表の公開キー以外のキーと一致�
     let public = public_keys();
     let missing: Vec<&String> = public.iter().filter(|k| !spec_keys.contains(*k)).collect();
     assert!(missing.is_empty(), "07 §5 の表に無い公開キー: {missing:?}");
-    let want: Vec<&String> = spec_keys.difference(&public).collect();
+    // 公開しない、常に有効の機能のキー (07 §5.1 の P 列が「公開しない」) は、公開前のキーとは別の一覧に置く
+    for k in ALWAYS_ON_KEYS {
+        assert!(spec_keys.contains(*k), "07 §5 の表に無い: {k}");
+        assert!(!public.contains(*k), "公開キーではない: {k}");
+    }
+    let want: Vec<&String> = spec_keys
+        .difference(&public)
+        .filter(|k| !ALWAYS_ON_KEYS.contains(&k.as_str()))
+        .collect();
     let have: Vec<&str> = RESERVED_KEYS.to_vec();
     let mut sorted = have.clone();
     sorted.sort_unstable();
@@ -176,5 +186,38 @@ fn 設定キーでない名前は警告になる() {
         let d = &l.diagnostics[0];
         assert_eq!(d.key, key);
         assert_eq!(d.severity, eve_config::Severity::Warning, "{text}");
+    }
+}
+
+#[test]
+fn editor_multi_cursor_を書くと専用の情報診断になり値を使わない() {
+    // 07 §5.1 (M32 の段 3): 公開しない。「このバージョンでは未対応」ではなく、複数カーソルは常に有効と示す
+    for text in [
+        "[editor]\nmulti_cursor = false\n",
+        "[editor]\nmulti_cursor = true\n",
+        "editor.multi_cursor = 1\n",
+    ] {
+        let l = eve_config::load_str(text);
+        assert_eq!(l.config, eve_config::Config::default(), "{text}");
+        assert_eq!(l.diagnostics.len(), 1, "{text}: {:?}", l.diagnostics);
+        let d = &l.diagnostics[0];
+        assert_eq!(d.key, "editor.multi_cursor");
+        assert_eq!(d.severity, eve_config::Severity::Info, "{text}");
+        assert_eq!(d.kind, eve_config::DiagKind::MultiCursorAlways, "{text}");
+        assert_eq!(eve_core::config_diagnostic_kind(d), "multi_cursor_always");
+        for (cat, want) in [
+            (
+                eve_config::Catalog::builtin_ja(),
+                "editor.multi_cursor は使えません。複数カーソルは常に有効です",
+            ),
+            (
+                eve_config::Catalog::builtin_en(),
+                "editor.multi_cursor is not supported; multiple cursors are always available",
+            ),
+        ] {
+            let (body, action) = eve_core::config_diagnostic_texts(cat, d);
+            assert_eq!(body, want);
+            assert!(action.contains("keymap.toml"), "対処: {action}");
+        }
     }
 }

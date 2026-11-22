@@ -757,9 +757,47 @@ fn pane_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     }
 }
 
+/// カーソルを足すコマンドを 1 つ以上 (docs/03 §4.5.1、§4.7.1 の fuzz。v0.5 の M32 の段 3)。次の一致を足す・すべて選ぶ・上下に
+/// 足すを 1〜8 回実行し (ときどき検索のジョブを走らせる)、続けて `esc`・文字の入力・ジョブの実行のどれかをする。
+fn add_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const CMDS: [&str; 4] = [
+        "select.add_next_match",
+        "select.all_matches",
+        "select.add_cursor_above",
+        "select.add_cursor_below",
+    ];
+    let n = 1 + usize::from(b.u8() % 8);
+    let mut done = Vec::with_capacity(n);
+    for _ in 0..n {
+        let id = CMDS[usize::from(b.u8()) % CMDS.len()];
+        h.cmd(id);
+        done.push(id);
+        if b.u8() & 3 == 0 {
+            h.run_jobs();
+        }
+    }
+    let what = format!("add_cursor {done:?}");
+    match b.u8() % 4 {
+        0 => {
+            h.keys("escape");
+            format!("{what} + esc")
+        }
+        1 => {
+            let t = b.text(4);
+            h.text(&t);
+            format!("{what} + text {t:?}")
+        }
+        2 => {
+            h.run_jobs();
+            format!("{what} + run_jobs")
+        }
+        _ => what,
+    }
+}
+
 /// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
 /// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
-/// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは段 3 で、`cmd` の一覧の外の操作として足す)。
+/// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは `cmd` の一覧の外の操作 26 で選ぶ)。
 fn multi_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     const EDITS: &[&str] = &[
         "edit.insert_text",
@@ -974,9 +1012,19 @@ pub fn editor_sequence(data: &[u8]) {
         .registry()
         .iter()
         .map(|s| s.id.as_str().to_owned())
-        // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で選ぶ
-        // (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
-        .filter(|id| !id.starts_with("app.quit") && !id.starts_with("pane."))
+        // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
+        // コマンドは操作 26 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
+        .filter(|id| {
+            !id.starts_with("app.quit")
+                && !id.starts_with("pane.")
+                && !matches!(
+                    id.as_str(),
+                    "select.add_next_match"
+                        | "select.all_matches"
+                        | "select.add_cursor_above"
+                        | "select.add_cursor_below"
+                )
+        })
         .collect();
     let mut revs = BTreeMap::new();
     // 遅い読込で開いたパスと、開いた時点の中身 (先行表示の不変条件の検査に使う)
@@ -997,7 +1045,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 26 {
+        match b.u8() % 27 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1149,6 +1197,11 @@ pub fn editor_sequence(data: &[u8]) {
             25 => {
                 // 複数カーソル (v0.5 の M32 の段 2。docs/03 §4.5): 複数の Range を置き、既存の編集を 1 つ
                 let what = multi_cursor_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            26 => {
+                // カーソルを足すコマンド (v0.5 の M32 の段 3。docs/03 §4.5.1)
+                let what = add_cursor_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

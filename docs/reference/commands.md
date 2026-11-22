@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 105 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 109 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -46,7 +46,7 @@
 | `edit.move_line_up` | 行を上へ移動 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Alt+↑`, `Ctrl+K ↑` | 出す |
 | `edit.newline` | 改行 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Enter` | 出す |
 | `edit.outdent` | インデント解除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Shift+Tab` | 出す |
-| `edit.paste` | 貼り付け | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+V`, `Shift+Insert`<br>`prompt`: `Ctrl+V`, `Shift+Insert` | 出す |
+| `edit.paste` | 貼り付け | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+V`, `Shift+Insert`, `Ctrl+K V`<br>`prompt`: `Ctrl+V`, `Shift+Insert` | 出す |
 | `edit.redo` | やり直し | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Y`, `Ctrl+Shift+Z` [E] | 出す |
 | `edit.undo` | 元に戻す | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Z` | 出す |
 | `file.check_external_changes` | 外部変更の確認 | File | — | `doc.has_path` | `-` | — | 出す |
@@ -86,7 +86,11 @@
 | `search.toggle_selection` | 選択範囲内を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+L`, `Ctrl+K L` | 出す |
 | `search.toggle_word` | 単語単位を切替 | Ui | — | `search.active \|\| overlay.active == "workspace_search"` | `ui` | `search`: `Alt+W`, `Ctrl+K B`<br>`finder`: `Alt+W`, `Ctrl+K B` | 出す |
 | `search.workspace` | ワークスペースを検索 | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+Shift+F` [E], `Ctrl+K F`<br>`search`: `Ctrl+Shift+F` [E], `Ctrl+K F` | 出す |
+| `select.add_cursor_above` | 上の行にカーソルを追加 | Motion | — | — | `read` | `editor`: `Ctrl+Alt+↑`, `Ctrl+K Shift+↑` | 出す |
+| `select.add_cursor_below` | 下の行にカーソルを追加 | Motion | — | — | `read` | `editor`: `Ctrl+Alt+↓`, `Ctrl+K Shift+↓` | 出す |
+| `select.add_next_match` | 次の一致を選択に追加 | Motion | — | — | `read` | `editor`: `Ctrl+D` | 出す |
 | `select.all` | すべて選択 | Motion | — | — | `read` | `editor`: `Ctrl+A`<br>`prompt`: `Ctrl+A` | 出す |
+| `select.all_matches` | 一致をすべて選択 | Motion | — | — | `read` | `editor`: `Ctrl+Shift+L` [E], `Ctrl+K E` | 出す |
 | `select.extend_down` | 下へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Shift+↓` | 出す |
 | `select.extend_end` | 行末まで選択 | Motion | — | — | `read` | `editor`: `Shift+End`, `Ctrl+K Shift+→` | 出す |
 | `select.extend_home` | 行頭まで選択 | Motion | — | — | `read` | `editor`: `Shift+Home`, `Ctrl+K Shift+←` | 出す |

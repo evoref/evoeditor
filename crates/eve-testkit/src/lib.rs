@@ -21,7 +21,7 @@ pub mod scenario;
 mod stdin;
 mod virtual_screen;
 
-pub use ascii::{AsciiOptions, render_ascii, tab_line_text};
+pub use ascii::{AsciiOptions, render_ascii, secondary_cursors, tab_line_text};
 pub use clock::ManualClock;
 /// `Harness::with_locale` に渡す言語 (eve-config に依存しない crate の試験からも使えるように)。
 pub use eve_config::Locale;

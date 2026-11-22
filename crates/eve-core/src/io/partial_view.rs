@@ -542,6 +542,8 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::SwapRead { doc, .. }
         | Pending::Save { doc, .. } => Some(*doc),
         Pending::ConvertEol(c) => Some(c.doc),
+        Pending::AddNextMatch(ask) => Some(ask.doc()),
+        Pending::SelectAllMatches(ask) => Some(ask.doc()),
         Pending::ReplaceUnmappable { ask, .. } => Some(ask.doc),
         Pending::SaveAsTarget(ask) => Some(ask.doc),
         Pending::WriteRecovery { release, .. } => *release,

@@ -16,6 +16,7 @@ pub(crate) use input_field::field_selection;
 pub(crate) use prompt::{PromptKind, PromptState};
 pub(crate) use quit_chain::{ChoiceDef, ConfirmAction, ConfirmState, Continuation, QuitChain};
 
+use eve_text::Selection;
 use eve_view::{EditorEvent, OverlayKind};
 
 use crate::command::{CommandResult, RejectReason};
@@ -193,8 +194,33 @@ impl EditorState {
         }
         if self.take_overlay().is_some() {
             self.mark_dirty_render();
+            return CommandResult::Done;
         }
+        self.cancel_selection();
         CommandResult::Done
+    }
+
+    /// `Esc` の最後の 2 段 (04 §7.5): 複数カーソルなら主の Range だけを残し (主の選択は残す。03 §4.5.1 の MCUR-5)、Range が
+    /// 1 つで選択があれば選択を解いて head の空のカーソルにする。「単語の一致」の印は残す (MCUR-2 (e))。
+    fn cancel_selection(&mut self) {
+        let Some(view) = self.focused_view() else {
+            return;
+        };
+        let Some(sel) = self.view(view).map(|v| v.selection.clone()) else {
+            return;
+        };
+        let primary = *sel.primary();
+        let next = if sel.len() >= 2 {
+            Selection::single(primary)
+        } else if !primary.is_empty() {
+            Selection::single(primary.collapse_to_head())
+        } else {
+            return;
+        };
+        let word = self.word_mark_valid(view);
+        self.set_selection(view, next);
+        self.set_word_mark(view, word);
+        self.ensure_cursor_visible(view);
     }
 
     /// `ui.list_next` / `ui.list_prev`: 確認のフォーカスを移す (折り返す)。

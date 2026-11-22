@@ -29,26 +29,113 @@ fn check_invariants(s: &Selection, len: usize) {
     for r in rs {
         assert!(r.anchor.0 <= len && r.head.0 <= len, "N6: {r:?} > {len}");
     }
-    for (i, w) in rs.windows(2).enumerate() {
+    for w in rs.windows(2) {
         let (a, b) = (w[0], w[1]);
         assert!(a.start() <= b.start(), "N2: {a:?} {b:?}");
         match (a.is_empty(), b.is_empty()) {
             (false, false) => assert!(a.end() < b.start(), "N3 非空同士: {a:?} {b:?}"),
             (true, true) => assert!(a.start() < b.start(), "N3 空同士: {a:?} {b:?}"),
+            // N4: 空のカーソルは非空の Range の端にも残らない (主のカーソルも併合される)
             (true, false) => {
                 assert!(
-                    a.start() < b.start() || i == s.primary_index(),
+                    a.start() < b.start(),
                     "N4: 空のカーソルが非空の端にある: {a:?} {b:?}"
                 );
             }
             (false, true) => {
                 assert!(
-                    a.end() < b.start() || i + 1 == s.primary_index(),
+                    a.end() < b.start(),
                     "N4: 空のカーソルが非空の端にある: {a:?} {b:?}"
                 );
             }
         }
     }
+}
+
+/// `merged` の参照モデル (03 §4.4 の N2〜N6 をそのまま書いたもの。実装の掃き出しとは別の、組を繰り返し併合する形)。
+/// 結果は (start 昇順の (anchor, head) の並び, 主の番号)。
+fn reference_merged(
+    raw: &[(usize, usize)],
+    primary: usize,
+    len: usize,
+) -> (Vec<(usize, usize)>, usize) {
+    let clamp = |p: usize| p.min(len);
+    // 非空の Range の組: (start, end, 元の番号の並び)。重なる・接するものを、変わらなくなるまで併合する (N3)
+    let mut groups: Vec<(usize, usize, Vec<usize>)> = raw
+        .iter()
+        .enumerate()
+        .map(|(i, &(a, h))| (clamp(a.min(h)), clamp(a.max(h)), vec![i]))
+        .filter(|(s, e, _)| s < e)
+        .collect();
+    loop {
+        let pair = (0..groups.len()).find_map(|i| {
+            (i + 1..groups.len())
+                .find(|&j| groups[i].0 <= groups[j].1 && groups[j].0 <= groups[i].1)
+                .map(|j| (i, j))
+        });
+        let Some((i, j)) = pair else { break };
+        let (s, e, members) = groups.remove(j);
+        let g = &mut groups[i];
+        g.0 = g.0.min(s);
+        g.1 = g.1.max(e);
+        g.2.extend(members);
+    }
+    groups.sort_by_key(|g| (g.0, g.1));
+    // 向き: 主を含めば主の向き、含まなければ元の Range のうち (start, end) の最小のもの (同じなら入力の順) の向き
+    let forward = |i: usize| raw[i].1 >= raw[i].0;
+    let mut out: Vec<((usize, usize), bool)> = groups
+        .iter()
+        .map(|(s, e, members)| {
+            let lead = if members.contains(&primary) {
+                primary
+            } else {
+                *members
+                    .iter()
+                    .min_by_key(|&&m| {
+                        (
+                            clamp(raw[m].0.min(raw[m].1)),
+                            clamp(raw[m].0.max(raw[m].1)),
+                            m,
+                        )
+                    })
+                    .expect("組は空でない")
+            };
+            let r = if forward(lead) { (*s, *e) } else { (*e, *s) };
+            (r, members.contains(&primary))
+        })
+        .collect();
+    // 空のカーソル (N4): 非空の `[start, end]` にあれば捨てる。主なら、その Range を主にし、端ならカーソルの側を head に
+    let mut points: Vec<(usize, bool)> = Vec::new();
+    for (i, &(a, h)) in raw.iter().enumerate() {
+        let p = clamp(a);
+        if clamp(h) != p {
+            continue;
+        }
+        let is_primary = i == primary;
+        if let Some((r, prim)) = out
+            .iter_mut()
+            .find(|((x, y), _)| (*x).min(*y) <= p && p <= (*x).max(*y))
+        {
+            if is_primary {
+                let (s, e) = (r.0.min(r.1), r.0.max(r.1));
+                *prim = true;
+                if p == e {
+                    *r = (s, e);
+                } else if p == s {
+                    *r = (e, s);
+                }
+            }
+            continue;
+        }
+        match points.iter_mut().find(|(q, _)| *q == p) {
+            Some((_, prim)) => *prim |= is_primary,
+            None => points.push((p, is_primary)),
+        }
+    }
+    out.extend(points.into_iter().map(|(p, prim)| ((p, p), prim)));
+    out.sort_by_key(|((a, h), _)| ((*a).min(*h), (*a).max(*h)));
+    let primary = out.iter().position(|(_, p)| *p).unwrap_or(0);
+    (out.into_iter().map(|(r, _)| r).collect(), primary)
 }
 
 proptest! {
@@ -60,6 +147,14 @@ proptest! {
         let s = build(&rs, primary).merged(LEN);
         check_invariants(&s, LEN);
         prop_assert_eq!(s.clone().merged(LEN), s);
+    }
+
+    #[test]
+    fn 併合は参照モデルと一致する(raw in raw_selection()) {
+        let (rs, primary) = raw;
+        let s = build(&rs, primary).merged(LEN);
+        let got: Vec<(usize, usize)> = s.iter().map(|r| (r.anchor.0, r.head.0)).collect();
+        prop_assert_eq!((got, s.primary_index()), reference_merged(&rs, primary, LEN), "{:?} 主 {}", rs, primary);
     }
 
     #[test]

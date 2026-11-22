@@ -45,7 +45,7 @@ impl Motion {
     }
 }
 
-fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
+pub(crate) fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
     let w = ctx.state.focused_window()?;
     let v = ctx.state.window_view(w)?;
     Some((v, ctx.state.view(v)?.doc))
@@ -102,7 +102,7 @@ pub(crate) fn word_stop(doc: &Document, p: ByteOff, forward: bool) -> ByteOff {
 }
 
 /// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None`。
-type Wrap = Option<(WrapSettings, usize)>;
+pub(crate) type Wrap = Option<(WrapSettings, usize)>;
 
 /// 1 回の移動。`goal` は垂直移動の目標列 (未設定なら現在の表示列で初期化する)。
 /// 折り返し ON では、垂直移動は表示行を 1 つ動き、`goal` は表示行内の画面上の列になる (03 §14.3.1)。
@@ -230,6 +230,44 @@ fn step_rows(
     let (rel, a) = lr.at_col(r, g as usize);
     *aff = a;
     ByteOff(lr.ls + rel)
+}
+
+/// 上下の移動を 1 回した位置 (03 §4.5.1 の MCUR-4。カーソルを上下に足す操作が使う)。`goal` は目標の表示列 (未設定なら
+/// `p` の表示列で埋める)、`aff` は折り返し位置の帰属 (移動の前の値を読み、移動の後の値を書く)。文書の先頭の行 (`up`) /
+/// 最後の行 (折り返し ON では先頭 / 最後の表示行) にいれば `None` (上下の移動のように文書の端へ寄せない)。
+pub(crate) fn vertical_neighbor(
+    doc: &Document,
+    goal: &mut Option<u32>,
+    aff: &mut Affinity,
+    p: ByteOff,
+    up: bool,
+    wrap: Wrap,
+) -> Option<ByteOff> {
+    let (line, ls, _) = line_of(doc, p);
+    let last_line = doc.text().len_lines().saturating_sub(1);
+    let at_edge = match wrap {
+        Some((s, cols)) => {
+            let lr = line_rows(doc, line, s, cols);
+            let (r, _) = lr.locate(p.0 - ls, *aff);
+            if up {
+                line == 0 && r == 0
+            } else {
+                line == last_line && r + 1 == lr.len()
+            }
+        }
+        None => {
+            if up {
+                line == 0
+            } else {
+                line == last_line
+            }
+        }
+    };
+    if at_edge {
+        return None;
+    }
+    let m = if up { Motion::Up } else { Motion::Down };
+    Some(step(doc, goal, aff, p, m, 1, wrap))
 }
 
 /// 移動を各 Range に適用する。垂直・ページ移動は目標列を維持し、移動の後にカーソルが見えるようスクロールを調整する。

@@ -24,7 +24,7 @@ use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
 
 /// 同期検索で走査する量 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
-const SYNC_STEP_BYTES: usize = 1 << 18;
+pub(crate) const SYNC_STEP_BYTES: usize = 1 << 18;
 /// 同期検索で一度に `scan_bytes` へ渡す量 (打ち切りの粒度)。
 const SYNC_BATCH_BYTES: usize = 64 << 10;
 
@@ -354,7 +354,7 @@ impl EditorState {
     }
 
     /// 単発の検索と、全件ジョブを待つ次 / 前を取り消す (押した回数も捨てる)。
-    fn cancel_find_next(&mut self) {
+    pub(crate) fn cancel_find_next(&mut self) {
         if let Some(old) = self.find.find_job.take() {
             self.jobs.cancel(old);
             self.io.pending.remove(&old);
