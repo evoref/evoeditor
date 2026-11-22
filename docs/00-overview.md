@@ -113,7 +113,7 @@ evoeditor は Rust 製のテキストエディタである。最初は「nano �
 | 用語 | 英語 / 型名 (案) | 定義 |
 |---|---|---|
 | 位置 | `Pos` | 文書内の位置。正準表現は **UTF-8 バイトオフセット** ([ADR-0010](10-decisions.md#adr-0010-位置の正準表現)) |
-| 範囲 / 選択 | `Range` / `Selection` | `anchor` と `head` の 2 点で表す範囲。`Selection` は 1 個以上の Range (複数カーソル対応。v0.1〜v0.4 は 1 個に制限、複数カーソルは v0.5)。データと写像は eve-text |
+| 範囲 / 選択 | `Range` / `Selection` | `anchor` と `head` の 2 点で表す範囲。`Selection` は 1 個以上の Range (複数カーソル対応。v0.1〜v0.4 は 1 個に制限、複数カーソルは v0.5 で上限 10,000 個。03 §4.5)。データと写像は eve-text |
 | カーソル | cursor | Range の `head`。anchor == head の Range は「選択なしのカーソル」 |
 | 書記素 | grapheme cluster | ユーザーが 1 文字と認識する単位 (Unicode UAX #29)。カーソル移動・削除の最小単位 |
 | 桁 | column | ステータスバー・`path:行:桁` の桁。単位は書記素数・1 始まり。設定で表示列に切り替えられる ([OQ-32](10-decisions.md#oq-32-桁の単位) で確定) |

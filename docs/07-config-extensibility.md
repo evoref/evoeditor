@@ -291,7 +291,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `pending_changes_max_bytes` | int (bytes) | `16777216` (16 MiB) | 未決ジョブ・AI 提案の写像用に保持する ChangeSet の合計上限 (02 §5.3 / 03 §17.1)。**v1.L より前には `pending_changes` 自体が無い** (ジョブは Revision 照合で破棄)。写像は v1.L (Proposal の生成と同時、01 §4.3) | NFR-306 | v1.L |
 | `trim_trailing_whitespace_on_save` | bool | `false` | 保存時に末尾空白除去 | FR-216 | v0.5 |
 | `insert_final_newline_on_save` | bool | `false` | 保存時に末尾改行付与 | FR-216 | v0.5 |
-| `multi_cursor` | bool | `true` | 複数カーソルを有効化 | FR-211 | v0.5 |
+| `multi_cursor` | bool | `true` | 複数カーソルを有効化。**公開しない** (v0.5 の M32 の仕様の PR で決めた。PO の決定 2026-11-22。複数カーソルは常に使え、使わない利用者はキーマップの `"none"` で足す操作の割当を外す。03 §4.7.3)。書いたときは、公開前のキーの「このバージョンでは未対応」ではなく、専用の情報診断 `msg.config.multi_cursor_always` (04 §8.14) を出して値を使わない (M32 の段 3 で `crates/eve-config/src/reserved.rs` の扱いを替える) | FR-211 | — (公開しない) |
 
 ### 5.2 `[file]` — ファイル I/O
 
@@ -343,7 +343,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `view.control_char_style` | `"caret" \| "hex"` | `"hex"` | 制御文字の可視化表記 (`caret` = `^X`、`hex` = `<U+001B>`。C0 と DEL にだけ効き、C1 は常に `<U+0085>` の形。復号できないバイトの `<0xHH>` とは別物、03 §13.2)。空白の可視化 (`view.show_whitespace` の `"minimal"` = 全角スペースとタブ) とは独立で、この値では変わらない | FR-507 | v0.1 (定数、公開 v0.2) |
 | `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示)。**v0.2 の M10 で公開・実装した** (`ui.toggle_hint_bar` で実行中に切り替えられる。隠すとその行を本文に使う、04 §3.5 / §8.5。`config.reload` で即時に効く) | FR-504 | v0.1 (定数、公開 v0.2) |
 | `ui.status_bar` | bool | `true` | ステータスバー | FR-503 | v0.1 (定数、公開 v0.2) |
-| `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン (画面の最上行。並び・アクティブ・同じ名前の区別は 03 §9.9 の PANE-11 / PANE-12) | FR-510 | v0.5 |
+| `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン (画面の最上行。並び・アクティブ・同じ名前の区別は 03 §9.9 の PANE-11 / PANE-12)。M32 の FR-510 の PR (03 §4.7.2 の段 1) で公開する (PO の決定 2026-11-22)。不正な値は警告して `"auto"`。`config.reload` で即時に効く (03 §9.9 の PANE-12 (f)) | FR-510 | v0.5 |
 | `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した。v0.4 (M26) から、同梱の言語 (`ja` / `en`) に加えて `locales/<lang>.toml` がある言語も選べる。当たらない値は `msg.config.invalid_value` で知らせて次の段へ進む (§17.4、OQ-220) | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
 | `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8)。**v0.2 の M9b で公開・実装した** (`ui.toggle_mouse` で実行中に切り替えられる) | FR-307 | v0.2 |
@@ -698,8 +698,8 @@ literal:= '"' ... '"' | number | true | false
 | `doc.language` | string | 言語名 (`"rust"`, `"plain"`) |
 | `doc.modified` | bool | 未保存変更あり |
 | `doc.large` | bool | 巨大ファイル縮退中 (FR-123) |
-| `selection.empty` | bool | 主選択が空 |
-| `selection.multi` | bool | 複数カーソル |
+| `selection.empty` | bool | 選択が空 (v0.5 の M32 から: **全 Range が空** のとき真。Range が 1 つなら v0.4 までの「主選択が空」と同じ。03 §4.5.5) |
+| `selection.multi` | bool | 複数カーソル (Range が 2 つ以上。v0.5 の M32 で実装する、03 §4.5.5) |
 | `selection.multiline` | bool | 選択が複数行 |
 | `cursor.at_line_start` / `cursor.at_line_end` | bool | — |
 | `keymap.mode` | string | モード名 (`"normal"`, `"insert"` 等。Vim 層用。既定 `""`) |
@@ -1064,11 +1064,11 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.pane.bar` | フォーカスの無いペインの見出しの名前と印 (v0.5) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` |
 
-### 8.8 v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で §8.2 / §8.7 へ移した)
+### 8.8 v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で §8.2 / §8.7 へ移した。`ui.bracket_match` は M32 の仕様の PR、2026-11-22)
 
-複数ペイン (FR-509、M30) とタブライン (FR-510、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。**複数ペインの 3 つ (`ui.pane.border`・`ui.pane.bar`・`ui.pane.bar.active`) は M30 の段 2b (FR-509 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。下の表の 3 行は移した記録として残す)。タブラインの 2 つは M32 で移す。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。どれも重ねるロール (§8.6) ではない。
+複数ペイン (FR-509、M30)・タブライン (FR-510、M32)・対応括弧 (FR-308、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。**複数ペインの 3 つ (`ui.pane.border`・`ui.pane.bar`・`ui.pane.bar.active`) は M30 の段 2b (FR-509 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。下の表の 3 行は移した記録として残す)。タブラインの 2 つは M32 の段 1 (03 §4.7.2)、`ui.bracket_match` は M32 の段 4 で移す。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。`ui.bracket_match` のほかは重ねるロール (§8.6) ではない。**`ui.bracket_match` は重ねるロール** (本文・選択・現在行・検索の一致の上に属性だけを足す。移すときに §8.6 の重ねるロールの一覧と `eve_config::theme` の表に足す)。
 
-- **使い方** (03 §9.9 の PANE-10 / PANE-12、04 §3.4 / §9): ペインの見出しは、フォーカスのペインを `ui.pane.bar.active` (ステータスバーと同じ組。無色の段は反転。先頭に `▶`、ASCII の縮退では `>`) で、ほかのペインを `ui.pane.bar` (名前と印は本文と同じ色。残りの `─` の埋め (ASCII の縮退では `-`) は `ui.pane.border`) で描く。無色の段と ASCII の縮退の組 (最も区別しにくい組) でも「反転の行」と「`-` で埋めた行」で区別できる (FR-509 AC-1)。区切り (`│`、ASCII は `|`) は `ui.pane.border`。タブラインは、アクティブなタブを `ui.tab_line.active`、ほかを `ui.tab_line` で描き、省いた側の `‹` `›` は `ui.scroll_marker`。
+- **使い方** (03 §9.9 の PANE-10 / PANE-12、04 §3.4 / §9): ペインの見出しは、フォーカスのペインを `ui.pane.bar.active` (ステータスバーと同じ組。無色の段は反転。先頭に `▶`、ASCII の縮退では `>`) で、ほかのペインを `ui.pane.bar` (名前と印は本文と同じ色。残りの `─` の埋め (ASCII の縮退では `-`) は `ui.pane.border`) で描く。無色の段と ASCII の縮退の組 (最も区別しにくい組) でも「反転の行」と「`-` で埋めた行」で区別できる (FR-509 AC-1)。区切り (`│`、ASCII は `|`) は `ui.pane.border`。タブラインは、アクティブなタブを `ui.tab_line.active`、ほかを `ui.tab_line` で描き、省いた側の `‹` `›` は `ui.scroll_marker` (03 §9.9 の PANE-12 (e))。対応括弧は、主のカーソルの括弧と対応の括弧の 2 つのセルに `ui.bracket_match` (太字 + 下線。無色の段も同じ) を重ねる (03 §5.7 の BRK-5、04 §9)。
 - `check-themes` に掛かる点: (i) の 2 つは 4.5:1 (高コントラストは (h2) の 7.0:1 と (h4) の 3.0:1)、(iii) の `ui.pane.border` は白・黒の背景に 3.0:1 (高コントラストは (h3) と (h10))。16 の段で `bold` を使わない ((h9))。`ui.pane.bar.active` と `ui.tab_line.active` は意味のあるロール (フォーカス・アクティブを示す) なので、mono の段を `none` にしない (§8.2 の表の下の箇条、NFR-604 AC-1)。`ui.pane.bar` の mono が `none` なのは、`─` の埋めで区別するため (04 §12.4 と同じ考え)。
 
 | 足すロール | 用途 | 形 | テーマ | truecolor (fg / bg) | 256 (fg / bg) | 16 (fg / bg) | mono | 流用元 |
@@ -1082,6 +1082,8 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | | | | `high-contrast-light` | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` | 同上 |
 | `ui.tab_line` | タブラインの地と、アクティブでないタブ (FR-510、M32) | (ii) | 3 つとも | `default` / `default` | `default` / `default` | `default` / `default` | `none` | `ui.hint_bar` |
 | `ui.tab_line.active` | アクティブなタブ (フォーカスのペインの文書。FR-510、M32) | (i) | 3 つとも | `ui.pane.bar.active` と同じ | 同左 | 同左 | `reverse` | `ui.status_bar` |
+| `ui.bracket_match` | 対応括弧の強調 (主のカーソルの括弧と対応の括弧。FR-308、M32。重ねるロール) | (ii) | `default` | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` | `ui.overlay.match` |
+| | | | `high-contrast-dark` / `high-contrast-light` | `underline` + `bold` | `underline` + `bold` | `underline` ((h9)。16 の段で `bold` を使わない) | `underline` + `bold` | 同上 |
 
 - フォーカスのあるペインの見出しが一番下のペインにあると、すぐ下のステータスバーと同じ組の 2 行が続く。中身 (見出しは文書名と印だけ、ステータスバーは位置・文字コードなどを右に持つ) で見分ける。目で確かめるとき (09 §8.2 の互換の行) に見にくければ、見出しの組を変える (基準は満たしたまま)。
 
@@ -1229,8 +1231,8 @@ verb       := [a-z][a-z0-9_]*
 | `file` | ファイル I/O | `file.open`, `file.new`, `file.save`, `file.save_as`, `file.save_all`, `file.reload`, `file.check_external_changes`, `file.reopen_with_encoding`, `file.set_encoding`, `file.set_line_ending`, `file.toggle_read_only` |
 | `buffer` | Document の一覧・切替・閉じる | `buffer.next`, `buffer.prev`, `buffer.close`, `buffer.list` |
 | `edit` | 文書変更 | `edit.undo`, `edit.redo`, `edit.insert_text`, `edit.newline`, `edit.delete_backward`, `edit.delete_forward`, `edit.delete_word_backward`, `edit.indent`, `edit.outdent`, `edit.duplicate_line`, `edit.delete_line`, `edit.move_line_up`, `edit.toggle_comment`, `edit.paste`, `edit.transform_upper`, `edit.convert_indentation` (v0.5、03 §15), `edit.filter_through` (外部フィルタ、v0.5、§15。予約) |
-| `cursor` | 移動 (選択を解除) | `cursor.move_left`, `cursor.move_right`, `cursor.move_up`, `cursor.move_down`, `cursor.move_word_left`, `cursor.move_word_right`, `cursor.home` (スマートホーム、03 §5.4), `cursor.end`, `cursor.doc_start`, `cursor.doc_end`, `cursor.page_up`, `cursor.page_down`, `cursor.goto_line`。**移動の動詞は `move_` 接頭を正とする** (`cursor.left` のような接頭なしの表記は採らない) |
-| `select` | 選択の拡張・操作 | `select.extend_left` 等 (`cursor` の移動ごとの `extend_` 版。一覧は §11.6), `select.all`, `select.extend_to_doc_start`, `select.extend_to_doc_end`, `select.add_next_match` (v0.5), `select.line` (v0.5) |
+| `cursor` | 移動 (選択を解除) | `cursor.move_left`, `cursor.move_right`, `cursor.move_up`, `cursor.move_down`, `cursor.move_word_left`, `cursor.move_word_right`, `cursor.home` (スマートホーム、03 §5.4), `cursor.end`, `cursor.doc_start`, `cursor.doc_end`, `cursor.page_up`, `cursor.page_down`, `cursor.goto_line`, `cursor.goto_bracket` (v0.5、03 §5.7)。**移動の動詞は `move_` 接頭を正とする** (目標へ飛ぶ移動は `goto_<目標>`) (`cursor.left` のような接頭なしの表記は採らない) |
+| `select` | 選択の拡張・操作 (v0.5 から、複数カーソルを足す操作も) | `select.extend_left` 等 (`cursor` の移動ごとの `extend_` 版。一覧は §11.6), `select.all`, `select.extend_to_doc_start`, `select.extend_to_doc_end`, `select.add_next_match` / `select.all_matches` / `select.add_cursor_above` / `select.add_cursor_below` (v0.5、03 §4.5.1), `select.line` (v0.5) |
 | `search` | 検索・置換 | `search.open`, `search.next`, `search.prev`, `search.toggle_case`, `search.toggle_regex`, `search.replace_open`, `search.replace`, `search.replace_all`, `search.workspace` (v0.5) |
 | `view` | View の表示属性 | `view.toggle_wrap`, `view.scroll_down`, `view.toggle_line_numbers` |
 | `pane` | 分割ペイン (1 つの端末画面の中を分割する。04 §11、03 §9.9) の作成・フォーカス移動・大きさ・閉じる (v0.5)。分割の向きは「水平」「垂直」と書かず、新しいペインを置く側で書く | `pane.split_right`, `pane.split_down`, `pane.focus_next`, `pane.close` (一覧は §11.6 の「ペイン」) |
@@ -1415,6 +1417,20 @@ verb       := [a-z][a-z0-9_]*
 - **キーの選び方** (04 §7.2 / §7.3a): `mod+\` は v0.1 から予約していた分割のキー。従来の VT 端末では `Ctrl+\` が 0x1C で届き、eve-tui は既に `ctrl+\` に正規化している (04 §6.2) ので `[E]` を付けない。`\` を打ちにくい配列のために代替 `ctrl+k \` / `ctrl+k |` を持つ。下への分割は `ctrl+k -` (横の線の形。`\` との組は tmux の慣習の `|` / `-` に倣う)。`ctrl+k |` は `ctrl+k \` の別名 (macOS の JIS 配列の既定では `¥` キーが U+00A5 を送り `\` が打てないが、`Shift+¥` の `|` は届く)。JIS 配列では `=` が `Shift+-` なので、揃える (`ctrl+k =`) の Shift を押し忘れると下への分割になるが、分割は `ctrl+k q` で戻せる。ペインの移動の第一は `f6` / `shift+f6` (多くのアプリで「次の区画」。修飾が要らず、従来の端末でも届く)。方向の移動 (`pane.focus_left` 等) には **既定のキーを付けない**: v0.1 から予約していた `ctrl+k ctrl+矢印` は、`ctrl+k` の後で `ctrl` を離さずに矢印を押すと、行頭・行末の代替 (`ctrl+k left` / `ctrl+k right`。Terminal.app など `home` / `end` が届かない端末で日常に使う) のつもりが、黙ってペインの移動になる (逆に `ctrl` を早く離すと `ctrl+k up` / `ctrl+k down` = 行の上下移動で本文が変わる)。macOS の既定では Mission Control が `ctrl+矢印` を取ることもある。`ctrl+k ctrl+<矢印>` は予約のまま残し (ユーザーのキーマップでは割り当ててよい)、Must の移動は次 / 前で満たす。閉じるは `ctrl+k q` (`ctrl+k w` は文書を閉じる `buffer.close`)。大きさは `ctrl+k ]` / `ctrl+k [` / `ctrl+k =` (04 §11 の v0.4 までの案の `Ctrl+K -` は下への分割に使った)。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない (`ctrl+k` の 2 打目で使っていたのは `,` `.` `<` `>` `a` `b` `c` `d` `h` `l` `m` `n` `o` `p` `r` `s` `w` `x` `z` と矢印・`shift+left` / `shift+right`)。ユーザーのキーマップが同じキーを先に使っていれば、ユーザーの割当が勝つ (02 §7.2 K5)。`ctrl+\` を先頭にするユーザーのチョードは、v0.5 から既定の `mod+\` を無効にする警告 (§7.6 の `msg.config.keymap_chord_shadows_default`) が出る (CHANGELOG の v0.5 の「変更」に書く)。
 - 最後のペインでは `when` (`pane.split`) が偽になり、`pane.close`・移動・大きさはパレットで淡色 (`ui.palette.reason.single_pane`)。分割は `when` を持たず、広さが足りなければ `info.pane.no_room` を出す (03 §9.9 の PANE-4)。文書を閉じる `buffer.close` との違いは 03 §9.9 の PANE-9。
 
+**複数カーソルと対応括弧** (v0.5 の M32、FR-211 / FR-308。規則の正本は 03 §4.5.1 / §5.7。M32 の仕様の PR (2026-11-22) で決めた。ID と既定キー (`edit.paste` の代替 `ctrl+k v` を含む) は **PO の決定 2026-11-22** (推奨案のまま確定、03 §4.7.3))
+
+| ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
+|---|---|---|---|---|---|---|---|---|
+| `select.add_next_match` (v0.5) | `cmd.select.add_next_match` | Motion | — | — | `read` | `editor` | `mod+d` | - |
+| `select.all_matches` (v0.5) | `cmd.select.all_matches` | Motion | — | — | `read` | `editor` | `mod+shift+l` [E], `ctrl+k e` (alt) | - |
+| `select.add_cursor_above` / `select.add_cursor_below` (v0.5) | `cmd.select.add_cursor_above` / `cmd.select.add_cursor_below` | Motion | — | — | `read` | `editor` | `ctrl+alt+up` / `ctrl+alt+down`, `ctrl+k shift+up` / `ctrl+k shift+down` (alt) | - |
+| `cursor.goto_bracket` (v0.5) | `cmd.cursor.goto_bracket` | Motion | — | — | `read` | `editor` | `mod+]`, `ctrl+k %` (alt) | - |
+
+- **意味**: `select.add_next_match` は次の一致を選択に足す (カーソルだけなら、まず単語を選ぶ)。`select.all_matches` は一致をすべて選ぶ (上限 10,000 を超えるときは何も選ばない)。`select.add_cursor_above` / `select.add_cursor_below` は一番上 / 一番下のカーソルの上 / 下の行にカーソルを足す。足したカーソルが主のカーソルになり、`esc` (`ui.cancel`) で主の 1 つに戻る (03 §4.5.1)。`cursor.goto_bracket` は対応する括弧の直前へ移る (03 §5.7 の BRK-6)。どれも Motion で文書を変えず、読み取り専用の文書でも使える。
+- **キーの選び方** (04 §7.2 / §7.3a): `mod+d` は v0.1 から予約していた VS Code の慣習のキー (`Ctrl+D` は 0x04 で従来の端末でも届く)。すべて選ぶの `mod+shift+l` は VS Code の慣習で、`Ctrl+Shift+英字` なので `[E]` と代替 `ctrl+k e` (**e**very) を持つ (04 §7.3 の規則)。上下にカーソルを足す `ctrl+alt+up` / `ctrl+alt+down` は VS Code (Windows) と Sublime Text の慣習で、Windows Terminal と conhost は横取りしない (04 §7.3a。`alt+shift+up` / `down` (VS Code の Linux の慣習) は Windows Terminal がペインの大きさに使う)。デスクトップ (一部の Linux の作業領域の切り替え・グラフィックのドライバの画面の回転) が取る環境のために代替 `ctrl+k shift+up` / `ctrl+k shift+down` を持つ (`ctrl+k shift+left` / `right` が選択の拡張なのと揃えた。`shift` を早く離すと `ctrl+k up` / `down` (行の移動) になり本文が変わるが、目に見え、`mod+z` で戻せる)。`ctrl+k shift+up` / `ctrl+k shift+down` は、Windows Terminal で `ctrl` を離さずに 2 打目を押すと `ctrl+shift+up` / `down` (端末のスクロール) として横取りされ、チョードは保留のまま何も起きない (ヘルプで「2 打目の前に `Ctrl` を離す」と案内する)。`mod+shift+l` は従来の端末 (拡張キーボードプロトコルの無い Unix の端末・tmux) では `ctrl+l` (0x0C) として届き、M34 で `mod+l` (`select.line`、FR-309) を割り当てると、そこでは行の選択になる (Windows のコンソール API では区別できる。M34 の仕様の PR の点検項目に引き継ぐ)。対応括弧は `mod+]` を第一にする (IME が ON でも届く。従来の端末では 0x1D で届き、04 §6.2 で `ctrl+]` に正規化している。`Ctrl+5` も同じ 0x1D を送る端末があるが、誤って押しても移動だけで本文は変わらない。VS Code の `Ctrl+]` はインデントだが、対の `Ctrl+[` は `esc` と区別できないので evoeditor はこの対を採れない)。代替の `ctrl+k %` は Vim の `%` に倣う (2 打目の文字は IME を OFF にして打つ)。VS Code の `ctrl+shift+\` は、従来の端末で `ctrl+\` (0x1C、右への分割 `pane.split_right`) と区別できないので割り当てない。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない (`ctrl+k` の 2 打目で使っていたのは「ペイン」の表の下の一覧と `\` `|` `-` `[` `]` `=` `q` `tab` `shift+tab`・M31 の `f`)。`mod+]`・`ctrl+k e` / `ctrl+k %` / `ctrl+k shift+up` / `ctrl+k shift+down` / `ctrl+k v` は既定のどのコンテキストでも未使用。
+- **`edit.paste` の代替 `ctrl+k v` (alt)**: M32 の段 3 で、上の「編集」の表の `edit.paste` の行に足す (その表は実装と照らして検査する (09 §11.2) ので、行は実装の PR で直す)。Windows Terminal は `mod+v` と `shift+insert` を端末の貼り付けにし、短い貼り付け (16 打鍵未満) は個別のキーとして届くので、複数カーソルへの分配 (03 §4.5.3 の MCUR-10) が効かない。`ctrl+k v` は端末に横取りされず、`edit.paste` (システムのクリップボードの読み取り) を確実に呼ぶ。
+- 足したカーソルを 1 つ戻す・一致を飛ばす (VS Code の `Ctrl+U`・`Ctrl+K Ctrl+D`) と、マウスで足す操作は v0.5 では入れない (03 §4.7.3)。
+
 **オーバーレイ内** (v0.1 の ID 6 個。すべてパレット非表示)
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
@@ -1430,7 +1446,7 @@ verb       := [a-z][a-z0-9_]*
 
 **内部 (パレット非表示、配布ビルドに無い)**: `internal.debug_panic` (パニックの注入。cargo feature `test-hooks` を有効にしたビルドで、かつ `EVE_TEST_HOOK` に `panic_command` を含むときだけ登録する (09 §3.6 の test-hooks の一覧。どちらかが欠ければ登録しない)。01 NFR-302 AC-1、02 §4.1)。キー割当なし。
 
-**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
+**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`。M32 で上の「複数カーソルと対応括弧」の表に割り当てる)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
 
 **FR-606 の到達性検査** (09 §3.4、OQ-30) の対象「頻出操作」(v0.1 で確定。OQ-30 の分類「保存・終了・検索・パレット・Undo/Redo・コピー/カット/貼り付け・移動・選択」を ID で列挙したもの。v0.5 の M30 でペインの 3 個を足した。計 40 個):
 
