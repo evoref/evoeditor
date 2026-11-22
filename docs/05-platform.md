@@ -159,17 +159,7 @@ trait の形は [02 §4.4](02-architecture.md#44-ports-core-が定義し外側�
 
 ### 2.5 `FileWatcher` (v0.5)
 
-```rust
-// 案。v0.5 着手時に 02 §4.4 で確定
-trait FileWatcher {
-    fn watch(&mut self, path: &Path, kind: WatchKind /* File | DirShallow */) -> Result<WatchId, WatchError>;
-    fn unwatch(&mut self, id: WatchId);
-    fn capabilities(&self) -> WatchCaps;   // native_events: bool, polling_interval: Option<Duration>
-}
-// イベントは HostMsg::Fs(FsEvent { watch: WatchId, path: PathBuf, kind: Created|Modified|Removed|Renamed{from,to}|Rescan })
-```
-
-詳細は §12。
+v0.4 までの本節の案 (`watch` が結果を同期に返す・`WatchKind` と `WatchCaps` を持つ・イベントが `Created|Modified|Removed|Renamed` を区別する) は、v0.5 の M33 の仕様の PR で改めた。trait の正本は 02 §4.4 の「`FileWatcher` (v0.5 の M33)」: 登録は要求を積むだけで結果は `HostMsg::Fs` で届き、監視するのはディレクトリ (非再帰) だけ、イベントはファイル名の変化 (`Changed { name }`) と `Rescan` に畳む (core は種類に依らず stamp で照合するので、種類を区別しない。03 §9.5.1 の WATCH-5)。OS ごとの実装は §12。
 
 ### 2.6 `ProcessRunner` (v0.6 以降)
 
@@ -613,6 +603,15 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 
 **作成は eve-platform の関数で行う**: `std::fs::create_dir` / `create_dir_all` で作ったディレクトリは親の ACL を継承し (`%LOCALAPPDATA%` では Administrators が読める、`EVE_STATE_DIR` では共有フォルダの ACL になり得る)、上の定義を満たさない。そのため `recovery/`・`backup/`・`swap/` と代替の退避先は、`create_dir_all_private` (02 §4.5) または緊急退避の書き手が呼ぶ同じ実装 (`CreateDirectoryW` に上の SDDL から作った `SECURITY_ATTRIBUTES` を渡す) でだけ作る。中のファイルは `std::fs` で作っても、ディレクトリの保護付き DACL を継承するので所有者のみになる。DACL は暗号化ではないので、EFS で暗号化されたファイルの内容も `state_dir` には平文で書かれる (既知の制約。§7.5 の「退避・バックアップの容量と保持」(4))。
 
+### 5.7 ワークスペース設定の所有者の検査 (v0.5 の M33。FR-705)
+
+判定の規則 (判定する物・読む条件・判定できない FS・root のとき・逃げ道・同じハンドルで読むこと・診断) の正本は 07 §12.1 の OWN-1〜OWN-8 で、Port は 02 §4.5 の `FileSystem::read_checked`。本節は OS ごとの実装の要点だけを書く (S-25 の試作の (H) の形)。
+
+| OS | 判定に使う API | 注意 |
+|---|---|---|
+| Windows | `CreateFileW` (`READ_CONTROL`・`FILE_LIST_DIRECTORY`・`FILE_FLAG_BACKUP_SEMANTICS`。`.eve` は `FILE_FLAG_OPEN_REPARSE_POINT` も付け、再解析点なら読まない。ファイルを開くときも `FILE_FLAG_OPEN_REPARSE_POINT` と `SECURITY_SQOS_PRESENT \| SECURITY_IDENTIFICATION` を付ける。共有は `FILE_SHARE_READ \| FILE_SHARE_WRITE` で `FILE_SHARE_DELETE` を付けない) でディレクトリを開く → `GetVolumeInformationByHandleW` (`FILE_PERSISTENT_ACLS` の有無) → `GetSecurityInfo` (`OWNER_SECURITY_INFORMATION \| DACL_SECURITY_INFORMATION`) → `EqualSid` で「自分たち」と比べ、DACL の ACE を 1 つずつ見る。ファイルは `CreateFileW` (`GENERIC_READ \| READ_CONTROL`、共有は `FILE_SHARE_READ \| FILE_SHARE_WRITE \| FILE_SHARE_DELETE`) で開き、`GetFinalPathNameByHandleW` で親がディレクトリの最終のパスと同じかを確かめ、同じ判定をして同じハンドルから `ReadFile` で読む (07 §12.1 の OWN-6)。パスは std と同じ規則で `\\?\` の形にしてから渡す (`windows-sys` を直接呼ぶので、std の長いパスへの変換 (§3.1) が効かない。260 文字を超えるパスの `.editorconfig` を判定できないとしない) | 自分の SID・`TokenOwner`・決まった SID (SYSTEM・Administrators・TrustedInstaller・CREATOR OWNER・OWNER RIGHTS) はプロセスで 1 回だけ作る。`windows-sys` の feature は今の範囲 (`Win32_Security`・`Win32_Security_Authorization`・`Win32_Storage_FileSystem`・`Win32_System_Threading`。ACE の型の定数は値を写す、S-25)。既存の `owned_by_me` (`sys/windows/security.rs`) は `TokenOwner` との比較なので、特権の所有者と DACL の判定を足した別の関数にする (`FileMeta.owner_is_me` (§4.4 の保存の所有者の保持) とは意味が違う、S-25 の決める点 11) |
+| Unix | `open(dir, O_RDONLY \| O_DIRECTORY \| O_CLOEXEC)` (`.eve` は `O_NOFOLLOW` も) → `fstatat(dirfd, name, AT_SYMLINK_NOFOLLOW)` (有無。無ければ `Missing`) → `fstatfs` (`f_type`。07 §12.1 の OWN-3 の判定できない FS) → `fstat` (`st_uid`・`st_mode`) と `fgetxattr` (`system.posix_acl_access` の有無) → `openat(dirfd, name, O_RDONLY \| O_CLOEXEC \| O_NONBLOCK \| O_NOFOLLOW)` (リンクなら `ELOOP` で読まない) → `fstat` (`S_ISREG`・`st_uid`・`st_mode`) → `read` | `libc` は eve-platform が既に使う。実効 uid は `geteuid` (OWN-4。root のときは uid 0 だけが「自分」)。FIFO・デバイスは `O_NONBLOCK` で開いて `S_ISREG` でないので読まない |
+
 ---
 
 ## 6. 改行コード・文字コードの OS 既定
@@ -1038,17 +1037,26 @@ quit 要求 → 未保存確認 (対話可能な場合のみ) → 実行中の�
 |---|---|---|---|
 | Linux | inotify | ファイル or ディレクトリ (非再帰) | `fs.inotify.max_user_watches` (既定 8192〜、超過で ENOSPC)、`max_user_instances` (128)。**/mnt/* (WSL2 DrvFs)、NFS、CIFS、FUSE の多く、overlayfs の一部** はイベントが来ない。inode 単位なので原子的置換 (rename) 後は **古い inode を監視し続ける** → 親ディレクトリを監視する |
 | macOS | FSEvents (既定) / kqueue (`macos_kqueue` feature) | ディレクトリ (再帰、遅延 latency 既定 ~0.1〜1 s) | FSEvents はイベントを合体し「何か変わった」しか分からないことがある → `Rescan` として扱い mtime/len/hash を取り直す。kqueue はファイル記述子を消費 (多数ファイルで枯渇) |
-| Windows | `ReadDirectoryChangesW` | ディレクトリ | 1 回の保存で Modified が **複数回** 届く。ネットワーク共有 (SMB) では届かないことがある。監視中のディレクトリは **削除・リネームできなくなる** (ハンドル保持) → 空きがない時は監視を解除 |
+| Windows | `ReadDirectoryChangesW` | ディレクトリ | 1 回の保存で Modified が **複数回** 届く。ネットワーク共有 (SMB) では届かないことがある。監視中のディレクトリの **祖先は改名・移動できなくなる** (ハンドル保持。監視中のディレクトリ自身の改名・削除はできる。notify は `FILE_SHARE_DELETE` で開く。S-24 の (d)。v0.4 までの本表の「監視中のディレクトリは削除・リネームできなくなる」は M33 の仕様の PR で直した)。監視中のディレクトリを改名した後は、イベントが古いパスで届く。削除したときは、notify 8.2 では何も届かず (監視が黙って止まる)、9.0 では `Remove(Folder)` が届く (§12.2 の 11)。エクスプローラでプロジェクトのフォルダを改名すると、その下の文書を開いている間は失敗する (01 §4.6 の既知の制約) |
 
 ### 12.2 方針
 
-1. **監視対象は「開いている Document の親ディレクトリ (非再帰)」**。ファイル単体監視は inode 置換に弱い。ワークスペース全体の再帰監視 (ファイルツリー用、v0.5 Could) は別の WatchKind で、上限 (既定 10,000 エントリ) を設ける。
-2. **待ち合わせ 100 ms**。debouncer の crate (`notify-debouncer-mini` / `-full`) は使わず、Host が待機の期限 (02 §9.2 の `wait_deadline`) で自前に行う (一定の間隔で起きるスレッドを持たない、NFR-204。v0.5-plan §1.2)。同じパスのイベントは最後のものだけ core へ。設定ファイルの自動再読込 (07 §6) も同じ値で待ち合わせる (v0.4 まで 07 §6 は 300 ms と書いていた。揃えた理由は 07 §6)。
-3. **自己イベント抑制**: 保存ジョブが完了したら `(path, new_stamp)` を監視スレッドに通知し、`new_stamp` と一致するイベントを捨てる。それでも抜けたものは core 側で `(mtime, len, hash)` 比較により「変化なし」と判定され無視される (二重防御)。
-4. **イベントが来ない FS** (`WatchCaps.native_events == false`、または `FsKind::Network`、WSL DrvFs): **ポーリングはしない** (NFR-204)。代わりに (a) 保存時 (FR-117 v0.1)、(b) フォーカス取得時 (`InputEvent::Focus(true)`。v0.2)、(c) ユーザーが明示的に `file.check_external_changes` を実行した時、に mtime/len を確認する。設定 `file.watch.poll_interval_ms` (07 §5.2) を **ユーザーが明示的に設定した場合のみ** 低頻度ポーリング (最小 2000 ms) を許可する (OQ-78。確定 (推奨案、2026-11-20))。**ポーリングの実装は v0.6 以降** (08 §7)。v0.5 は、監視しない FS を上の (a)〜(c) のイベント駆動の確認に縮退するだけにする。
-5. **初期化失敗** (inotify 上限、権限) は警告 1 回で監視なし運用へ縮退。起動を妨げない。
+1. **監視対象は「開いている Document の親ディレクトリ (非再帰)」** (v0.5 の M33 で、canonical のパスの親と決めた。03 §9.5.1 の WATCH-1)。ファイル単体監視は inode 置換に弱い。ワークスペース全体の再帰監視 (ファイルツリー用、Could) は、入れる版で `FileWatcher` (02 §4.4) に再帰の要求を足して決める (v0.4 までの本項の「別の WatchKind、上限 10,000 エントリ」は、M33 で `WatchKind` を持たない形にしたので、その版で決め直す)。
+2. **待ち合わせ 100 ms** (最初のイベントから最長 1 s)。debouncer の crate (`notify-debouncer-mini` / `-full`) は使わず、core が期限 (`Editor::next_deadline`) で自前に行い、Host の待機 (02 §9.2 の `wait_deadline`) がそれを待つ (一定の間隔で起きるスレッドを持たない、NFR-204。v0.5-plan §1.2)。v0.4 までの本項は「Host が待ち合わせ、同じパスのイベントは最後のものだけ core へ」と書いていたが、Host は文書とパスの対応を知らないので、M33 の仕様の PR で core に移した (03 §9.5.1 の WATCH-4)。Host (eve-platform の監視のコールバック) は、下の 10 で捨てる種類を除いたイベントを、続けて同じ (監視, 名前) のものを 1 つにまとめて `HostMsg::Fs` で送る。設定ファイルの自動再読込 (07 §6) も同じ値で待ち合わせる (v0.4 まで 07 §6 は 300 ms と書いていた。揃えた理由は 07 §6)。
+3. **自己イベント抑制**: core が、保存などのジョブの間は照合を延ばし、終わった後に文書の `disk_stamp` と比べて同じなら捨てる (03 §9.5.1 の WATCH-5。S-24 で、evoeditor 自身の原子的保存と直接上書きを NTFS・ext4・tmpfs・SMB で 20 回とも抑えた)。v0.4 までの本項の「保存ジョブの完了を監視スレッドに通知して `new_stamp` と一致するイベントを捨てる」は採らない (監視のスレッドに状態を持たせ、主スレッドとの共有が要る。stamp を比べる場所は core の 1 か所で足りる)。一時ファイル・退避名のイベントは、文書のファイル名と違うので core が捨てる (名前で文書の変更を抑えることはしない。S-24 の own-then-ext)。
+4. **イベントが来ない FS**: **ポーリングはしない** (NFR-204)。監視を始める前に、監視できる FS かを判定し、できなければ登録を `Unsupported` で失敗させる (イベントが来ない FS を監視したつもりにならない。S-24 の (3)。DrvFs は `watch()` が成功してイベントが来ない)。**Windows** (許可リスト。Linux と同じ考え方): `GetVolumeInformationByHandleW` の FS の名前が NTFS か ReFS で、`FsKind::Network` (§5.5 の表。UNC・ネットワークドライブ・`\\wsl.localhost`) でなく、ユーザーモードの FS (WinFsp・Dokan など、NTFS と名乗るもの) を見分ける 03 §12.7.6 の段 5 (1) の判定 (`FILE_SUPPORTS_OPEN_BY_FILE_ID`・リモートの手順の情報。SAF-28 と同じ関数) を通ったボリュームだけを監視する。FAT・exFAT は監視しない (mtime の分解能が 2 秒で、S-24 で evoeditor の直接上書きのイベントが来なかった。外付けのドライブの監視のハンドルが「安全な取り外し」を妨げることも避ける)。rclone の mount・Google Drive のドライブなど、ローカルの固定ドライブと名乗っても遠くで変わる FS を監視したつもりにならない。**Linux** (v0.5 の M33 で決めた): `statfs` の `f_type` の **許可リスト** の FS だけを監視する: ext2/3/4 (`0xEF53`)・xfs (`0x58465342`)・btrfs (`0x9123683E`)・tmpfs (`0x01021994`)・f2fs (`0xF2F52010`) (S-24 の試作の値。段 7 の PR で `linux/magic.h` と照らす)。ほかの FS (9p (WSL2 の DrvFs)・NFS・CIFS / SMB・FUSE (virtiofs を含む)・overlayfs・zfs・bcachefs など) は、イベントが来ると確かめていないので監視しない (overlayfs (コンテナ・devcontainer の中、§15.3) と zfs を許可リストに入れるかは、段 7 の PR で試して決める) (§5.5 の `FsKind` の否定のリストとは別に持つ。`FsKind` は保存の手順と識別の信頼に使い、監視の可否には使わない)。`statfs` が失敗したら監視しない。macOS は出荷する版で決める (下の 13)。監視しない FS の文書は代わりに (a) 保存時 (FR-117 v0.1)、(b) フォーカス取得時 (`InputEvent::Focus(true)`。v0.2)、(c) ユーザーが明示的に `file.check_external_changes` を実行した時、に mtime/len を確認する。設定 `file.watch.poll_interval_ms` (07 §5.2) を **ユーザーが明示的に設定した場合のみ** 低頻度ポーリング (最小 2000 ms) を許可する (OQ-78。確定 (推奨案、2026-11-20))。**ポーリングの実装は v0.6 以降** (08 §7)。v0.5 は、監視しない FS を上の (a)〜(c) のイベント駆動の確認に縮退するだけにする。
+5. **初期化失敗** (inotify 上限、権限) は警告 1 回で監視なし運用へ縮退。起動を妨げない。v0.5 の M33 で決めた形: watcher の作成の失敗 (inotify のインスタンスの上限は `Io(EMFILE)` で届き、ファイル記述子の枯渇と区別できない) は、その後の登録をすべて `Other` で失敗させる。登録ごとの失敗 (`MaxFilesWatch` (`ENOSPC`)・権限・ディレクトリが無い) は、その登録だけを `Limit` / `Denied` / `NotFound` で失敗させる。知らせは core が理由の種類ごとにプロセスで 1 回だけ出す (03 §9.5.1 の WATCH-2。01 FR-117 AC-9)。watcher はプロセスに 1 つだけ作る (inotify のインスタンスを 1 つしか使わない、S-24 の (g))。
 6. 監視スレッドは `HostMsg::Fs` を送るだけで、`EditorState` に触れない。
-7. **監視のイベントでモーダルの確認を出さない** (v0.5-plan §1.2): 監視で外部の変更を知ったときは、表示していない文書を含めて、印とメッセージで知らせるだけにする。再読込の確認 (「再読込 / 無視 / 別名で保存」など、03 §9.5) は、文書を切り替えたとき・フォーカス復帰・保存の、今の流れで出す (入力の途中にダイアログが割り込まない)。未編集の文書を監視のイベントで確認なしに読み直すか (設定 `file.reload_on_external_change = "auto_if_unmodified"` (07 §5.2) の監視での効き方) は、M33 の FR-117 の仕様の PR で決める。
+7. **監視のイベントでモーダルの確認を出さない** (v0.5-plan §1.2): 監視で外部の変更を知ったときは、表示していない文書を含めて、印とメッセージで知らせるだけにする。再読込の確認 (「再読込 / 無視 / 別名で保存」など、03 §9.5) は、文書を切り替えたとき・フォーカス復帰・保存の、今の流れで出す (入力の途中にダイアログが割り込まない)。未編集の文書を監視のイベントで確認なしに読み直すか (設定 `file.reload_on_external_change = "auto_if_unmodified"` (07 §5.2) の監視での効き方) は、M33 の FR-117 の仕様の PR で決める。**決めた (M33 の仕様の PR、2026-11-22)**: 表示している未編集の文書だけを、`auto_if_unmodified` のとき確認なしで読み直す。表示していない文書は印だけを付け、切り替えたときに今の流れで確かめる (03 §9.5.1 の WATCH-6 / WATCH-8)。
+
+**v0.5 の M33 で決めた実装の細目** (S-24 の「M33 で決めること」の 1・2・5・6・9):
+
+8. **notify の版と feature**: `default-features = false` (macOS の backend を入れない。Windows と Linux の backend は変わらない)。版の決め方は 02 §13.7 (9.0 の安定版があればそれ、無ければ 9.0.0-rc を `=` で固定。8.2.x は Windows の監視のスレッドが 100 ms ごとに起きる)。使う API は `recommended_watcher`・`watch(dir, NonRecursive)`・`unwatch`・`Event` (8.2 と 9.0-rc で同じ、S-24)。
+9. **登録の呼び出し**: `FileWatcher::watch_dir` / `unwatch` (02 §4.4) は主スレッドで要求を積むだけで、OS を呼ぶ notify の `watch` / `unwatch` は `io` のレーンの Host の作業 (`HostTasks`、02 §4.4) で呼ぶ (notify の `watch` は監視のスレッドの応答を待つので、主スレッドで呼ばない。02 §4.4 規則 2)。上の 4 の監視できる FS の判定 (`GetDriveTypeW`・パスの形・`statfs`) も同じ作業の中で行う。結果は `HostMsg::Fs` の `FsEvent::Started` / `Failed` で core に届く。watcher (notify の `RecommendedWatcher`) は `io` のレーンの作業だけが触る (主スレッドと共有しない)。
+10. **イベントの選り分け** (監視のコールバックの中。notify のスレッドで動き、`EditorState` に触れない (上の 6)): `Access` の種類は捨てる (Linux の inotify の backend は読むだけの `IN_OPEN` も送る。S-24 の所見 3)。ただし `Access(Close(Write))` は変化として送る。ほかの種類 (`Create`・`Modify`・`Remove`・`Any`・`Other`) は、イベントのパスのファイル名を `FsEvent::Changed { name }` にして送る (`Name` (改名) は、元と先の両方の名前を送る)。`need_rescan()` (inotify の `IN_Q_OVERFLOW`、9.0 の Windows の 0 バイトの完了と `ERROR_NOTIFY_ENUM_DIR`) と、イベントの誤り (`Err`) は `FsEvent::Rescan` にする。**パスが監視しているディレクトリそのもの (直下でない) のイベント** (9.0 の Windows の `Remove(Folder)`、inotify の `IN_DELETE_SELF` / `IN_MOVE_SELF` / `IN_IGNORED`) は `FsEvent::Lost` (監視が失効した。inotify は削除で監視を自動で外す) にして送る (core はそのディレクトリの全文書を照合し、数え上げの監視を「失効」にして、次の確かめ (03 §9.5.1 の WATCH-1) で張り直す)。種類 (作成・変更・削除) は core に渡さない (core は stamp で照合する、03 §9.5.1 の WATCH-5)。
+11. **監視中のディレクトリの改名・削除**: その場で張り直しを試みない。notify 9.0 の `Remove(Folder)` は上の 10 の `Lost` として送り、core の照合で文書のファイルが無いと分かれば削除の印を付ける。notify 8.2 の Windows のように何も届かない場合は、フォーカス復帰と保存時の確認 (上の 4 の (a)〜(c)) で気付く。改名の後に古いパスで届くイベントは、古いパスの文書 (core が持つパス) と名前で照らすので、そのまま効く。保存・再読込のときに core が監視を確かめ直す (03 §9.5.1 の WATCH-1) ので、消して作り直したディレクトリの文書は次の保存から監視される。
+12. **inotify の上限**: `max_user_watches` を超えた登録は `Limit` で失敗し、そのディレクトリの文書だけを縮退させる (上の 5)。evoeditor が使うのは開いている文書のディレクトリの数だけ (再帰の監視をしない) なので、既定の上限 (8,192 以上) に当たるのは、ほかのプロセスが上限を使い切っているとき。
+13. **macOS** (出荷する版で決める): `macos_fsevent` (ディレクトリの再帰の監視で、イベントを合体・遅延する。§12.1) か `macos_kqueue` (ファイル記述子を使う) かを、その版のスパイクで決める。
 
 ---
 

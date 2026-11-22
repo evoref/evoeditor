@@ -1051,6 +1051,7 @@ core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) �
 v0.1 は単一文書で、バッファ一覧を持たない (別のファイルは `Ctrl+O` で今の文書を置き換えて開く。§7.2)。以下は v0.2 の規則。
 
 - リストオーバーレイ (パレットと同じ部品)。行: 変更マーカー `●`/`[+]`、名前、ディレクトリ (薄色、長いと中間省略)、文字コード。読込中 (`Loading` / 先行表示の `Partial`。v0.4 の M25、03 §9.8 の「読込中のバッファ」) の文書は、文字コードの代わりに `ui.load_state.loading` (「読込中」) を出す (文字コードは読込の完了で決まる)。`Enter` で切替、`Ctrl+W` で閉じる (一覧内。07 §11.6 の `list` コンテキストの `buffer.close`)。
+- **外部変更の印** (v0.5 の M33、FR-117 AC-7。03 §9.5.1 の WATCH-6 / WATCH-9): 監視で外部の変更・削除が分かった文書 (`external_pending`) と、確認で「無視」を選んだ文書 (`external_seen`) の行は、文字コードの欄の前に `ui.buffer_list.external_changed` (「外部で変更」) / `ui.buffer_list.external_deleted` (「外部で削除」) を出す (無色の段でも文字で分かる。行の並び・選択は変えない)。印の無い文書の行は v0.4 と同じ (既存のゴールデンは変わらない)。
 - 順序: 最近使った順 (直前のバッファが 2 番目 → `Ctrl+E` `Enter` で直前と往復)。
 
 ### 8.5a 設定の診断の一覧 (FR-703、v0.3)
@@ -1082,7 +1083,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 | 左 4 | 5 | 機能縮退 (**v0.5**: ペインの縮退表示 (03 §9.9 の PANE-4 (b)。端末が狭くフォーカスのペインだけを出している間) も同じ種類の項目で出し、長い行の項目があればその後ろに並べる。文言は `status.degraded.panes.long` / `.short` (`{index}` / `{total}`)「[ペイン 2/3 だけ表示]」/「2/3」。長い行を含む文書は折り返さない。NFR-106、03 §14.4。v0.1 は読み取り専用で先頭 64 KiB だけを表示し、v0.2〜v0.3 は閾値を超える行を char 近似モード (書記素 = char) で表示して「近似表示」と出した。**v0.4 の M25** で書記素の単位にしたので、「折り返さない」意味に改めた。長大行の折り返しを v0.4 に入れたら、この項目を出さない。03 §14.4) | `[長い行: 折り返しなし]` | `折返なし` | `status.degraded.long_line.long` / `.short` |
 | 左 5 | 5 | 読込中 (**v0.4 の M25**: 先行表示 (`Partial`、03 §9.2.1) の間は同じ項目 (`StatusKind::Loading`) を `status.partial.long` / `.short` (`{percent}`) 「[先頭のみ {percent}%]」/「{percent}%」で出す (表示中の文書が先行表示のときだけ。表示していない文書の読込の進捗は `status.loading.*`)。標準入力 (03 §9.2.2) は大きさが分からないので、`status.loading_bytes.long` / `.short` (`{size}`) 「[読込中 {size}]」/「{size}」で読んだ量を出す (どちらを出すかは文書の種類で決める。`Progress.total = 0` は空のファイルでも出るので使わない)。標準入力の読込は、その文書を表示しているときだけ出す (ほかの文書の表示中に出る読込中の項目は、ファイルの `file.open` の読込だけ)。標準入力のキーは M25 の (9) で足した) | `[読込中 45%]` | `45%` | `status.loading.long` / `.short`、`status.partial.long` / `.short` |
 | 左 6 | 5 | 保存中 (保存ジョブの完了を待つ間だけ出る。03 §9.7 の `Saving`) | `[保存中]` | `保存中` | `status.saving.long` / `.short` |
-| 左 7 | 5 | 外部変更 (外部での変更の確認で「無視」を選んでから、保存・再読込・開き直しまで。03 §9.5 の「状態」。v0.3 の M18) | `[外部で変更]` | `外部変更` | `status.external_change.long` / `.short` |
+| 左 7 | 5 | 外部変更 (外部での変更の確認で「無視」を選んでから、保存・再読込・開き直しまで。03 §9.5 の「状態」。v0.3 の M18。**v0.5 の M33**: 監視で外部の変更・削除が分かった文書 (`external_pending`、03 §9.5.1 の WATCH-9) にも出す。削除は `status.external_deleted.long` / `.short` の「[外部で削除]」/「外部削除」) | `[外部で変更]` | `外部変更` | `status.external_change.long` / `.short` |
 | 左 8 | 5 | チョード保留 (保留中だけ出る) | `Ctrl+K …` (`Capabilities.ascii_only` が真のときは `Ctrl+K ...` にする案、§3.7、提案、OQ-214) | — | — (キー表記) |
 | 右 1 | 2 | 選択情報 | `(12 文字選択)` | — (省略) | `status.selection` |
 | 右 1 (複数カーソルのとき、v0.5 の M32) | 4 | カーソルの数 (`StatusKind::Selection`。カーソルが 2 つ以上のとき、選択情報の代わりに出す。03 §4.5.5) | `カーソル 3 個` | `3カーソル` | `status.cursors.long` / `.short` (`{count}`) |
@@ -1212,6 +1213,53 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `info.bracket.none` | `cursor.goto_bracket` で、カーソルの隣に括弧が無い (03 §5.7 の BRK-6) | カーソルの前後に括弧がありません | No bracket next to the cursor |
 | `info.bracket.no_match` | 対応する括弧が無い | 対応する括弧がありません | No matching bracket |
 | `info.bracket.too_far` | 探す範囲 (1 MiB) を超えた | 対応する括弧は {limit} の範囲に見つかりませんでした | No matching bracket within {limit} |
+
+### 8.15 設定・言語・行コメント・ワークスペース設定・監視の文言の案 (v0.5 の M33)
+
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (07 §12.6.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。整数でない置き場所 (`{item}`・`{value}`・`{path}`・`{file}`・`{name}`・`{owner}`・`{who}`・`{fs}`・`{section}`・`{language}`・`{first}`・`{second}`・`{key}`・`{condition}`・`{allowed}`・`{reason}`・`{origin}`) はすべて、ファイル由来・OS 由来の文字列を含み得る (ワークスペース層の言語定義の `display_name`、`.editorconfig` の glob など) ので、07 §4.3 の無害化を通す。`{count}`・`{line}` は整数 (千の区切りを付けない)。`msg.*` は設定の診断 (`config.show_diagnostics`) の文言で、`/` の後ろが対処。`info.*` は情報メッセージ (§8.9) で対処を持たない。
+
+| キー (案) | 出す場面 | ja (案) | en (案) |
+|---|---|---|---|
+| `cmd.config.show.title` / `.description` | コマンドの名前と説明 (07 §11.6) | 設定の値と由来を表示 / 今効いている設定の値と、どこで決まったかを一覧で示します | Show Settings / List the effective settings and where each value comes from |
+| `cmd.lang.set.title` / `.description` | 同上 | 言語を選ぶ / 文書の言語 (字下げとコメントの記号) を替えます | Set Language / Change the language of the document (indentation and comment marker) |
+| `cmd.edit.toggle_comment.title` / `.description` | 同上 | 行コメントの切替 / 対象の行に行コメントを付ける・外す | Toggle Line Comment / Add or remove line comments on the target lines |
+| `ui.config_show.title` | `config.show` の見出し (07 §3.5) | 設定 ({name}・{language}) | Settings ({name} · {language}) |
+| `ui.config_show.item` | 一覧の 1 行 | {key} = {value} | {key} = {value} |
+| `ui.config_origin.default` / `.user` / `.workspace` / `.cli` | 一覧の右の列 (由来) | 既定 / ユーザー: {file}:{line} / ワークスペース: {file}:{line} / --set | default / user: {file}:{line} / workspace: {file}:{line} / --set |
+| `ui.config_origin.language_builtin` / `.language_file` / `.editorconfig` | 同上 (文書ごとのキー、07 §3.6) | 言語 {language} (組込み) / 言語 {language}: {file}:{line} / .editorconfig:{line} [{section}] | language {language} (built-in) / language {language}: {file}:{line} / .editorconfig:{line} [{section}] |
+| `ui.config_origin.condition` | 条件付きセクションの値 (07 §3.4 の COND-7) | {origin} [{condition}] | {origin} [{condition}] |
+| `ui.lang_set.title` / `ui.lang_set.auto` | `lang.set` の一覧 (07 §9.6 の LANG-8) | 言語を選ぶ (今: {language}) / 自動で判定 | Set Language (current: {language}) / Detect automatically |
+| `info.lang.changed` | 言語を替えた | 言語を {language} にしました | Language set to {language} |
+| `info.comment.unsupported` | 行コメントの記号の無い言語 (03 §15.6 の CMT-6) | {language} には行コメントの記号がありません | {language} has no line comment marker |
+| `info.comment.no_lines` | 対象が空行だけ (CMT-1) | コメントにする行がありません | No lines to comment |
+| `msg.config.condition_unknown` | 未知の条件の名前 (07 §3.4 の COND-5 (a)。警告) | {item} は条件付きセクションの名前ではありません / 使える名前は os.windows・os.macos・os.linux・os.unix・frontend.tui・env.ssh・env.tmux・env.wsl です | {item} is not a conditional section name / Valid names: os.windows, os.macos, os.linux, os.unix, frontend.tui, env.ssh, env.tmux, env.wsl |
+| `msg.config.condition_nested` | 入れ子 (COND-5 (b)。警告) | 条件付きセクションは入れ子にできません ({item}) / 条件ごとに別のセクションに書いてください | Conditional sections cannot be nested ({item}) / Write a separate section for each condition |
+| `msg.config.condition_bare_key` | 条件の直下のキー (COND-5 (c)。警告) | 条件付きセクションの直下にはキーを書けません ({item}) / [os.windows.editor] のようにセクションをはさんでください | Keys cannot be written directly under a condition ({item}) / Add a section, as in [os.windows.editor] |
+| `msg.config.condition_unsupported_table` | 条件の中の言語定義・キー (COND-5 (d)。警告) | 条件付きセクションの中に {item} は書けません / 言語定義は条件の外に、キーの割当は keymap.toml の when に書いてください | {item} cannot be written in a conditional section / Write language definitions outside conditions, and key bindings with when in keymap.toml |
+| `msg.config.condition_in_keymap` | `keymap.toml` の条件付きセクション (COND-6。警告) | keymap.toml では条件付きセクション ({item}) を使えません / OS ごとの割当は when = "os == \"windows\"" のように書いてください | Conditional sections ({item}) are not supported in keymap.toml / Use when = "os == \"windows\"" for OS-specific bindings |
+| `msg.language.ambiguous` | 同じ層の 2 つの言語が当たる (07 §9.6 の LANG-6 (d)。警告) | {file} は言語 {first} と {second} の両方に当たるため、{second} を使います / どちらかの定義の file_types などを直してください | {file} matches both {first} and {second}; using {second} / Fix file_types or other patterns in one of the definitions |
+| `msg.language.invalid_name` | 使えない言語の名前 (LANG-3。警告) | 言語の名前 {value} は使えません / 英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません) | Language name {value} is invalid / Use lowercase letters, digits, _, + and - (up to 32; plain is reserved) |
+| `msg.workspace.not_owned` | 所有者が違う (07 §12.1 の OWN-7。警告) | {path} を読みませんでした: 所有者が {owner} です / 自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: it is owned by {owner} / Take ownership (takeown / chown), or add it to workspace.safe_directories in your user settings |
+| `msg.workspace.others_can_write` | 他人が書ける (OWN-7。警告) | {path} を読みませんでした: ほかのユーザー ({who}) が書き込めます / Windows は icacls で継承を切ってそのアカウントを外し、Unix は chmod o-w で外してください | Did not read {path}: other users ({who}) can write to it / On Windows, disable inheritance with icacls and remove that account; on Unix, run chmod o-w |
+| `msg.workspace.owner_unknown` | 判定できない FS (OWN-7。警告) | {path} を読みませんでした: この FS ({fs}) では所有者を判定できません / 読むときは、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: ownership cannot be checked on this file system ({fs}) / To read it, add it to workspace.safe_directories in your user settings |
+| `msg.workspace.item_pending` | 準安全・危険の項目 (07 §12.5 の WSC-4。情報) | {item} はワークスペース設定からは使いません ({class}) / v0.5 では、使うときはユーザーの設定に書いてください | {item} is not applied from workspace settings ({class}) / In v0.5, write it in your user settings instead |
+| `msg.workspace.item_pending_unsafe` | 危険の項目 (WSC-4。情報。ユーザーの設定へ写すことを勧めない) | {item} = {value} はこのリポジトリが求めた値ですが、安全のため使っていません / 中身を確かめてから決めてください | {item} = {value} was requested by this repository but is not applied for safety / Check it before deciding to use it |
+| `ui.workspace.class.semi_safe` | 上の `{class}` (準安全。危険の項目は上の `item_pending_unsafe`) | 準安全 | semi-safe |
+| `msg.workspace.item_ignored` | 常に無視の項目 (WSC-4。警告) | {item} はワークスペース設定に書けません (常に無視します) | {item} cannot be set in workspace settings (always ignored) |
+| `msg.workspace.item_no_effect` | 効かない項目 (WSC-4。情報) | {item} はワークスペース設定では効きません (起動時に決まります) / ユーザーの設定に書いてください | {item} has no effect in workspace settings (decided at startup) / Write it in your user settings |
+| `msg.workspace.key_rejected` | 使わないキーの割当 (07 §7.4 の WKEY-2。情報) | ワークスペースのキー割当 {key} は使いません ({reason}) | Workspace key binding {key} is not used ({reason}) |
+| `ui.workspace.key_reason.bound` / `.shadows` / `.text` / `.args` / `.none` / `.exec` | 上の `{reason}` (WKEY-2 の (a)〜(f)) | 既にある割当を変えるため / 既にある割当を使えなくするため / 文字入力のキーのため / 引数を持つため / 割当の解除のため / 外部コマンドのため | it changes an existing binding / it disables an existing binding / it takes a text key / it has arguments / it removes a binding / it runs an external command |
+| `msg.editorconfig.invalid_value` | 誤った値 (07 §10.1。警告) | .editorconfig の {item} = {value} は使えません / 許される値: {allowed} | {item} = {value} in .editorconfig is invalid / Allowed: {allowed} |
+| `msg.editorconfig.charset_unmapped` | 写せない `charset` (§10.1。情報) | .editorconfig の charset = {value} には対応していません (新しいファイルは今の既定の文字コードで作ります) | charset = {value} in .editorconfig is not supported (new files use the current default encoding) |
+| `msg.editorconfig.too_large` | 大きすぎる・UTF-8 でない・合計の上限 (EC-2。警告) | {path} を読みませんでした ({reason}) | Did not read {path} ({reason}) |
+| `ui.editorconfig.reason.too_large` / `.not_utf8` / `.total_limit` | 上の `{reason}` | 256 KiB を超えています / UTF-8 ではありません / 1 つの文書で読む量の上限を超えました | larger than 256 KiB / not UTF-8 / over the total limit for one document |
+| `info.watch.unavailable` | 監視できない (03 §9.5.1 の WATCH-2。理由ごとにプロセスで 1 回) | {path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます | Cannot watch the folder of {path} ({reason}). External changes are checked when you return to the editor and when you save |
+| `ui.watch.reason.network` / `.unsupported_fs` / `.limit` / `.denied` / `.not_found` / `.other` | 上の `{reason}` (`WatchError::Unsupported` は `fs` が `network` なら `.network`、ほかは `.unsupported_fs`。`Limit` / `Denied` / `NotFound` / `Other` はそれぞれの語) | ネットワークの共有 / この FS ({fs}) では監視しません / 監視の数が OS の上限に達しました / 権限がありません / フォルダがありません / 監視を始められません | network share / this file system ({fs}) is not watched / the OS limit on watches was reached / permission denied / the folder does not exist / watching could not be started |
+| `info.external.changed` / `.deleted` | 監視で外部の変更・削除が分かった (WATCH-6) | {name} が外部で変更されました / {name} が外部で削除されました | {name} was changed outside the editor / {name} was deleted outside the editor |
+| `info.external.changed_many` | 2 つ以上の文書 (WATCH-6) | {count} 個のファイルが外部で変更されました (バッファ一覧に印があります) | {count} files were changed outside the editor (marked in the buffer list) |
+| `info.external.reloaded` | 表示中の未編集の文書を読み直した (WATCH-6) | {name} を外部の変更に合わせて読み直しました (元に戻すこともできます) | Reloaded {name} to match the external change (you can undo this) |
+| `status.external_deleted.long` / `.short` | ステータスバー (§8.7 の左 7) | [外部で削除] / 外部削除 | [deleted outside] / deleted |
+| `ui.buffer_list.external_changed` / `.external_deleted` | バッファ一覧の印 (§8.5) | 外部で変更 / 外部で削除 | changed outside / deleted outside |
 
 ---
 
