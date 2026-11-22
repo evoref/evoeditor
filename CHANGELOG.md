@@ -18,10 +18,13 @@ v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える�
 - **OS・環境ごとの設定 (条件付きセクション)**: 1 つの `config.toml` を Windows・macOS・Linux で共有し、`[os.windows.file]`・`[os.linux.view]`・`[os.unix.editor]` (macOS と Linux)・`[frontend.tui.editor]`・`[env.ssh.clipboard]`・`[env.tmux.editor]`・`[env.wsl.editor]` のように、その OS・環境のときだけ効く値を書けます。条件の無い値の後に、`os` → `frontend` → `env` (`ssh` → `tmux` → `wsl`) の順に重なります。`--set os.windows.editor.tab_width=2` も書けます。ほかの OS のセクションの綴りの誤りも、今の OS で知らせます
 - **設定の値と由来の一覧 (`config.show`)**: コマンドパレットの「設定の値と由来を表示」で、今効いている設定の値と、どこで決まったか (既定・`config.toml` の行・`--set`。条件付きセクションの値は `[os.windows]` などの条件) を一覧で見られます。`Enter` で値を書いたファイルのその行を開きます
 - **キーマップの `when` で OS と frontend を使えるようになりました**: `"super+s" = { command = "file.save", when = "os == \"macos\"" }` のように、OS ごとに割当を変えられます (`os` は `windows` / `macos` / `linux`、`frontend` は `tui`)
+- **複数カーソル**: `Ctrl+D` でカーソルの位置の単語を選び、もう一度押すと同じ文字列の次の一致を選択に足します (文書の末尾まで行ったら先頭から続けます。大文字小文字を区別し、単語から始めたときは単語単位で探します)。`Ctrl+Shift+L` (または `Ctrl+K E`) で一致をすべて選び、`Ctrl+Alt+↑` / `Ctrl+Alt+↓` (または `Ctrl+K Shift+↑` / `Ctrl+K Shift+↓`) で上 / 下の行にカーソルを足します。文字の入力・削除・改行・インデント・貼り付けは全部のカーソルで同時に行われ、1 回の元に戻すで全部が戻ります。最後に足したカーソルが主のカーソルで、`Esc` で主のカーソル 1 つに戻ります (もう一度 `Esc` で選択を解きます)。主でないカーソルは反転と下線で示し、ステータスバーにカーソルの数が出ます。カーソルは 10,000 個までです。コピーは選択を文書の順に改行でつなぎ、同じ数のカーソルに貼ると 1 つずつ戻ります。ほかのアプリからの複数行は、行の数と同じ数のカーソルに 1 行ずつ貼れます。Windows Terminal の `Ctrl+V` は短い貼り付けをカーソルごとに分けられないので、`Ctrl+K V` (システムのクリップボードを読む貼り付け) を使ってください。複数カーソルは常に使えます (設定 `editor.multi_cursor` は無く、書くと情報の診断が出ます。使わないときは `keymap.toml` で足す操作のキーを `"none"` にします)
 - eve-view: タブラインの境界の型を追加した (追加のみ。docs/02 §8.2 / §7.3 の C2、docs/03 §9.9 の PANE-12)。`Frame.tab_line` (`TabLineModel`・`TabItem`)、`ChromeTarget::Tab`。`Frame.size` はタブラインの行を引いた後の大きさで、`PaneFrame.rect`・見出し・区切り・`primary_cursor` は編集面の座標のまま (frontend がタブラインの下に置く)。`InputEvent::Resize` の行数はタブラインの行を含む。`CONTRACT_VERSION` は 0 のまま
 - eve-view: 複数ペインの境界の型を追加した (追加のみ。docs/02 §8.2 / §7.3 の C2、docs/03 §9.9 の PANE-7 / PANE-10)。`Frame.dividers` (`Divider`)、`PaneFrame.active` と `PaneFrame.bar` (`PaneBarModel`)、`InputEvent::ChromeMouse` (`ChromeMouseEvent`、`ChromeTarget::PaneBar`。`#[non_exhaustive]`)。`PaneFrame.rect` と `Frame.primary_cursor` は編集面の左上が原点 (ペインが 1 つのときは今と同じ値)。`CONTRACT_VERSION` は 0 のまま
 
 ### 変更
+
+- **`Esc` で選択を解くようにしました**: 選択があるときの `Esc` は、選択を解いて、選択の伸びた側 (カーソルのあった側) にカーソルを置きます (オーバーレイや検索バーを開いているとき・読込中などは、これまでどおりそちらを先に閉じる・取り消します)。これまでは何もしませんでした
 
 - **`Ctrl+O` は、パスを入力して開く操作からファインダ (ファイルを探して開く) に変わりました**: パスを入力して開く操作 (`file.open`) は、コマンドパレット (`Ctrl+P`) の「ファイル: 開く」から使えます。これまでの `Ctrl+O` を使いたいときは、`keymap.toml` の `[keys.editor]` と `[keys.search]` (検索バーにいるとき) の両方に `"ctrl+o" = "file.open"` と書いてください。このとき、ヒントバーの「開く」は表示されなくなります (ヒントバーの「開く」はファインダの項目で、ファインダにキーが届かなくなるため)。ファインダはコマンドパレットの「ワークスペース: ファイルを探して開く」から使えます
 

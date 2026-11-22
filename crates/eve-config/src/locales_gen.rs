@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (941 件)。
+/// `locales/en.toml` の文言 (957 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -167,8 +167,16 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.search.toggle_word.title"), B("Toggle Whole Word")),
     (B("cmd.search.workspace.description"), B("Search across the files in the workspace.")),
     (B("cmd.search.workspace.title"), B("Search Workspace")),
+    (B("cmd.select.add_cursor_above.description"), B("Add a cursor on the line above the topmost cursor.")),
+    (B("cmd.select.add_cursor_above.title"), B("Add Cursor Above")),
+    (B("cmd.select.add_cursor_below.description"), B("Add a cursor on the line below the bottommost cursor.")),
+    (B("cmd.select.add_cursor_below.title"), B("Add Cursor Below")),
+    (B("cmd.select.add_next_match.description"), B("Add the next occurrence of the selected text as another cursor (selects the word first if nothing is selected).")),
+    (B("cmd.select.add_next_match.title"), B("Add Next Match to Selection")),
     (B("cmd.select.all.description"), B("Select the whole document.")),
     (B("cmd.select.all.title"), B("Select All")),
+    (B("cmd.select.all_matches.description"), B("Select every occurrence of the selected text, with a cursor at each.")),
+    (B("cmd.select.all_matches.title"), B("Select All Matches")),
     (B("cmd.select.extend_down.description"), B("Extend the selection down one line.")),
     (B("cmd.select.extend_down.title"), B("Select Down")),
     (B("cmd.select.extend_end.description"), B("Extend the selection to the end of the line.")),
@@ -249,6 +257,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.config.reload_unchanged"), B("Reloaded the settings (nothing changed)")),
     (B("info.config.reloaded"), B("Reloaded the settings. {count} items changed: {keys}")),
     (B("info.config.unsupported"), B("{item} is not supported in this version and was ignored")),
+    (B("info.cursor.limit"), B("Up to {limit} cursors; selection unchanged")),
     (B("info.eol.converted"), B("Converted {count} line endings to {eol} (undo restores them)")),
     (B("info.eol.unchanged"), B("Line endings are already {eol}")),
     (B("info.external.unchanged"), B("{path} has not changed")),
@@ -312,6 +321,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.search.replaced_lines_removed"), B("Replaced {count} matches; the document is {lines} lines shorter (undo restores them)")),
     (B("info.search.wrapped_backward"), B("Reached the start of the document, searching from the end")),
     (B("info.search.wrapped_forward"), B("Reached the end of the document, searching from the start")),
+    (B("info.select.no_more_matches"), B("No more matches")),
+    (B("info.select.no_word"), B("No word at the cursor")),
+    (B("info.select.query_too_long"), B("The selection is too long to search for (up to 64 KiB); no matches were searched")),
+    (B("info.select.too_many_matches"), B("More than {limit} matches; selection unchanged")),
     (B("info.stdin.stopped"), B("Stopped reading standard input and opened what was read ({size}) as read-only")),
     (B("info.stdin.terminal"), B("Standard input is a terminal; opened an empty document without reading it")),
     (B("info.swap.applied_read_only"), B("Recovered content applied. The document is read-only because it has invalid bytes; allow editing with {key:file.toggle_read_only} to continue")),
@@ -403,6 +416,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.config.locale_unknown_key.text"), B("There is no text key named {item}")),
     (B("msg.config.locale_unreadable.hint"), B("Check that it is a readable file")),
     (B("msg.config.locale_unreadable.text"), B("This language file is not used because it cannot be read: {reason}")),
+    (B("msg.config.multi_cursor_always.hint"), B("To turn them off, set the keys of the add commands to \"none\" in keymap.toml")),
+    (B("msg.config.multi_cursor_always.text"), B("editor.multi_cursor is not supported; multiple cursors are always available")),
     (B("msg.config.out_of_range.hint"), B("Specify a value in {range}. This item uses {default}")),
     (B("msg.config.out_of_range.text"), B("The value {value} of {item} is out of range")),
     (B("msg.config.problem.hint"), B("{hint}")),
@@ -871,6 +886,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.help.terminal.alt"), B("On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives")),
     (B("ui.help.terminal.chord"), B("Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels")),
     (B("ui.help.terminal.ime"), B("While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter")),
+    (B("ui.help.terminal.multi_cursor_paste"), B("To paste one line per cursor, use Ctrl+K V (a short terminal paste cannot be split per cursor)")),
     (B("ui.help.terminal.readme"), B("Per-terminal settings and known limitations are described in the README")),
     (B("ui.help.terminal.stdin_keys"), B("When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input")),
     (B("ui.help.terminal.stdin_powershell"), B("Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\"")),
@@ -954,7 +970,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (941 件)。
+/// `locales/ja.toml` の文言 (957 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1113,8 +1129,16 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.search.toggle_word.title"), B("単語単位を切替")),
     (B("cmd.search.workspace.description"), B("ワークスペースのファイルを横断して検索します。")),
     (B("cmd.search.workspace.title"), B("ワークスペースを検索")),
+    (B("cmd.select.add_cursor_above.description"), B("一番上のカーソルの上の行にカーソルを足します。")),
+    (B("cmd.select.add_cursor_above.title"), B("上の行にカーソルを追加")),
+    (B("cmd.select.add_cursor_below.description"), B("一番下のカーソルの下の行にカーソルを足します。")),
+    (B("cmd.select.add_cursor_below.title"), B("下の行にカーソルを追加")),
+    (B("cmd.select.add_next_match.description"), B("選択と同じ文字列の次の一致を、カーソルとして足します (カーソルだけなら単語を選びます)。")),
+    (B("cmd.select.add_next_match.title"), B("次の一致を選択に追加")),
     (B("cmd.select.all.description"), B("文書全体を選択します。")),
     (B("cmd.select.all.title"), B("すべて選択")),
+    (B("cmd.select.all_matches.description"), B("選択と同じ文字列をすべて選び、それぞれにカーソルを置きます。")),
+    (B("cmd.select.all_matches.title"), B("一致をすべて選択")),
     (B("cmd.select.extend_down.description"), B("選択範囲を下の行へ広げます。")),
     (B("cmd.select.extend_down.title"), B("下へ選択")),
     (B("cmd.select.extend_end.description"), B("選択範囲を行の末尾まで広げます。")),
@@ -1195,6 +1219,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.config.reload_unchanged"), B("設定を読み直しました (変わった項目はありません)")),
     (B("info.config.reloaded"), B("設定を読み直しました。{count} 項目が変わりました: {keys}")),
     (B("info.config.unsupported"), B("{item} はこのバージョンでは未対応のため無視しました")),
+    (B("info.cursor.limit"), B("カーソルは {limit} 個までです。選択を変えませんでした")),
     (B("info.eol.converted"), B("{count} 個の改行を {eol} に変換しました (元に戻すで戻せます)")),
     (B("info.eol.unchanged"), B("改行はすでに {eol} です")),
     (B("info.external.unchanged"), B("{path} は変更されていません")),
@@ -1258,6 +1283,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.search.replaced_lines_removed"), B("{count} 件を置換しました。文書は {lines} 行減りました (元に戻すで戻せます)")),
     (B("info.search.wrapped_backward"), B("文書の先頭に達したので、末尾から検索しました")),
     (B("info.search.wrapped_forward"), B("文書の末尾に達したので、先頭から検索しました")),
+    (B("info.select.no_more_matches"), B("ほかに一致はありません")),
+    (B("info.select.no_word"), B("カーソルの位置に単語がありません")),
+    (B("info.select.query_too_long"), B("選択が長すぎるため (64 KiB まで)、一致を探しませんでした")),
+    (B("info.select.too_many_matches"), B("一致が {limit} 件を超えるため、選択を変えませんでした")),
     (B("info.stdin.stopped"), B("標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました")),
     (B("info.stdin.terminal"), B("標準入力が端末のため、読まずに空の文書を開きました")),
     (B("info.swap.applied_read_only"), B("復旧内容を適用しました。不正なバイトを含むため読み取り専用です。{key:file.toggle_read_only} で編集を許可すると続けられます")),
@@ -1349,6 +1378,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.config.locale_unknown_key.text"), B("{item} という文言のキーはありません")),
     (B("msg.config.locale_unreadable.hint"), B("読める通常のファイルか確かめてください")),
     (B("msg.config.locale_unreadable.text"), B("この言語ファイルを読めないため使っていません: {reason}")),
+    (B("msg.config.multi_cursor_always.hint"), B("使わないときは keymap.toml で足す操作のキーを \"none\" にしてください")),
+    (B("msg.config.multi_cursor_always.text"), B("editor.multi_cursor は使えません。複数カーソルは常に有効です")),
     (B("msg.config.out_of_range.hint"), B("{range} で指定してください。この項目は {default} を使います")),
     (B("msg.config.out_of_range.text"), B("{item} の値 {value} は範囲外です")),
     (B("msg.config.problem.hint"), B("{hint}")),
@@ -1817,6 +1848,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.help.terminal.alt"), B("Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります")),
     (B("ui.help.terminal.chord"), B("Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます")),
     (B("ui.help.terminal.ime"), B("IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください")),
+    (B("ui.help.terminal.multi_cursor_paste"), B("複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません)")),
     (B("ui.help.terminal.readme"), B("端末ごとの設定と既知の制約は README に書いてあります")),
     (B("ui.help.terminal.stdin_keys"), B("標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います")),
     (B("ui.help.terminal.stdin_powershell"), B("Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください")),

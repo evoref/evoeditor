@@ -80,7 +80,11 @@ pub const SEARCH_TOGGLE_REGEX: &str = "search.toggle_regex";
 pub const SEARCH_TOGGLE_SELECTION: &str = "search.toggle_selection";
 pub const SEARCH_TOGGLE_WORD: &str = "search.toggle_word";
 pub const SEARCH_WORKSPACE: &str = "search.workspace";
+pub const SELECT_ADD_CURSOR_ABOVE: &str = "select.add_cursor_above";
+pub const SELECT_ADD_CURSOR_BELOW: &str = "select.add_cursor_below";
+pub const SELECT_ADD_NEXT_MATCH: &str = "select.add_next_match";
 pub const SELECT_ALL: &str = "select.all";
+pub const SELECT_ALL_MATCHES: &str = "select.all_matches";
 pub const SELECT_EXTEND_DOWN: &str = "select.extend_down";
 pub const SELECT_EXTEND_END: &str = "select.extend_end";
 pub const SELECT_EXTEND_HOME: &str = "select.extend_home";
@@ -111,7 +115,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 106] = [
+pub const ALL: [&str; 110] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -190,7 +194,11 @@ pub const ALL: [&str; 106] = [
     SEARCH_TOGGLE_SELECTION,
     SEARCH_TOGGLE_WORD,
     SEARCH_WORKSPACE,
+    SELECT_ADD_CURSOR_ABOVE,
+    SELECT_ADD_CURSOR_BELOW,
+    SELECT_ADD_NEXT_MATCH,
     SELECT_ALL,
+    SELECT_ALL_MATCHES,
     SELECT_EXTEND_DOWN,
     SELECT_EXTEND_END,
     SELECT_EXTEND_HOME,

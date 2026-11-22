@@ -77,7 +77,11 @@ search.toggle_regex	Ui	Ui	search.active || overlay.active == "workspace_search"
 search.toggle_selection	Ui	Ui	search.active
 search.toggle_word	Ui	Ui	search.active || overlay.active == "workspace_search"
 search.workspace	Ui	Ui	—
+select.add_cursor_above	Motion	Read	—
+select.add_cursor_below	Motion	Read	—
+select.add_next_match	Motion	Read	—
 select.all	Motion	Read	—
+select.all_matches	Motion	Read	—
 select.extend_down	Motion	Read	—
 select.extend_end	Motion	Read	—
 select.extend_home	Motion	Read	—

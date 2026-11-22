@@ -69,6 +69,7 @@ pub fn builtin_registry() -> CommandRegistry {
     let mut r = CommandRegistry::new();
     crate::command::edit::register(&mut r);
     crate::view::motion::register(&mut r);
+    crate::view::multi_cursor::register(&mut r);
     crate::io::file_cmds::register(&mut r);
     crate::io::external::register(&mut r);
     buffer::register(&mut r);

@@ -51,6 +51,10 @@ pub(crate) enum Pending {
         cursor: eve_text::ByteOff,
         forward: bool,
     },
+    /// `select.add_next_match` の単発の検索 (03 §4.5.1 の MCUR-2 (d)。`find_job` を `search.next` / `search.prev` と共有する)。
+    AddNextMatch(Box<crate::view::multi_cursor::NextMatchAsk>),
+    /// `select.all_matches` の全件の検索 (MCUR-3)。束 (`SearchBatch`) は途中経過なので、終端まで待ちの記録を残す。
+    SelectAllMatches(Box<crate::view::multi_cursor::AllMatchesAsk>),
     /// 改行コードの変換の `ChangeSet` を作るジョブ (03 §8.4)。
     ConvertEol(crate::document::eol_cmd::EolConvert),
     /// すべて置換の `ChangeSet` を作るジョブ (03 §12.5)。
@@ -162,6 +166,8 @@ impl EditorState {
                 Pending::SaveAsTarget(ask) => ask.doc == doc,
                 Pending::Search => self.find.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
+                Pending::AddNextMatch(ask) => ask.doc() == doc,
+                Pending::SelectAllMatches(ask) => ask.doc() == doc,
                 Pending::ReplaceAll { doc: d, .. } | Pending::ReplaceOne { doc: d, .. } => {
                     *d == doc
                 }
@@ -261,6 +267,14 @@ impl EditorState {
             }
             return;
         }
+        // `select.all_matches` の全件の検索も途中経過が複数届く (03 §4.5.1 の MCUR-3)
+        if matches!(
+            self.io.pending.get(&job),
+            Some(Pending::SelectAllMatches(_))
+        ) {
+            self.on_all_matches_result(job, r);
+            return;
+        }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(JobOutput { job, body: r });
@@ -292,6 +306,9 @@ impl EditorState {
                 cursor,
                 forward,
             } => self.finish_find_next(doc, revision, cursor, forward, r),
+            Pending::AddNextMatch(ask) => self.finish_add_next_match(*ask, r),
+            // 途中経過の束と終わりは上で振り分けた
+            Pending::SelectAllMatches(_) => {}
             Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
             Pending::ReplaceOne {

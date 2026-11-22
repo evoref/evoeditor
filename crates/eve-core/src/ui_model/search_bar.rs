@@ -567,18 +567,26 @@ impl EditorState {
         Some((r.start(), r.end()))
     }
 
-    /// 選択を動かさずに、`pos` が見えるようスクロールする。
+    /// 選択を動かさずに、`pos` が見えるようスクロールする。選択と、`set_selection` が消す目標の列・折り返し位置の帰属・
+    /// 「単語の一致」の印 (03 §4.5.1 の MCUR-2 (e)。検索バーの逐次検索は選択を変えない) を戻す。
     fn reveal(&mut self, pos: ByteOff) {
         let Some(view) = self.focused_view() else {
             return;
         };
-        let Some(saved) = self.view(view).map(|v| v.selection.clone()) else {
+        let Some(saved) = self.view(view).map(|v| {
+            (
+                v.selection.clone(),
+                v.goal_dcol,
+                v.cursor_affinity,
+                v.word_match.clone(),
+            )
+        }) else {
             return;
         };
         self.set_selection(view, Selection::point(pos));
         self.ensure_cursor_visible(view);
         if let Some(v) = self.docs.views.get_mut(&view) {
-            v.selection = saved;
+            (v.selection, v.goal_dcol, v.cursor_affinity, v.word_match) = saved;
         }
     }
 
@@ -1037,7 +1045,7 @@ impl EditorState {
     }
 
     /// 探さない理由をメッセージ行に text と hint で出す (03 §12.3.1、04 §8.4)。
-    fn show_limit_message(&mut self, l: ScanLimit) {
+    pub(crate) fn show_limit_message(&mut self, l: ScanLimit) {
         let (key, _, args) = limit_message(l);
         let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
         self.show_message(MessageLevel::Warn, key, &args);

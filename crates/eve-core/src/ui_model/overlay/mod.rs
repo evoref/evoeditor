@@ -16,6 +16,7 @@ pub(crate) use input_field::field_selection;
 pub(crate) use prompt::{PromptKind, PromptState};
 pub(crate) use quit_chain::{ChoiceDef, ConfirmAction, ConfirmState, Continuation, QuitChain};
 
+use eve_text::Selection;
 use eve_view::{EditorEvent, OverlayKind};
 
 use crate::command::{CommandResult, RejectReason};
@@ -162,9 +163,14 @@ impl EditorState {
         if self.palette_back() {
             return CommandResult::Done;
         }
-        // 取り消す順 (03 §12.7.6 の細目 (9)): 表示中の文書の読込 (標準入力の確認を含む) → 名前を付けて保存の照合 → 表示して
-        // いない文書の読込。読込の結果は `Failed { Cancelled }` で届き、旧文書があれば残る (FR-122)
+        // 取り消す順 (03 §12.7.6 の細目 (9)、04 §7.5): 表示中の文書の読込 (標準入力の確認を含む) → 未編集の上書き保存の
+        // 照合 → 名前を付けて保存の照合 → 表示していない文書の読込 → 表現不能の置換の一覧の作成。読込の結果は
+        // `Failed { Cancelled }` で届き、旧文書があれば残る (FR-122)
         if self.ui.overlay.is_none() && self.cancel_own_loading() {
+            return CommandResult::Done;
+        }
+        // 未編集の上書き保存の照合 (`CheckingUnchanged`) は中止する (何も書いていない。後続も捨てる、03 §9.7)
+        if self.ui.overlay.is_none() && self.cancel_unchanged_check() {
             return CommandResult::Done;
         }
         // 照合を待つ間は、結果を捨てて名前の入力に戻る (03 §9.7 の `CheckTarget` の行)
@@ -173,6 +179,10 @@ impl EditorState {
             return CommandResult::Done;
         }
         if self.ui.overlay.is_none() && self.cancel_hidden_loading() {
+            return CommandResult::Done;
+        }
+        // 表現不能の置換の一覧を作っている (`BuildingReplacement`) なら、E3 のキャンセルと同じく保存を中止する (03 §9.7)
+        if self.ui.overlay.is_none() && self.cancel_building_replacement() {
             return CommandResult::Done;
         }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
@@ -194,8 +204,33 @@ impl EditorState {
         }
         if self.take_overlay().is_some() {
             self.mark_dirty_render();
+            return CommandResult::Done;
         }
+        self.cancel_selection();
         CommandResult::Done
+    }
+
+    /// `Esc` の最後の 2 段 (04 §7.5): 複数カーソルなら主の Range だけを残し (主の選択は残す。03 §4.5.1 の MCUR-5)、Range が
+    /// 1 つで選択があれば選択を解いて head の空のカーソルにする。「単語の一致」の印は残す (MCUR-2 (e))。
+    fn cancel_selection(&mut self) {
+        let Some(view) = self.focused_view() else {
+            return;
+        };
+        let Some(sel) = self.view(view).map(|v| v.selection.clone()) else {
+            return;
+        };
+        let primary = *sel.primary();
+        let next = if sel.len() >= 2 {
+            Selection::single(primary)
+        } else if !primary.is_empty() {
+            Selection::single(primary.collapse_to_head())
+        } else {
+            return;
+        };
+        let word = self.word_mark_valid(view);
+        self.set_selection(view, next);
+        self.set_word_mark(view, word);
+        self.ensure_cursor_visible(view);
     }
 
     /// `ui.list_next` / `ui.list_prev`: 確認のフォーカスを移す (折り返す)。

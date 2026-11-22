@@ -314,9 +314,25 @@ title = "ワークスペースを検索"
 description = "検索バーを開いたときの選択範囲の中だけを探すかを切り替えます。"
 title = "選択範囲内を切替"
 
+[cmd.select.add_cursor_above]
+description = "一番上のカーソルの上の行にカーソルを足します。"
+title = "上の行にカーソルを追加"
+
+[cmd.select.add_cursor_below]
+description = "一番下のカーソルの下の行にカーソルを足します。"
+title = "下の行にカーソルを追加"
+
+[cmd.select.add_next_match]
+description = "選択と同じ文字列の次の一致を、カーソルとして足します (カーソルだけなら単語を選びます)。"
+title = "次の一致を選択に追加"
+
 [cmd.select.all]
 description = "文書全体を選択します。"
 title = "すべて選択"
+
+[cmd.select.all_matches]
+description = "選択と同じ文字列をすべて選び、それぞれにカーソルを置きます。"
+title = "一致をすべて選択"
 
 [cmd.select.extend_down]
 description = "選択範囲を下の行へ広げます。"
@@ -472,6 +488,9 @@ reload_unchanged = "設定を読み直しました (変わった項目はあり�
 reloaded = "設定を読み直しました。{count} 項目が変わりました: {keys}"
 unsupported = "{item} はこのバージョンでは未対応のため無視しました"
 
+[info.cursor]
+limit = "カーソルは {limit} 個までです。選択を変えませんでした"
+
 [info.eol]
 converted = "{count} 個の改行を {eol} に変換しました (元に戻すで戻せます)"
 unchanged = "改行はすでに {eol} です"
@@ -557,6 +576,12 @@ restored = "{path} を元に戻しました"
 done = "{saved} 件の文書を保存しました"
 done_skipped = "{saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません"
 none = "保存する文書はありません"
+
+[info.select]
+no_more_matches = "ほかに一致はありません"
+no_word = "カーソルの位置に単語がありません"
+query_too_long = "選択が長すぎるため (64 KiB まで)、一致を探しませんでした"
+too_many_matches = "一致が {limit} 件を超えるため、選択を変えませんでした"
 
 [info.search]
 no_selection = "選択範囲がありません。選択してから検索バーを開いてください"
@@ -751,6 +776,10 @@ text = "{item} という文言のキーはありません"
 [msg.config.locale_unreadable]
 hint = "読める通常のファイルか確かめてください"
 text = "この言語ファイルを読めないため使っていません: {reason}"
+
+[msg.config.multi_cursor_always]
+hint = "使わないときは keymap.toml で足す操作のキーを \"none\" にしてください"
+text = "editor.multi_cursor は使えません。複数カーソルは常に有効です"
 
 [msg.config.out_of_range]
 hint = "{range} で指定してください。この項目は {default} を使います"
@@ -1563,6 +1592,7 @@ compat_yen_key = "¥ キーで入る文字の多くは \\ (U+005C) で、これ�
 ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"
 chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
 alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
+multi_cursor_paste = "複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません)"
 stdin_keys = "標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います"
 stdin_redraw = "書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください"
 stdin_powershell = "Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください"

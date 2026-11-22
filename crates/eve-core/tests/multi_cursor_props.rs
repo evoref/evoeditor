@@ -592,9 +592,9 @@ proptest! {
         check_invariants_of(&h, second, "編集した View");
     }
 
-    /// (c): 続けて打った文字は、全 Range で R7 の条件を満たすとき (Range が離れていて、編集が 1 つのまとまりに
-    /// つながらない) 1 つの Undo にまとまる。主の空のカーソルが選択の始まりに残る (N4) と、最初の入力の 2 つの編集が
-    /// つながってまとまりの数が Range の数と変わるので、新しいノードになる (MCUR-7)。
+    /// (c): 続けて打った文字は、全 Range で 1 つの Undo にまとまる (R7。正規化の後の Range は離れている (03 §4.4 の
+    /// N3 / N4: 接する非空どうしは併合し、非空の端の空のカーソルは捨てるか併合する) ので、入力の編集が 1 つのまとまりに
+    /// つながることは無い)。
     #[test]
     fn 続けて打った文字は全_range_で_1_つの_undo_になる(
         text in doc_text(),
@@ -603,16 +603,13 @@ proptest! {
     ) {
         let (mut h, before) = setup(&text, &raw, primary);
         let apart = before.ranges().windows(2).all(|w| w[0].end() < w[1].start());
+        prop_assert!(apart, "正規化の後の Range は離れている: {:?}", before);
         h.text(s);
         h.text(s);
         h.text(s);
         h.cmd("edit.undo");
-        if apart {
-            prop_assert_eq!(h.doc_text(), text);
-            prop_assert_eq!(selection(&h), before);
-        } else {
-            prop_assert_ne!(h.doc_text(), text, "つながった編集の後の入力は別のノード");
-        }
+        prop_assert_eq!(h.doc_text(), text);
+        prop_assert_eq!(selection(&h), before);
     }
 }
 

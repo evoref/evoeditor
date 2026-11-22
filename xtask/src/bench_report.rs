@@ -100,6 +100,12 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "core 区間のみ。折り返し ON (view.wrap = word)",
         ),
         "BM-103a-200x60" => t("(診断用)", None, "core 区間のみ。端末 200x60"),
+        // v0.5 の M32 の段 3: 複数カーソルの入力 (01 FR-211 AC-3 の (B)。10k の p99 が 50 ms を超えたら上限を見直す、03 §4.7.1)
+        id if id.starts_with("BM-211-") => t(
+            "(参考) 10k の p99 50 ms を超えたら上限を見直す",
+            None,
+            "1 MB の各行の行頭のカーソルで 1 文字の入力 → Frame (core 区間。BM-103a と同じ測り方)",
+        ),
         "BM-103b" => t(
             "p50 2 ms / p99 8 ms",
             limits(v, 2.0, 8.0),

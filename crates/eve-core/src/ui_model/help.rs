@@ -224,6 +224,8 @@ impl EditorState {
             keys::UI_HELP_TERMINAL_IME,
             keys::UI_HELP_TERMINAL_CHORD,
             keys::UI_HELP_TERMINAL_ALT,
+            // 複数カーソルへの貼り付けの既知の制約 (03 §4.5.3 の MCUR-10。v0.5 の M32)
+            keys::UI_HELP_TERMINAL_MULTI_CURSOR_PASTE,
             // 標準入力 (`cmd | evoeditor -`) の既知の制約 (07 §18.5、04 §8.6。v0.4 の M25)
             keys::UI_HELP_TERMINAL_STDIN_KEYS,
             keys::UI_HELP_TERMINAL_STDIN_REDRAW,
