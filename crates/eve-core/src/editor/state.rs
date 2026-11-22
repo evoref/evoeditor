@@ -615,6 +615,9 @@ impl EditorState {
         }
         let rows = rows.saturating_sub(tab_rows).max(1);
         if self.term.viewport != (cols, rows) {
+            // 桁数が変わったときだけ折り返し幅が変わる。行数だけの変化 (端末の高さ・検索バーとタブラインの出し入れ) では
+            // 先頭の表示行を保つ (03 §14.3.1 の「リサイズ・設定変更」、§9.9 の PANE-12 (b))
+            let cols_changed = self.term.viewport.0 != cols;
             self.term.viewport = (cols, rows);
             self.out.needs_render = true;
             // 画面の大きさが変わっても、カーソルが見えるようにする (配置は 1 回だけ求める)
@@ -622,7 +625,7 @@ impl EditorState {
             self.with_view_sizes(|st| {
                 for v in views {
                     // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
-                    if let Some(view) = st.docs.views.get_mut(&v) {
+                    if cols_changed && let Some(view) = st.docs.views.get_mut(&v) {
                         view.scroll.wrap_idx = 0;
                     }
                     st.ensure_cursor_visible(v);

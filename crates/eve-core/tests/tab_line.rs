@@ -426,6 +426,82 @@ fn オーバーレイと検索バーの間_閉じた文書_左の押下でない
     assert_eq!(h.editor.state().documents_len(), 2);
 }
 
+// verifies: AC-FR-510-2
+#[test]
+fn 出し入れで折り返した行の途中の先頭の表示行が動かず_桁数が変わったときだけ戻す() {
+    // 40 桁 × 10 行。先頭の論理行は 400 文字で、折り返すと 10 行を超える
+    let mut text = "a".repeat(400).into_bytes();
+    text.extend_from_slice(b"\n");
+    text.extend(lines(20));
+    let mut h = opened_sized(40, 10, &[("/w/a.txt", &text)]);
+    h.cmd("view.toggle_wrap");
+    // ホイールで 2 目盛り (6 表示行) 下げ、先頭を折り返した行の途中にする。カーソルは画面の中ほどに置く
+    h.mouse(MouseKind::WheelDown, Modifiers::NONE, 2, 10);
+    h.mouse(MouseKind::WheelDown, Modifiers::NONE, 2, 10);
+    h.click(4, 10);
+    let scroll = |h: &Harness| {
+        let v = h.editor.state().view(focused(h)).expect("View");
+        (v.scroll.top, v.scroll.wrap_idx)
+    };
+    let before = scroll(&h);
+    assert_eq!(before.1, 6, "先頭は折り返した行の 7 つ目の表示行");
+    let first_row = |h: &mut Harness| {
+        let f = h.frame();
+        f.panes[0].rows[0].source
+    };
+    let row0 = first_row(&mut h);
+    // タブラインを出しても消しても、先頭の表示行は同じ
+    h.set_tab_line(TabLineMode::Always);
+    assert_eq!(h.frame().size.rows, 9);
+    assert_eq!(scroll(&h), before);
+    assert_eq!(first_row(&mut h), row0);
+    h.set_tab_line(TabLineMode::Never);
+    assert_eq!(scroll(&h), before);
+    // 検索バーの出し入れも同じ (桁数は変わらない)
+    h.cmd("search.open");
+    h.keys("escape");
+    assert_eq!(scroll(&h), before);
+    // 端末の桁数が変わったら、折り返し幅が変わるので論理行の最初の表示行に戻す (その後、カーソルが余白の外に出ない
+    // ように最小限スクロールする)
+    h.resize(50, 10);
+    let after = scroll(&h);
+    assert_eq!(after.0, before.0);
+    assert!(after.1 < 2, "{after:?}");
+}
+
+// verifies: AC-FR-510-1
+#[test]
+fn 同じ名前の区別はタブに出す文書の集合で行い_見出しとタブで同じ名前になる() {
+    let mut h = opened(&[("/p/b/mod.rs", b"b\n")]);
+    h.cmd("pane.split_right");
+    // 右のペインに無題のバッファを出し、それを置き換えて /p/a/mod.rs を開く (読込の途中で止める)
+    h.cmd("file.new");
+    h.fs.add_file("/p/a/mod.rs", b"a\n");
+    h.open("/p/a/mod.rs");
+    let f = h.frame();
+    // 読込中の a/mod.rs はタブに出さないので、b/mod.rs は区別しない
+    assert_eq!(names(&f), vec!["mod.rs", "無題-2"]);
+    let left_bar: Vec<String> = f.panes[0]
+        .bar
+        .as_ref()
+        .expect("見出し")
+        .items
+        .iter()
+        .map(|i| cell_text(&i.long))
+        .collect();
+    assert_eq!(left_bar, vec!["mod.rs"], "見出しもタブと同じ名前");
+    // 読込が終わると a/mod.rs がタブに出て、両方を区別する
+    h.run_jobs();
+    let f = h.frame();
+    assert_eq!(names(&f), vec!["mod.rs (b)", "mod.rs (a)"]);
+    let bars: Vec<String> = f
+        .panes
+        .iter()
+        .map(|p| cell_text(&p.bar.as_ref().expect("見出し").items[0].long))
+        .collect();
+    assert_eq!(bars, vec!["mod.rs (b)", "mod.rs (a)"]);
+}
+
 // ---------- ASCII の Frame のゴールデン (03 §4.7.1 のゴールデン、PANE-12 (h)) ----------
 
 fn golden_path(name: &str) -> std::path::PathBuf {

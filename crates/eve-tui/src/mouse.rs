@@ -256,6 +256,14 @@ impl MouseTracker {
             self.buttons = r.buttons & (LEFT | RIGHT | MIDDLE);
             return Vec::new();
         }
+        // 押している間に幾何が替わったら (タブラインの出し入れでペインが上下に動く)、押したペインの矩形を、今の幾何の同じ
+        // View のペインから引き直す (原点がずれて残りのドラッグが 1 行ずれないように。03 §9.9 の PANE-12 (j) の (7))。
+        // 同じ View が無ければ (ペインが別の文書に切り替わった) 押したときの矩形のまま
+        if let Some(p) = self.pressed
+            && let Some(now) = geom.panes.iter().find(|g| g.view == p.view)
+        {
+            self.pressed = Some(*now);
+        }
         let hit = geom.hit(r.col, r.row);
         let ev = |kind, pane: PaneGeom| MouseEvent {
             kind,
@@ -690,5 +698,79 @@ mod tests {
             (vec![MouseKind::Drag(MouseButton::Left)], -1)
         );
         feed(&mut t, rec(5, 0, 0, 0), &g);
+    }
+
+    // verifies: AC-FR-510-2
+    #[test]
+    fn ドラッグ中にタブラインが出入りしても_押したペインの原点は今の幾何に従う() {
+        // 押したときはタブラインなし (本文は 0 行目から)
+        let before = Geometry {
+            panes: vec![pane(7, 0, 0, 80, 10)],
+            tabs: Vec::new(),
+        };
+        // ドラッグの途中で文書が 2 つになり、タブラインが出て本文が 1 行下がった
+        let after = Geometry {
+            panes: vec![pane(7, 0, 1, 80, 9)],
+            tabs: Vec::new(),
+        };
+        let mut t = MouseTracker::new();
+        let d = feed(&mut t, rec(5, 3, LEFT, 0), &before);
+        assert_eq!(d[0].at.row, 3);
+        // 画面の 6 行目は、新しい幾何では本文の 5 行目
+        let m = feed(&mut t, rec(5, 6, LEFT, MOVED), &after);
+        assert_eq!(
+            (kinds(&m), m[0].at.row, m[0].at.view),
+            (vec![MouseKind::Drag(MouseButton::Left)], 5, ViewId(7))
+        );
+        let u = feed(&mut t, rec(5, 6, 0, 0), &after);
+        assert_eq!(
+            (kinds(&u), u[0].at.row),
+            (vec![MouseKind::Up(MouseButton::Left)], 5)
+        );
+        // タブラインが消えたときも同じ (押し直して、消えた後の幾何で引く)
+        feed(&mut t, rec(5, 4, LEFT, 0), &after);
+        let m = feed(&mut t, rec(5, 4, LEFT, MOVED), &before);
+        assert_eq!(m[0].at.row, 4);
+        feed(&mut t, rec(5, 4, 0, 0), &before);
+    }
+
+    // verifies: AC-FR-509-4, AC-FR-510-2
+    #[test]
+    fn タブラインを出したまま見出しをクリックすると_見出しの矩形は_1_行下() {
+        let mut h = eve_testkit::Harness::new()
+            .with_size(80, 10)
+            .with_file("/w/a.txt", b"a\n")
+            .with_file("/w/b.txt", b"b\n");
+        h.open("/w/a.txt");
+        h.run_jobs();
+        h.open("/w/b.txt");
+        h.run_jobs();
+        h.cmd("pane.split_right");
+        let f = h.frame();
+        assert!(f.tab_line.is_some());
+        let g = Geometry::from_frame(&f, &Glyphs::unicode());
+        let left = &f.panes[0];
+        let bar = left.bar.as_ref().expect("見出し").rect;
+        assert_eq!(g.panes[0].bar.expect("見出し").row, bar.row + 1);
+        let mut t = MouseTracker::new();
+        // 端末の行 (見出しの行 + 1) で押すと、左のペインの見出し
+        let e = t.feed(rec(3, i32::from(bar.row) + 1, LEFT, 0), &g);
+        assert_eq!(
+            e,
+            vec![InputEvent::ChromeMouse(ChromeMouseEvent {
+                kind: MouseKind::Down(MouseButton::Left),
+                mods: Modifiers::NONE,
+                target: ChromeTarget::PaneBar { view: left.view },
+                row: 0,
+                col: 3,
+            })]
+        );
+        t.feed(rec(3, i32::from(bar.row) + 1, 0, 0), &g);
+        // Frame の見出しの行 (端末では 1 行上) は本文の最下行
+        let d = feed(&mut t, rec(3, i32::from(bar.row), LEFT, 0), &g);
+        assert_eq!(
+            (d[0].at.view, d[0].at.row),
+            (left.view, i32::from(left.rect.rows) - 1)
+        );
     }
 }

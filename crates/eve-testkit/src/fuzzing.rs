@@ -181,6 +181,29 @@ fn check_frame(f: &Frame, step: usize) {
     }
 }
 
+/// タブラインの不変条件 (03 §9.9 の PANE-12): タブラインがあれば、アクティブは `Some` でフォーカスのペインの文書と一致し、
+/// 編集面は 3 行以上残る (PANE-12 (b))。
+fn check_tab_line(h: &Harness, f: &Frame, step: usize) {
+    let Some(t) = &f.tab_line else {
+        return;
+    };
+    let Some(a) = t.active else {
+        panic!("step {step}: タブラインのアクティブが無い");
+    };
+    let focus = f.panes.iter().find(|p| p.active).map(|p| p.view);
+    let doc = focus.and_then(|v| h.editor.state().view(v)).map(|v| v.doc);
+    assert_eq!(
+        t.tabs.get(a).map(|x| x.doc),
+        doc,
+        "step {step}: アクティブなタブがフォーカスのペインの文書でない"
+    );
+    assert!(
+        f.size.rows >= 3,
+        "step {step}: タブラインを出して編集面が {} 行",
+        f.size.rows
+    );
+}
+
 fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
     let st = h.editor.state();
     if let Ok(Answer::Documents(docs)) = h.query(&Query::Documents) {
@@ -1007,6 +1030,7 @@ pub fn editor_sequence(data: &[u8]) {
         }
         let f = h.frame();
         check_frame(&f, step);
+        check_tab_line(&h, &f, step);
         check_state(&h, &mut revs, step);
         check_partial(&h, &opened, step);
         if let Some((t, Some((doc, before)))) = outside
