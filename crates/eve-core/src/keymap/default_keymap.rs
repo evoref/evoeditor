@@ -66,6 +66,9 @@ pub(crate) fn default_keymap() -> Keymap {
         ("mod+shift+s", "file.save_as"),
         ("mod+o", "workspace.open_file"),
         ("mod+n", "file.new"),
+        // 横断検索 (検索バーから開くと検索語とトグルを引き継ぐ、03 §12.7.5)
+        ("mod+shift+f", "search.workspace"),
+        ("ctrl+k f", "search.workspace"),
     ] {
         bind("search", keys, cmd);
     }
@@ -127,6 +130,9 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("editor", "ctrl+k a", "file.save_all");
     // ファインダ (v0.5 の M31。パスを入力する `file.open` はパレットから、07 §11.6)
     bind("editor", "mod+o", "workspace.open_file");
+    // 横断検索 (v0.5 の M31、FR-405。Windows Terminal は ctrl+shift+f を横取りするので ctrl+k f も置く、04 §7.3a)
+    bind("editor", "mod+shift+f", "search.workspace");
+    bind("editor", "ctrl+k f", "search.workspace");
     bind("editor", "mod+n", "file.new");
     // バッファ (複数文書)
     bind("editor", "mod+w", "buffer.close");
@@ -252,8 +258,27 @@ pub(crate) fn default_keymap() -> Keymap {
         ("editor", "ctrl+shift+home"),
         ("editor", "ctrl+shift+end"),
         ("editor", "mod+shift+k"),
+        ("editor", "mod+shift+f"),
+        ("search", "mod+shift+f"),
     ] {
         l.mark_enhanced(ctx, keys);
+    }
+    // 横断検索の結果のトグル (finder → list → prompt → global。ファインダでは効かないよう `when` で分ける、07 §7.1 / §11.6)
+    for (keys, cmd) in [
+        ("alt+c", "search.toggle_case"),
+        ("ctrl+k c", "search.toggle_case"),
+        ("alt+r", "search.toggle_regex"),
+        ("ctrl+k x", "search.toggle_regex"),
+        ("alt+w", "search.toggle_word"),
+        ("ctrl+k b", "search.toggle_word"),
+    ] {
+        l.bind(
+            "finder",
+            keys,
+            cmd,
+            "overlay.active == \"workspace_search\"",
+        )
+        .expect("既定キーマップの書式は正しい");
     }
     Keymap::new(vec![l]).expect("既定キーマップに曖昧なチョードはない")
 }

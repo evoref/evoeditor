@@ -138,7 +138,7 @@ fn dump_keymap_の_json_の形とユーザーの層() {
     }
     // コンテキストは 07 §7.1 の順にまとまる
     let order = [
-        "global", "editor", "search", "prompt", "palette", "list", "dialog", "help",
+        "global", "editor", "search", "prompt", "palette", "list", "dialog", "help", "finder",
     ];
     let ranks: Vec<usize> = bindings
         .iter()

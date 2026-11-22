@@ -74,6 +74,11 @@ impl EditorState {
                 cursor: &mut f.cursor,
                 all_selected: &mut f.all_selected,
             }),
+            Some(Overlay::WorkspaceSearch(w)) => Some(FieldMut {
+                text: &mut w.text,
+                cursor: &mut w.cursor,
+                all_selected: &mut w.all_selected,
+            }),
             None => {
                 let b = self.find.search_bar.as_mut()?;
                 match b.focus {
@@ -107,6 +112,14 @@ impl EditorState {
         if id.starts_with("ui.") || id == ids::APP_QUIT {
             return None;
         }
+        // 横断検索のトグルは、オーバーレイの検索語に効く (03 §12.7.5)
+        if matches!(
+            id,
+            ids::SEARCH_TOGGLE_CASE | ids::SEARCH_TOGGLE_REGEX | ids::SEARCH_TOGGLE_WORD
+        ) && self.overlay_name() == "workspace_search"
+        {
+            return None;
+        }
         // バッファ一覧の中の `buffer.close` は、選んでいる文書を閉じる (07 §11.6 の `list` コンテキスト)
         if id == ids::BUFFER_CLOSE && self.overlay_name() == "buffer_list" {
             return None;
@@ -125,6 +138,7 @@ impl EditorState {
         }
         let is_prompt = matches!(self.ui.overlay, Some(Overlay::Prompt(_)));
         let is_finder = matches!(self.ui.overlay, Some(Overlay::Finder(_)));
+        let is_ws_search = matches!(self.ui.overlay, Some(Overlay::WorkspaceSearch(_)));
         let Some(f) = self.input_mut() else {
             return Some(CommandResult::Rejected(RejectReason::NotAvailable));
         };
@@ -212,6 +226,8 @@ impl EditorState {
                 self.bar_edited();
             } else if is_finder {
                 self.finder_edited();
+            } else if is_ws_search {
+                self.ws_search_edited();
             } else {
                 self.palette_reset_selection();
             }

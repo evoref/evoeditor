@@ -13,7 +13,7 @@ use std::sync::Arc;
 use crate::gitignore::{ExcludeChain, IgnoreRules, PathKind};
 use crate::io::fs::{DirEntry, EntryKind, FileId, FileKind, FileSystem, FsError};
 use crate::io::fspath::FsPath;
-use crate::time::{Clock, Tick};
+use crate::time::{Clock, Millis, Tick};
 
 use super::candidate::Candidate;
 use super::git::{
@@ -52,6 +52,18 @@ pub trait WalkObserver {
 /// 何もしない [`WalkObserver`]。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoObserver;
+
+/// 候補 1 つについて列挙で分かったこと (横断検索が、開かずに飛ばすかを決めるのに使う。03 §12.7.5 の 2)。
+/// [`WorkspaceWalk::with_entry_facts`] で集め、[`WorkspaceWalk::take_found`] で候補と組にして取り出す。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EntryFacts {
+    /// 大きさ (列挙で分かるときだけ。Windows のファイル)。
+    pub len: Option<u64>,
+    /// 読むと呼び戻しが起きる (`DirEntry::offline`)。
+    pub offline: bool,
+    /// 辿らないシンボリックリンク (`follow_symlinks = false`)。横断検索は読まない (リンク先のワークスペースの外を読まない)。
+    pub unfollowed_link: bool,
+}
 
 impl WalkObserver for NoObserver {}
 
@@ -103,6 +115,8 @@ pub struct WorkspaceWalk {
     prefix_len: usize,
     visited: HashSet<VisitKey>,
     pending: Vec<Candidate>,
+    /// `pending` と同じ順の列挙の情報 (集めるときだけ `Some`。横断検索、[`WorkspaceWalk::with_entry_facts`])。
+    facts: Option<Vec<EntryFacts>>,
     found: u64,
     entries: u64,
     unreadable_dirs: u64,
@@ -144,6 +158,7 @@ impl WorkspaceWalk {
             prefix_len: 0,
             visited: HashSet::new(),
             pending: Vec::new(),
+            facts: None,
             found: 0,
             entries: 0,
             unreadable_dirs: 0,
@@ -152,6 +167,13 @@ impl WorkspaceWalk {
             last_flush: None,
             reported_unreadable: 0,
         }
+    }
+
+    /// 候補ごとの列挙の情報 ([`EntryFacts`]) も集める (横断検索が使う。ファインダは集めない)。
+    #[must_use]
+    pub fn with_entry_facts(mut self) -> WorkspaceWalk {
+        self.facts = Some(Vec::new());
+        self
     }
 
     /// ルート。
@@ -186,7 +208,28 @@ impl WorkspaceWalk {
 
     /// まだ塊にしていない候補をすべて取り出す (試験と横断検索が使う)。
     pub fn take_pending(&mut self) -> Vec<Candidate> {
+        if let Some(f) = &mut self.facts {
+            f.clear();
+        }
         std::mem::take(&mut self.pending)
+    }
+
+    /// まだ塊にしていない候補を、列挙の情報と組にしてすべて取り出す ([`WorkspaceWalk::with_entry_facts`] で作ったとき。
+    /// 集めていなければ情報は既定 (大きさ不明・オフラインでない・リンクでない))。
+    pub fn take_found(&mut self) -> Vec<(Candidate, EntryFacts)> {
+        let facts = self.facts.as_mut().map(std::mem::take).unwrap_or_default();
+        let pending = std::mem::take(&mut self.pending);
+        debug_assert!(
+            facts.is_empty() || facts.len() == pending.len(),
+            "列挙の情報 {} 件と候補 {} 件が揃っていない",
+            facts.len(),
+            pending.len()
+        );
+        let mut facts = facts.into_iter();
+        pending
+            .into_iter()
+            .map(|c| (c, facts.next().unwrap_or_default()))
+            .collect()
     }
 
     /// 送る塊を取り出す: [`CANDIDATE_CHUNK`] 件ごとの塊と、`finish` なら残りすべて、そうでなければ前に送ってから
@@ -195,6 +238,10 @@ impl WorkspaceWalk {
     /// ディレクトリの数が前に送った値から増えていれば、空の塊を 1 つ返す (数を届けるため)。
     pub fn take_chunks(&mut self, now: Tick, finish: bool) -> Vec<Arc<[Candidate]>> {
         let last = *self.last_flush.get_or_insert(now);
+        // 塊にするのはファインダの経路だけ (列挙の情報は捨てる。横断検索は `take_found` を使う)
+        if let Some(f) = &mut self.facts {
+            f.clear();
+        }
         let mut out: Vec<Arc<[Candidate]>> = Vec::new();
         while self.pending.len() >= CANDIDATE_CHUNK {
             let rest = self.pending.split_off(CANDIDATE_CHUNK);
@@ -226,6 +273,27 @@ impl WorkspaceWalk {
         clock: &dyn Clock,
         obs: &mut dyn WalkObserver,
     ) -> WalkStep {
+        self.step_inner(fs, clock, obs, WALK_STEP_TIME)
+    }
+
+    /// [`WorkspaceWalk::step`] の、時間の区切りを `budget` にしたもの (横断検索が、同じ区切りでファイルを探した残りの時間で
+    /// 走査する。03 §12.7.5 の段 7 の細目 (2))。ディレクトリは 1 つは読む (`budget` が 0 でも進む)。
+    pub fn step_within(
+        &mut self,
+        fs: &dyn FileSystem,
+        clock: &dyn Clock,
+        budget: Millis,
+    ) -> WalkStep {
+        self.step_inner(fs, clock, &mut NoObserver, budget.min(WALK_STEP_TIME))
+    }
+
+    fn step_inner(
+        &mut self,
+        fs: &dyn FileSystem,
+        clock: &dyn Clock,
+        obs: &mut dyn WalkObserver,
+        budget: Millis,
+    ) -> WalkStep {
         if self.finished {
             return WalkStep::Done;
         }
@@ -248,9 +316,7 @@ impl WorkspaceWalk {
                     return WalkStep::Failed(e);
                 }
                 dirs_read += 1;
-                if dirs_read >= WALK_DIRS_PER_STEP
-                    || clock.now().saturating_sub(start) >= WALK_STEP_TIME
-                {
+                if dirs_read >= WALK_DIRS_PER_STEP || clock.now().saturating_sub(start) >= budget {
                     return WalkStep::Yield;
                 }
                 continue;
@@ -425,6 +491,14 @@ impl WorkspaceWalk {
                     .push(Candidate::from_walk(&mrel[rel_start..], || {
                         os_rel.join(&entry.name)
                     }));
+                if let Some(f) = &mut self.facts {
+                    f.push(EntryFacts {
+                        len: entry.len,
+                        offline: entry.offline,
+                        unfollowed_link: entry.kind == EntryKind::Symlink
+                            && !self.config.follow_symlinks,
+                    });
+                }
                 self.found += 1;
                 Visit::Next
             }

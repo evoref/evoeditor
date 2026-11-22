@@ -293,6 +293,10 @@ impl EditorState {
 
     /// 大小の区別を巡回する (Smart → Sensitive → Insensitive → Smart) 。切り替えたら再検索する。
     pub fn search_toggle_case(&mut self) -> CommandResult {
+        // 横断検索のオーバーレイが開いていれば、オーバーレイの検索語に効く (検索バーのトグルは変えない、03 §12.7.5)
+        if let Some(r) = self.ws_search_toggle(crate::workspace::ws_search_ui::WsToggle::Case) {
+            return r;
+        }
         let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
@@ -303,6 +307,9 @@ impl EditorState {
 
     /// 正規表現の ON / OFF を切り替える。切り替えたら再検索する。
     pub fn search_toggle_regex(&mut self) -> CommandResult {
+        if let Some(r) = self.ws_search_toggle(crate::workspace::ws_search_ui::WsToggle::Regex) {
+            return r;
+        }
         let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
@@ -313,6 +320,9 @@ impl EditorState {
 
     /// 単語単位の ON / OFF を切り替える。切り替えたら再検索する。
     pub fn search_toggle_word(&mut self) -> CommandResult {
+        if let Some(r) = self.ws_search_toggle(crate::workspace::ws_search_ui::WsToggle::Word) {
+            return r;
+        }
         let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
@@ -983,7 +993,9 @@ impl EditorState {
 
 /// 探さない理由の文言 (03 §12.3.1 の「探さない場合」と「最悪の入力の上限」、04 §15.2): (メッセージの基の名前, その `.text`
 /// のキー, 引数)。検索バーの件数の位置には `.text` だけを出し、次 / 前・置換ではメッセージ行に text と hint を出す。
-fn limit_message(l: ScanLimit) -> (&'static str, &'static str, Vec<(&'static str, String)>) {
+pub(crate) fn limit_message(
+    l: ScanLimit,
+) -> (&'static str, &'static str, Vec<(&'static str, String)>) {
     match l {
         ScanLimit::TooLarge => (
             keys::MSG_SEARCH_MULTILINE_TOO_LARGE,
@@ -999,7 +1011,7 @@ fn limit_message(l: ScanLimit) -> (&'static str, &'static str, Vec<(&'static str
 }
 
 /// 正規表現が不正という誤りの理由 (構文エラーと大きさの上限の超過)。
-fn invalid_regex_reason(e: &QueryError) -> &str {
+pub(crate) fn invalid_regex_reason(e: &QueryError) -> &str {
     match e {
         QueryError::Syntax(reason) => reason,
         QueryError::TooLarge => "pattern too large",

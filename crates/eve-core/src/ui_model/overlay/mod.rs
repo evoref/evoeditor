@@ -32,6 +32,8 @@ pub(crate) enum Overlay {
     Help(crate::ui_model::help::HelpState),
     /// ファインダ (一覧のオーバーレイ、03 §12.7.4・04 §8.11)。
     Finder(Box<crate::workspace::finder::FinderOverlay>),
+    /// 横断検索の結果 (一覧のオーバーレイ、03 §12.7.5・04 §8.12)。
+    WorkspaceSearch(Box<crate::workspace::ws_search_ui::WsSearchOverlay>),
 }
 
 impl EditorState {
@@ -43,14 +45,12 @@ impl EditorState {
                 Overlay::Prompt(_) => OverlayKind::Prompt,
                 Overlay::Palette(_) => OverlayKind::List,
                 Overlay::Help(_) => OverlayKind::Help,
-                Overlay::Finder(_) => OverlayKind::List,
+                Overlay::Finder(_) | Overlay::WorkspaceSearch(_) => OverlayKind::List,
             })
         };
         let (before, after) = (kind(&self.ui.overlay), kind(&new));
         let mut old = std::mem::replace(&mut self.ui.overlay, new);
-        if let Some(Overlay::Finder(f)) = &mut old {
-            self.finder_closed(f);
-        }
+        self.overlay_closed(&mut old);
         if before != after
             && let Some(window) = self.focused_window()
         {
@@ -63,9 +63,7 @@ impl EditorState {
 
     pub(crate) fn take_overlay(&mut self) -> Option<Overlay> {
         let mut old = self.ui.overlay.take();
-        if let Some(Overlay::Finder(f)) = &mut old {
-            self.finder_closed(f);
-        }
+        self.overlay_closed(&mut old);
         if old.is_some()
             && let Some(window) = self.focused_window()
         {
@@ -75,6 +73,15 @@ impl EditorState {
             });
         }
         old
+    }
+
+    /// 閉じたオーバーレイの後始末 (ファインダの照合の取消し・横断検索の状態を持っておく)。
+    fn overlay_closed(&mut self, old: &mut Option<Overlay>) {
+        match old {
+            Some(Overlay::Finder(f)) => self.finder_closed(f),
+            Some(Overlay::WorkspaceSearch(w)) => self.ws_search_closed(std::mem::take(&mut **w)),
+            _ => {}
+        }
     }
 
     /// 出ている確認ダイアログの名前 (`ui.confirm.<name>` の `<name>`)。確認が出ていなければ `None` (試験用)。
@@ -88,7 +95,7 @@ impl EditorState {
 
     /// 出ているオーバーレイの種類。条件式 `overlay.active` の値と同じ (07 §7.3、11 §6.3 の `overlay`):
     /// `""` (なし) / `"dialog"` (確認) / `"prompt"` (入力プロンプト) / `"palette"` (コマンドパレット) /
-    /// `"buffer_list"` (バッファ一覧) / `"help"` (ヘルプ) / `"finder"` (ファインダ)。
+    /// `"buffer_list"` (バッファ一覧) / `"help"` (ヘルプ) / `"finder"` (ファインダ) / `"workspace_search"` (横断検索)。
     pub fn overlay_kind(&self) -> &'static str {
         self.overlay_name()
     }
@@ -105,6 +112,7 @@ impl EditorState {
             Some(Overlay::Palette(_)) => "palette",
             Some(Overlay::Help(_)) => "help",
             Some(Overlay::Finder(_)) => "finder",
+            Some(Overlay::WorkspaceSearch(_)) => "workspace_search",
         }
     }
 
@@ -138,6 +146,7 @@ impl EditorState {
             // ヘルプは確定するものが無い (閉じるのは `Esc`)
             Some(Overlay::Help(_)) => CommandResult::Done,
             Some(Overlay::Finder(_)) => self.finder_confirm(),
+            Some(Overlay::WorkspaceSearch(_)) => self.ws_search_confirm(),
             None => CommandResult::Rejected(RejectReason::NotAvailable),
         }
     }
@@ -198,6 +207,9 @@ impl EditorState {
         }
         if matches!(self.ui.overlay, Some(Overlay::Finder(_))) {
             return self.finder_move(forward);
+        }
+        if matches!(self.ui.overlay, Some(Overlay::WorkspaceSearch(_))) {
+            return self.ws_search_move(forward);
         }
         if self.ui.overlay.is_none() && self.find.search_bar.is_some() {
             self.bar_focus_cycle(forward);

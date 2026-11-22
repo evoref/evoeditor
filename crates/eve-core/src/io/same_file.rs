@@ -307,6 +307,8 @@ impl crate::editor::state::EditorState {
         {
             self.io.open_jumps.entry(existing).or_insert(jump);
         }
+        // 横断検索のジャンプは、既存の文書に移す (読み終えていれば、出した後にすぐ移る。下で出してから)
+        let ws_jump = self.io.ws_jumps.remove(&doc);
         let pane = replace.map(|r| r.pane).or_else(|| self.focused_pane());
         let existing_path = self.document(existing).and_then(|d| d.path.clone());
         if let Some(other) = existing_path.filter(|p| p != opened) {
@@ -335,6 +337,10 @@ impl crate::editor::state::EditorState {
         } else {
             // 表示している (起動時の最初の文書など): 表示しているペインを既存の文書へ替えてから閉じる
             self.close_shown_document(doc, pane.map(|p| (p, existing)));
+        }
+        if let Some(j) = ws_jump {
+            self.io.ws_jumps.insert(doc, j);
+            self.transfer_ws_jump(doc, existing);
         }
         self.mark_dirty_render();
     }

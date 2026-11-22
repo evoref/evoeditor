@@ -580,6 +580,8 @@ impl EditorState {
         if let Some((line, col)) = self.io.open_jumps.remove(&doc) {
             self.jump_to_line_col(view, doc, line, col);
         }
+        // 横断検索の結果から開いた: 開いた時点のペインにまだ出ていれば一致の位置へ移る (03 §12.7.5 の「ジャンプ」)
+        self.finish_ws_jump(doc);
         self.mark_snapshot_update(doc);
     }
 
@@ -604,6 +606,7 @@ impl EditorState {
         // どれかのペインが表示している (フォーカスの無いペインでも。03 §9.9 の PANE-8)
         if !self.panes_showing(doc).is_empty() || self.focused_window().is_none() {
             self.io.open_jumps.remove(&doc);
+            self.io.ws_jumps.remove(&doc);
             // オーバーレイ・検索バーの間は、表示を移さずに先頭だけを捨てて待つ (閉じた後に移す。03 §9.2.1 の「失敗・
             // 取消し・閉じる」。パレットで選んだコマンドが、開いたときと別の文書に効かないため)
             if self.focused_window().is_some() && self.auto_switch_blocked() {

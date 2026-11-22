@@ -40,6 +40,8 @@ search	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
 search	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
 search	Ctrl+O	workspace.open_file	Args({})	ContextExpr(None)	false
 search	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
+search	Ctrl+Shift+F	search.workspace	Args({})	ContextExpr(None)	true
+search	Ctrl+K F	search.workspace	Args({})	ContextExpr(None)	false
 editor	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
 editor	Esc	ui.cancel	Args({})	ContextExpr(None)	false
 editor	Ctrl+R	search.replace_open	Args({})	ContextExpr(None)	false
@@ -78,6 +80,8 @@ editor	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
 editor	Ctrl+K S	file.save_as	Args({})	ContextExpr(None)	false
 editor	Ctrl+K A	file.save_all	Args({})	ContextExpr(None)	false
 editor	Ctrl+O	workspace.open_file	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+F	search.workspace	Args({})	ContextExpr(None)	true
+editor	Ctrl+K F	search.workspace	Args({})	ContextExpr(None)	false
 editor	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
 editor	Ctrl+W	buffer.close	Args({})	ContextExpr(None)	false
 editor	Ctrl+K W	buffer.close	Args({})	ContextExpr(None)	false
@@ -163,3 +167,9 @@ editor	Ctrl+K ,	cursor.page_up	Args({})	ContextExpr(None)	false
 editor	Ctrl+K .	cursor.page_down	Args({})	ContextExpr(None)	false
 editor	Ctrl+K <	select.extend_page_up	Args({})	ContextExpr(None)	false
 editor	Ctrl+K >	select.extend_page_down	Args({})	ContextExpr(None)	false
+finder	Alt+C	search.toggle_case	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
+finder	Ctrl+K C	search.toggle_case	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
+finder	Alt+R	search.toggle_regex	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
+finder	Ctrl+K X	search.toggle_regex	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
+finder	Alt+W	search.toggle_word	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
+finder	Ctrl+K B	search.toggle_word	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false

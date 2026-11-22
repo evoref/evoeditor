@@ -561,7 +561,10 @@ fn 走査の続きはレーンの末尾に積まれ_間に投入されたジョ�
     let other = sp.spawn(
         None,
         Revision(0),
-        JobKind::ReleaseCandidates { chunks: Vec::new() },
+        JobKind::ReleaseCandidates {
+            chunks: Vec::new(),
+            hits: Vec::new(),
+        },
     );
     release.send(()).unwrap();
     let r = recv_until_terminals(&rx, 2);
@@ -624,7 +627,10 @@ fn 区切りの途中で取り消した走査は続きを積まず_cancelled_を
     let next = sp.spawn(
         None,
         Revision(0),
-        JobKind::ReleaseCandidates { chunks: Vec::new() },
+        JobKind::ReleaseCandidates {
+            chunks: Vec::new(),
+            hits: Vec::new(),
+        },
     );
     let r = recv_job(&rx);
     assert_eq!(r.job, next);

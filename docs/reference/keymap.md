@@ -1,6 +1,6 @@
 # 既定キーマップ
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 164 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 174 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
 
 - コンテキストは 07 §7.1 の順。同じコンテキストの中は優先の順 (層の順・登録の順)。キーを探すときの参照の順 (`search` → `prompt` → `global` など) は 07 §7.1。
 - **キー** は画面の表記 (04 §7.8)、**設定の表記** は `keymap.toml` に書く形 (07 §7.2)。**拡張キー** の「要」は拡張キーが無い端末では届かない割当 (07 §11.6 の `[E]`)。
@@ -33,6 +33,8 @@
 | `Ctrl+K S` | `ctrl+k s` | `file.save_as` | 名前を付けて保存 | — | — |
 | `Ctrl+K A` | `ctrl+k a` | `file.save_all` | すべて保存 | — | — |
 | `Ctrl+O` | `ctrl+o` | `workspace.open_file` | ファイルを探して開く | — | — |
+| `Ctrl+Shift+F` | `ctrl+shift+f` | `search.workspace` | ワークスペースを検索 | — | 要 |
+| `Ctrl+K F` | `ctrl+k f` | `search.workspace` | ワークスペースを検索 | — | — |
 | `Ctrl+N` | `ctrl+n` | `file.new` | 新規作成 | — | — |
 | `Ctrl+W` | `ctrl+w` | `buffer.close` | 文書を閉じる | — | — |
 | `Ctrl+K W` | `ctrl+k w` | `buffer.close` | 文書を閉じる | — | — |
@@ -147,6 +149,8 @@
 | `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | 要 |
 | `Ctrl+O` | `ctrl+o` | `workspace.open_file` | ファイルを探して開く | — | — |
 | `Ctrl+N` | `ctrl+n` | `file.new` | 新規作成 | — | — |
+| `Ctrl+Shift+F` | `ctrl+shift+f` | `search.workspace` | ワークスペースを検索 | — | 要 |
+| `Ctrl+K F` | `ctrl+k f` | `search.workspace` | ワークスペースを検索 | — | — |
 
 ## `prompt`
 
@@ -203,3 +207,14 @@
 | `PgUp` | `pageup` | `ui.list_page_up` | 一覧の前のページ | — | — |
 | `Esc` | `esc` | `ui.cancel` | 取り消し | — | — |
 | `Ctrl+C` | `ctrl+c` | `ui.message_history_copy` | メッセージ履歴をコピー | — | — |
+
+## `finder`
+
+| キー | 設定の表記 | コマンド | タイトル | when | 拡張キー |
+|---|---|---|---|---|---|
+| `Alt+C` | `alt+c` | `search.toggle_case` | 大小文字の区別を切替 | `overlay.active == "workspace_search"` | — |
+| `Ctrl+K C` | `ctrl+k c` | `search.toggle_case` | 大小文字の区別を切替 | `overlay.active == "workspace_search"` | — |
+| `Alt+R` | `alt+r` | `search.toggle_regex` | 正規表現を切替 | `overlay.active == "workspace_search"` | — |
+| `Ctrl+K X` | `ctrl+k x` | `search.toggle_regex` | 正規表現を切替 | `overlay.active == "workspace_search"` | — |
+| `Alt+W` | `alt+w` | `search.toggle_word` | 単語単位を切替 | `overlay.active == "workspace_search"` | — |
+| `Ctrl+K B` | `ctrl+k b` | `search.toggle_word` | 単語単位を切替 | `overlay.active == "workspace_search"` | — |

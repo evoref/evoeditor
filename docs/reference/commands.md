@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 104 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 105 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -81,10 +81,11 @@
 | `search.replace` | 置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Enter` | 出す |
 | `search.replace_all` | すべて置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Alt+A` | 出す |
 | `search.replace_open` | 置換 | Ui | — | `!doc.read_only` | `ui` | `editor`: `Ctrl+R`, `Ctrl+H` [E]<br>`search`: `Ctrl+R`, `Ctrl+H` [E] | 出す |
-| `search.toggle_case` | 大小文字の区別を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+C`, `Ctrl+K C` | 出す |
-| `search.toggle_regex` | 正規表現を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+R`, `Ctrl+K X` | 出す |
+| `search.toggle_case` | 大小文字の区別を切替 | Ui | — | `search.active \|\| overlay.active == "workspace_search"` | `ui` | `search`: `Alt+C`, `Ctrl+K C`<br>`finder`: `Alt+C`, `Ctrl+K C` | 出す |
+| `search.toggle_regex` | 正規表現を切替 | Ui | — | `search.active \|\| overlay.active == "workspace_search"` | `ui` | `search`: `Alt+R`, `Ctrl+K X`<br>`finder`: `Alt+R`, `Ctrl+K X` | 出す |
 | `search.toggle_selection` | 選択範囲内を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+L`, `Ctrl+K L` | 出す |
-| `search.toggle_word` | 単語単位を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+W`, `Ctrl+K B` | 出す |
+| `search.toggle_word` | 単語単位を切替 | Ui | — | `search.active \|\| overlay.active == "workspace_search"` | `ui` | `search`: `Alt+W`, `Ctrl+K B`<br>`finder`: `Alt+W`, `Ctrl+K B` | 出す |
+| `search.workspace` | ワークスペースを検索 | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+Shift+F` [E], `Ctrl+K F`<br>`search`: `Ctrl+Shift+F` [E], `Ctrl+K F` | 出す |
 | `select.all` | すべて選択 | Motion | — | — | `read` | `editor`: `Ctrl+A`<br>`prompt`: `Ctrl+A` | 出す |
 | `select.extend_down` | 下へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Shift+↓` | 出す |
 | `select.extend_end` | 行末まで選択 | Motion | — | — | `read` | `editor`: `Shift+End`, `Ctrl+K Shift+→` | 出す |

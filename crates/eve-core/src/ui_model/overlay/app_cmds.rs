@@ -98,6 +98,9 @@ fn cmd_list_page_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if matches!(ctx.state.ui.overlay, Some(Overlay::Finder(_))) {
         return ctx.state.finder_page(true);
     }
+    if matches!(ctx.state.ui.overlay, Some(Overlay::WorkspaceSearch(_))) {
+        return ctx.state.ws_search_page(true);
+    }
     ctx.state.palette_page(true)
 }
 
@@ -107,6 +110,9 @@ fn cmd_list_page_up(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
     if matches!(ctx.state.ui.overlay, Some(Overlay::Finder(_))) {
         return ctx.state.finder_page(false);
+    }
+    if matches!(ctx.state.ui.overlay, Some(Overlay::WorkspaceSearch(_))) {
+        return ctx.state.ws_search_page(false);
     }
     ctx.state.palette_page(false)
 }
@@ -203,24 +209,18 @@ pub(crate) fn register(r: &mut CommandRegistry) {
         active,
         cmd_list_page_up,
     );
-    // 07 §11.6 の perm 列は `ui` (キーマップ以外からも呼べるが、外部クライアントには許可を要する)
+    // 07 §11.6 の perm 列は `ui` (キーマップ以外からも呼べるが、外部クライアントには許可を要する)。大小・正規表現・単語単位の
+    // トグルは、横断検索のオーバーレイの検索語にも効く (03 §12.7.5)
+    let toggle_when = "search.active || overlay.active == \"workspace_search\"";
     for (id, when, h) in [
         (ids::SEARCH_OPEN, "", cmd_search_open as crate::Handler),
-        (
-            ids::SEARCH_TOGGLE_CASE,
-            "search.active",
-            cmd_search_toggle_case,
-        ),
+        (ids::SEARCH_TOGGLE_CASE, toggle_when, cmd_search_toggle_case),
         (
             ids::SEARCH_TOGGLE_REGEX,
-            "search.active",
+            toggle_when,
             cmd_search_toggle_regex,
         ),
-        (
-            ids::SEARCH_TOGGLE_WORD,
-            "search.active",
-            cmd_search_toggle_word,
-        ),
+        (ids::SEARCH_TOGGLE_WORD, toggle_when, cmd_search_toggle_word),
         (
             ids::SEARCH_TOGGLE_SELECTION,
             "search.active",

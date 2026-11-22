@@ -199,6 +199,11 @@ impl EditorState {
         self.window_mut(at.0)?.panes.get_mut(&at.1)
     }
 
+    /// ペイン `at` が表示中の View。
+    pub(crate) fn pane_view(&self, at: PaneRef) -> Option<ViewId> {
+        self.pane(at).map(|p| p.view)
+    }
+
     /// ペイン `at` が表示中の文書。
     pub(crate) fn pane_document(&self, at: PaneRef) -> Option<DocumentId> {
         self.view(self.pane(at)?.view).map(|v| v.doc)

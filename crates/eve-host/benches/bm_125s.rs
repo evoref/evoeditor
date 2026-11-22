@@ -286,7 +286,14 @@ fn scan_once(
     };
     let time = t.elapsed();
     let batches = chunks.len();
-    let rel = sp.spawn(None, Revision(0), JobKind::ReleaseCandidates { chunks });
+    let rel = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::ReleaseCandidates {
+            chunks,
+            hits: Vec::new(),
+        },
+    );
     loop {
         if let HostMsg::Job(r) = rx.recv_timeout(Duration::from_secs(60)).expect("解放")
             && r.job == rel
@@ -438,6 +445,7 @@ fn probe_delays(
                     Revision(0),
                     JobKind::ReleaseCandidates {
                         chunks: std::mem::take(&mut chunks),
+                        hits: Vec::new(),
                     },
                 );
                 if Instant::now() >= end {
