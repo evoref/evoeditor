@@ -483,6 +483,31 @@ impl Harness {
         self.collect();
     }
 
+    /// 実行待ちの先頭のジョブを 1 件 (区切って譲るジョブなら 1 区切り) だけ実行し、結果を `Editor` に渡す (ワークスペースの
+    /// 走査の途中の状態を決定的に作る試験用)。実行したら `true`。
+    pub fn run_one_job(&mut self) -> bool {
+        let ran = self.jobs.run_one();
+        let results = self.jobs.take_results();
+        self.deliver(results);
+        ran
+    }
+
+    /// 実行待ちの先頭のジョブを 1 件だけ実行し、結果を `Editor` に渡さずに返す (古い結果を後から `deliver` で渡す試験用)。
+    /// 取消しで積まれた `Cancelled` など、受け口に溜まっていた結果も一緒に返す。
+    pub fn run_one_job_held(&mut self) -> Vec<eve_core::JobOutput> {
+        self.jobs.run_one();
+        self.jobs.take_results()
+    }
+
+    /// ジョブの結果を `Editor` に渡す。
+    pub fn deliver(&mut self, results: Vec<eve_core::JobOutput>) {
+        for r in results {
+            self.editor.tick(self.clock.now());
+            self.editor.on_job_result(r);
+        }
+        self.collect();
+    }
+
     /// 実行待ちのジョブをすべて取り消す (結果は次の `run_jobs` で `Editor` に届く)。
     pub fn cancel_jobs(&mut self) {
         self.jobs.cancel_all();

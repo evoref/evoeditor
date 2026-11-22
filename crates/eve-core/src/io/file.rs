@@ -173,6 +173,20 @@ impl EditorState {
     /// ファイルを開く (03 §9.2)。Loading の文書を作ってすぐ読込ジョブを投入する。
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
+        let Ok(path) = self.paths.normalize(raw_path) else {
+            self.show_message(
+                MessageLevel::Error,
+                keys::MSG_OPEN_FAILED,
+                &[("path", raw_path), ("reason", "invalid path")],
+            );
+            return CommandResult::Rejected(RejectReason::InvalidArgs);
+        };
+        self.open_fs_path(path, opts)
+    }
+
+    /// 正規化した絶対パスを開く (`open_path` の後半。ファインダは候補のパスを文字列にせずに渡す。名前が UTF-8 で表せない
+    /// ファイルも開ける、03 §12.7.4 の「開く」)。`opts` の設定の値 (改行コード・閾値) が無ければ今の設定で埋める。
+    pub(crate) fn open_fs_path(&mut self, path: FsPath, opts: OpenOptions) -> CommandResult {
         let opts = OpenOptions {
             // 新しく開く読込なので、先行表示を送ってよい (03 §9.2.1。再読込・開き直しは io/reload.rs で立てない)
             partial: true,
@@ -184,14 +198,6 @@ impl EditorState {
                 .long_line_threshold
                 .or(Some(self.config_long_line_threshold())),
             ..opts
-        };
-        let Ok(path) = self.paths.normalize(raw_path) else {
-            self.show_message(
-                MessageLevel::Error,
-                keys::MSG_OPEN_FAILED,
-                &[("path", raw_path), ("reason", "invalid path")],
-            );
-            return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
         // 今の文書は置き換えない (03 §9.8)。同じパスが既に開いていれば、そのバッファへ切り替える
         let existing = self

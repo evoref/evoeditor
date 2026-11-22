@@ -64,7 +64,7 @@ pub(crate) fn default_keymap() -> Keymap {
         ("mod+f", "search.open"),
         ("mod+s", "file.save"),
         ("mod+shift+s", "file.save_as"),
-        ("mod+o", "file.open"),
+        ("mod+o", "workspace.open_file"),
         ("mod+n", "file.new"),
     ] {
         bind("search", keys, cmd);
@@ -74,7 +74,8 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("editor", "esc", "ui.cancel");
     bind("editor", "mod+r", "search.replace_open");
     bind("editor", "ctrl+h", "search.replace_open"); // [E]
-    // 一覧の候補の移動 (一覧の UI で共通。パレットは palette → list → prompt → global、バッファ一覧は list → prompt → global)
+    // 一覧の候補の移動 (一覧の UI で共通。パレットは palette → list → prompt → global、バッファ一覧は list → prompt → global、
+    // ファインダは finder → list → prompt → global)
     bind("list", "down", "ui.list_next");
     bind("list", "up", "ui.list_prev");
     bind("list", "ctrl+n", "ui.list_next");
@@ -124,7 +125,8 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("editor", "mod+shift+s", "file.save_as");
     bind("editor", "ctrl+k s", "file.save_as");
     bind("editor", "ctrl+k a", "file.save_all");
-    bind("editor", "mod+o", "file.open");
+    // ファインダ (v0.5 の M31。パスを入力する `file.open` はパレットから、07 §11.6)
+    bind("editor", "mod+o", "workspace.open_file");
     bind("editor", "mod+n", "file.new");
     // バッファ (複数文書)
     bind("editor", "mod+w", "buffer.close");

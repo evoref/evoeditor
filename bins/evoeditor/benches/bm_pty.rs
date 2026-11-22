@@ -15,13 +15,17 @@
 //!   同じ区間。1 MB の文書 (可視範囲の同期検索、`--only 103m`) と、100 MB の全件の走査中 (`--only 404m`)。
 //! - **BM-108**: 100 MB の文書の中ほどにだけある語を検索欄に打って `Enter` し、読取完了 → 一致の行が編集面に出た最初の
 //!   Frame の `write` まで (`--only 108`。区間の記録 `search.first_match`)。
-//! - **BM-104v-100m / BM-104v-100m-sjis**: 100 MB (UTF-8 / `Shift_JIS`) を `Ctrl+O` で開き、`Enter` の読取完了 → 文書の先頭部分を
+//! - **BM-104v-100m / BM-104v-100m-sjis**: 100 MB (UTF-8 / `Shift_JIS`) をパスを入力するプロンプト (`file.open`) で開き、`Enter` の読取完了 → 文書の先頭部分を
 //!   含む最初の Frame の `write` まで (`--only 104v`。区間の記録 `open.content`。先行表示の先頭だった回は印 `open.partial`
 //!   が付くので、その割合も出す。01 FR-122 AC-2、03 §9.2.1)。
 //! - **BM-120-100m** (参考): 100 MB の UTF-8 を `cmd /d /c <書き手> | evoeditor -` のパイプで渡して起動し、`main` 入口 →
 //!   読み終えた文書の最初の Frame の `write` まで (`--only 120`。区間の記録 `startup.first_loaded`。03 §9.2.2、09 §5.2)。
 //!   書き手はこの計測の実行ファイル自身 (`--pipe-writer <file>`)。比べる相手として、同じファイルを BM-104-100m と同じ手順
 //!   (読込ジョブで開く → 完了、プロセス内) と、起動時のパスで開く起動 (同じ区間) を、回ごとに交互に測る。
+//!
+//! - **BM-125-{many,few} / BM-103b-finder-{many,few}** (v0.5 の M31): ワークスペースの木 (`--workspace-tree`) を `DIR` で開いた
+//!   ファインダの入力欄に 30 ms ごとに打鍵し、打鍵の読取完了 → その入力で絞り込んだ件数を描いた Frame の `write` (`--only 125`。
+//!   区間の記録 `search.first_match` の一覧の版) と、同じ打鍵の `input.to_flush` (01 FR-125 AC-2、09 §5.2)。
 //!
 //! どのビルドでも測る、端末込みの参考値 (`ConPTY` を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
@@ -35,6 +39,7 @@
 //! cargo bench -p evoeditor --bench bm_pty -- --runs 50             # 回数を減らす (記録には使わない)
 //! cargo bench -p evoeditor --bench bm_pty -- --json                # 1 行ずつの JSON
 //! cargo bench -p evoeditor --bench bm_pty -- --only 103,107        # 一部だけ (101 102 103 107)
+//! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 125 --workspace-tree <木>  # BM-125 / BM-103b-finder
 //! ```
 
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
@@ -674,7 +679,17 @@ fn swap_window(dir: &Path, mb: usize, id: &str, json: bool, quick: bool) {
     );
 }
 
-/// 「開く → 進捗」(01 §3.0.1): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 進捗を含む最初の Frame の `write`。
+/// パスを入力して開くプロンプト (`file.open`) を出す。v0.5 の M31 の段 6 で `Ctrl+O` はファインダに移ったので、パレットから
+/// 実行する (`Ctrl+P` → `file.open` → `Enter`)。区間は後の `Enter` (パスの確定) から測るので、出し方は区間に入らない。
+fn open_prompt(t: &mut Term) {
+    t.send(b"\x10"); // Ctrl+P
+    thread::sleep(Duration::from_millis(80));
+    t.send(b"file.open");
+    thread::sleep(Duration::from_millis(60));
+    t.send(b"\r");
+    thread::sleep(Duration::from_millis(80));
+}
+/// 「開く → 進捗」(01 §3.0.1): パスを入力して開くプロンプト (`file.open`) → パス → `Enter` の、`Enter` の読取完了 → 進捗を含む最初の Frame の `write`。
 /// 2 つのファイルを交互に開く (同じファイルの再読込と区別するため)。
 fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
     const VK_ENTER: u64 = 0x0D;
@@ -683,8 +698,7 @@ fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> 
     t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
     for i in 0..runs + warmup {
         let p = if i % 2 == 0 { a } else { b };
-        t.send(b"\x0f"); // Ctrl+O
-        thread::sleep(Duration::from_millis(80));
+        open_prompt(&mut t);
         t.send(p.to_str().unwrap().as_bytes());
         thread::sleep(Duration::from_millis(60));
         t.send(b"\r");
@@ -735,7 +749,7 @@ struct HeadRun {
     partial: bool,
 }
 
-/// BM-104v (01 FR-122 AC-2、09 §5.2、03 §9.2.1 の「計測」): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 文書の先頭部分を
+/// BM-104v (01 FR-122 AC-2、09 §5.2、03 §9.2.1 の「計測」): パスを入力して開くプロンプト → パス → `Enter` の、`Enter` の読取完了 → 文書の先頭部分を
 /// 含む最初の Frame の `write` (先行表示の先頭。先に読み終えたら全文の最初の Frame)。区間の記録 `open.content` で測り、
 /// 同じ区間に印 `open.partial` があれば先行表示の回と数える。2 つのファイルを交互に開き、読み終えるまで待ってから閉じる
 /// (BM-104p と同じ。開いている文書を開き直すと切り替えになり読み込まない)。
@@ -746,8 +760,7 @@ fn open_head(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<
     t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
     for i in 0..runs + warmup {
         let p = if i % 2 == 0 { a } else { b };
-        t.send(b"\x0f"); // Ctrl+O
-        thread::sleep(Duration::from_millis(80));
+        open_prompt(&mut t);
         t.send(p.to_str().unwrap().as_bytes());
         thread::sleep(Duration::from_millis(60));
         t.send(b"\r");
@@ -1343,6 +1356,128 @@ fn search_load_multiline(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration
         .collect()
 }
 
+/// ファインダの一覧の件数の欄 (`{matched}/{total}`) を画面から読む。走査中 (`走査中`) や、一覧が無ければ `None`。
+fn finder_counts(t: &Term) -> Option<(u64, u64)> {
+    let screen = t.parser.lock().unwrap().screen().contents();
+    if !screen.contains("ファイルを開く")
+        || screen.contains("走査中")
+        || screen.contains("調べています")
+    {
+        return None;
+    }
+    // 枠の下辺の `─ 123/456 ─` (画面の解釈では `- 123/456 -+` にもなる)。ほかの行の数字 (ステータスバーの行:桁) と取り違えない
+    // よう、枠の線のある行だけを見る
+    let border = |l: &&str| l.contains('─') || l.trim_end().ends_with("-+");
+    screen.lines().filter(border).find_map(|l| {
+        let i = l.find('/')?;
+        let m = l[..i].rsplit(|c: char| !c.is_ascii_digit()).next()?;
+        let n = l[i + 1..].split(|c: char| !c.is_ascii_digit()).next()?;
+        Some((m.parse().ok()?, n.parse().ok()?))
+    })
+}
+
+/// ファインダの件数が `want` の検索語の結果になるまで待つ (前の結果の件数と違う値が出て、変わらなくなるまで)。
+fn finder_settle(t: &Term, what: &str) -> (u64, u64) {
+    t.wait(what, || finder_counts(t).is_some());
+    let mut last = finder_counts(t);
+    loop {
+        thread::sleep(Duration::from_millis(400));
+        let now = finder_counts(t);
+        if let Some(c) = now
+            && now == last
+        {
+            return c;
+        }
+        last = now;
+    }
+}
+
+/// BM-125 / BM-103b-finder の 1 つの場面: 入力欄に `base` を入れておき、`key` と `BackSpace` を交互に 30 ms ごとに打つ。
+struct FinderCase {
+    name: &'static str,
+    base: &'static str,
+    key: u8,
+}
+
+/// 1 つの場面の結果: BM-125 (打鍵 → その入力の候補を描いた Frame)、BM-103b-finder (打鍵 → 入力欄を反映した Frame)、
+/// 送った `key` の数、`(base の件数, base + key の件数, 候補の総数)`。
+struct FinderRun {
+    update: Vec<Duration>,
+    typing: Vec<Duration>,
+    sent: usize,
+    counts: (u64, u64, u64),
+}
+
+/// BM-125 / BM-103b-finder (01 FR-125 AC-2、09 §5.2): ワークスペースの木 `tree` を `DIR` で開き (ファインダが開く)、走査を
+/// 終えてから、入力欄に `case.base` を入れた後、`case.key` と `BackSpace` を 30 ms ごとに交互に打つ。BM-125 は `key` の
+/// 読取完了 → その入力で絞り込んだ件数が件数の欄に出た Frame の `write` (`search.first_match`。件数で見分けるので、先に
+/// 別のプロセスで `base` と `base + key` の件数を読んでおき、違うことを確かめる)。BM-103b-finder は同じ打鍵の
+/// `input.to_flush`。30 ms のうちに結果が描かれなかった打鍵は BM-125 の記録が残らない (送った数との差を報告する)。
+fn finder_typing(
+    dir: &Path,
+    tree: &Path,
+    case: &FinderCase,
+    runs: usize,
+    warmup: usize,
+) -> FinderRun {
+    let tree_s = tree.to_str().expect("木のパス");
+    // 1. 件数を読む (計測しないプロセス)
+    let (mut t, _) = Term::start(&[tree_s], "", None);
+    let (_, total) = finder_settle(&t, "走査の完了");
+    t.send(case.base.as_bytes());
+    let (m0, _) = finder_settle(&t, "base の件数");
+    t.send(&[case.key]);
+    let (m1, _) = finder_settle(&t, "base + key の件数");
+    t.send(b"\x11");
+    let _ = t.wait_exit(WAIT);
+    drop(t);
+    assert_ne!(m0, m1, "{}: 打鍵で件数が変わらない ({m0})", case.name);
+    // 2. 計測する
+    let trace = dir.join(format!("finder-{}.jsonl", case.name));
+    let marker = format!("{m1}/{total}");
+    let (mut t, _) = Term::start_env(
+        &[tree_s],
+        "",
+        Some(&trace),
+        &[("EVE_TRACE_MATCH", marker.as_str())],
+    );
+    finder_settle(&t, "走査の完了");
+    t.send(case.base.as_bytes());
+    finder_settle(&t, "base の件数");
+    let n = runs + warmup;
+    for _ in 0..n {
+        t.send(&[case.key]);
+        thread::sleep(Duration::from_millis(30));
+        t.send(b"\x7f"); // BackSpace
+        thread::sleep(Duration::from_millis(30));
+    }
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x1b");
+    thread::sleep(Duration::from_millis(100));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let vk = u64::from(case.key.to_ascii_uppercase());
+    let spans = read_spans(&trace);
+    let _ = std::fs::remove_file(&trace);
+    let pick = |name: &str| -> Vec<Duration> {
+        let mut v: Vec<&Span> = spans
+            .iter()
+            .filter(|s| s.name == name && s.vk == Some(vk))
+            .collect();
+        v.sort_by_key(|s| s.start_ns);
+        v.iter()
+            .skip(warmup)
+            .map(|s| ns_dur(s.end_ns - s.start_ns))
+            .collect()
+    };
+    FinderRun {
+        update: pick("search.first_match"),
+        typing: pick("input.to_flush"),
+        sent: runs,
+        counts: (m0, m1, total),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     // BM-120 のパイプの書き手として起こされた (計測ではない)
@@ -1364,6 +1499,11 @@ fn main() {
         .and_then(|i| args.get(i + 1))
         .map(|v| v.split(',').map(str::to_owned).collect());
     let want = |id: &str| only.as_ref().is_none_or(|o| o.iter().any(|x| x == id));
+    let workspace_tree: Option<PathBuf> = args
+        .iter()
+        .position(|a| a == "--workspace-tree")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from);
     let warmup = runs / 10;
 
     let dir = std::env::temp_dir().join(format!("evo-bench-pty-{}", std::process::id()));
@@ -1652,6 +1792,53 @@ fn main() {
             json,
             quick,
         );
+    }
+    if traced && want("125") {
+        match workspace_tree.as_deref() {
+            None => println!(
+                "(BM-125 / BM-103b-finder は `--workspace-tree <cargo xtask gen-corpus --workspace large の木>` を付けたときだけ測ります)"
+            ),
+            Some(tree) => {
+                let cases = [
+                    FinderCase {
+                        name: "many",
+                        base: "",
+                        key: b'e',
+                    },
+                    FinderCase {
+                        name: "few",
+                        base: "flat/case1234",
+                        key: b'5',
+                    },
+                ];
+                for case in &cases {
+                    let r = finder_typing(&dir, tree, case, runs, warmup);
+                    let (m0, m1, total) = r.counts;
+                    println!(
+                        "  ファインダの場面 {}: 入力欄 {:?} の件数 {m0}、打鍵 {:?} の後 {m1} (候補 {total})。BM-125 の記録 {} / 送った打鍵 {} (ウォームアップを除く。30 ms のうちに結果が描かれなかった打鍵は記録が残らない)",
+                        case.name,
+                        case.base,
+                        case.key as char,
+                        r.update.len(),
+                        r.sent
+                    );
+                    report(
+                        &format!("BM-125-{}", case.name),
+                        "ファインダの候補の更新 (打鍵の読取完了 → その入力で絞り込んだ候補を描いた Frame の write)",
+                        r.update,
+                        json,
+                        quick,
+                    );
+                    report(
+                        &format!("BM-103b-finder-{}", case.name),
+                        "ファインダの入力欄への打鍵 (入力の読取完了 → 描画の write)",
+                        r.typing,
+                        json,
+                        quick,
+                    );
+                }
+            }
+        }
     }
     if traced && want("404m") {
         let v = search_load_multiline(&dir, runs, warmup);

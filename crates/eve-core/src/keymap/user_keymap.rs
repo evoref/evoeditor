@@ -2,7 +2,7 @@
 //! FR-608)。
 //!
 //! 単一ストロークとチョード (ストロークの数に上限は無い) の上書き・追加・解除 (`"none"`)・`when`・`args` を解決する。
-//! `finder` / `panel.*` コンテキストは「このバージョンでは未対応」の情報診断にして使わない。問題のある割当は、それだけを
+//! `panel.*` コンテキストは「このバージョンでは未対応」の情報診断にして使わない (`finder` は v0.5 の M31 の段 6 から解決する)。問題のある割当は、それだけを
 //! 無効にして診断を返す (ほかの割当は使う)。プレフィックスの衝突 (曖昧なチョード) はチョードを優先し、使えなくなった
 //! 割当を診断で名指しする (02 §7.2 K3、07 §7.6)。
 //!
@@ -20,8 +20,8 @@ use crate::command::{ArgValue, Args, CommandRegistry, ids};
 use crate::editor::Editor;
 
 /// ユーザーが書けるコンテキスト (07 §7.1)。core が公開する固定集合。並びは一覧の出力 (`--dump-keymap`) の順にも使う。
-pub const CONTEXTS: [&str; 8] = [
-    "global", "editor", "search", "prompt", "palette", "list", "dialog", "help",
+pub const CONTEXTS: [&str; 9] = [
+    "global", "editor", "search", "prompt", "palette", "list", "dialog", "help", "finder",
 ];
 
 /// どの設定でも必ず届く脱出のコマンド (07 §7.6)。
@@ -74,7 +74,7 @@ fn apply_user_keymap(
         };
 
         let Some(&ctx) = CONTEXTS.iter().find(|c| **c == e.context) else {
-            if e.context == "finder" || e.context.starts_with("panel.") {
+            if e.context.starts_with("panel.") {
                 push(Severity::Info, DiagKind::Unsupported, "");
             } else {
                 warn(&mut push, KeymapProblem::UnknownContext, &e.context);

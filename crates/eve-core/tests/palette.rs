@@ -177,7 +177,7 @@ fn 割当キーを逆引きして添える() {
 #[test]
 fn プロンプトが出ていてもパレットを開ける() {
     let mut h = Harness::new();
-    h.keys("ctrl+o");
+    h.cmd("file.open");
     assert_eq!(h.overlay(), "prompt");
     h.keys("ctrl+p");
     assert_eq!(h.overlay(), "palette");

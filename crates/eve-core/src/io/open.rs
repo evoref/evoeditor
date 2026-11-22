@@ -369,6 +369,20 @@ impl EditorState {
                     self.drop_failed_open(doc_id, replace);
                     return;
                 }
+                // ファインダで選んだファイルが走査の後に消えた: 新規の文書にせず知らせる (03 §12.7.4 の「開く」)
+                if opts.must_exist
+                    && matches!(&err, crate::jobs::JobError::Fs(e) if e.kind == crate::io::fs::FsErrorKind::NotFound)
+                {
+                    self.open_failed(
+                        doc_id,
+                        replace,
+                        MessageLevel::Warn,
+                        keys::MSG_FINDER_NOT_FOUND,
+                        &path,
+                        "",
+                    );
+                    return;
+                }
                 let reason = reason_label(&err);
                 let (level, key) = open_failure(&err);
                 self.open_failed(doc_id, replace, level, key, &path, &reason);

@@ -85,6 +85,9 @@ pub struct OpenOptions {
     /// 先行表示 (`JobResult::Partial`、03 §9.2.1。v0.4 の M25) を送ってよい。core が新しく開く読込 (`file.open`・起動時の
     /// パス) のときだけ立てる。再読込・文字コードを指定して開き直すでは立てない。確認からの再投入は引き継ぐ (02 §9.3)。
     pub partial: bool,
+    /// パスが無ければ新規の文書にせず `Failed { Fs(NotFound) }` で終える (v0.5 の M31。ファインダ・横断検索から開くときだけ
+    /// 立てる。走査の後に消えたファイルを空の新規の文書にしない、03 §9.2 手順 2・§12.7.4)。
+    pub must_exist: bool,
 }
 
 pub(crate) fn run_open(
@@ -194,6 +197,10 @@ fn open_inner(
     // 2. metadata
     let meta = match ports.fs.metadata(path) {
         Ok(m) => m,
+        // 在るはずのファイル (ファインダ・横断検索で選んだもの) が無い: 新規の文書にしない
+        Err(e) if e.kind == FsErrorKind::NotFound && opts.must_exist => {
+            return fail(JobError::Fs(e));
+        }
         Err(e) if e.kind == FsErrorKind::NotFound => {
             let parent_missing = match e.detail {
                 Some(FsErrorDetail::ParentMissing { dir }) => Some(dir),

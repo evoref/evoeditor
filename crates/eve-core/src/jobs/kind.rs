@@ -247,6 +247,18 @@ pub enum JobKind {
         /// 積み直しの続き (最初の投入は `None`)。
         walk: Option<Box<crate::workspace::WorkspaceWalk>>,
     },
+    /// ファインダの照合 (`bg`。03 §12.7.4)。`chunks` の全候補を `query` で照らし、一致した件数と上位 `top` 件を
+    /// `JobResult::FinderMatched` で返す。区切らない (照合 1 回)。候補 4,096 件ごとに取消しを見る。`doc` は `None`。
+    FinderMatch {
+        /// 照らす候補の塊 (主スレッドの一覧の `Arc` の写し)。
+        chunks: Vec<std::sync::Arc<[crate::workspace::Candidate]>>,
+        /// 検索語 (入力欄の文字列のまま)。
+        query: std::sync::Arc<str>,
+        /// 上位の件数 (`FINDER_TOP`)。
+        top: usize,
+        /// 照合の世代 (結果を照らして古いものを捨てる)。
+        generation: u64,
+    },
     /// 古い候補の一覧を `bg` で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)。終端の結果は
     /// `JobResult::Released` だけ。取り消さない。
     ReleaseCandidates {

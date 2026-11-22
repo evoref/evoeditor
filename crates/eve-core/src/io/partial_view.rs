@@ -547,6 +547,8 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::RecoveryScan
         | Pending::LastVersion
         | Pending::WorkspaceRoot
+        | Pending::WorkspaceScan { .. }
+        | Pending::FinderMatch { .. }
         | Pending::Leftover(_)
         | Pending::SwapRemove { .. } => None,
     }

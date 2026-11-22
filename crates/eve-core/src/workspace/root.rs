@@ -78,6 +78,8 @@ pub(crate) struct WorkspaceState {
     held_dirs: Vec<FsPath>,
     /// 届いた結果のうち、知らせに使うもの。
     settled: Option<Settled>,
+    /// ファインダの候補の一覧と走査 (03 §12.7.2 の「一覧の寿命」)。
+    pub(crate) finder: crate::workspace::finder::FinderList,
 }
 
 /// 届いた結果のうち、起動の引数のディレクトリの知らせに使うもの。
@@ -315,6 +317,10 @@ impl EditorState {
         };
         for path in std::mem::take(&mut self.workspace.held_dirs) {
             self.notify_startup_dir(&path);
+        }
+        // ファインダ: 待っていれば走査を始め、`DIR` で決まったら開く (03 §12.7.1、07 §18.2)
+        if let Some(source) = self.workspace.current.as_ref().map(Workspace::source) {
+            self.finder_on_root(source);
         }
         // `--workspace` を使えなかった知らせは、利用者が明示した指定なので最後に出す (現在のメッセージにする)
         if let (Some(e), Some(root)) = (explicit_error, self.workspace.current.as_ref()) {

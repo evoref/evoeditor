@@ -72,6 +72,13 @@ pub(crate) enum Pending {
     LastVersion,
     /// ワークスペースのルートの検出 (03 §12.7.1)。
     WorkspaceRoot,
+    /// ファインダの候補の走査 (03 §12.7.2)。束 (`ScanBatch`) は途中経過なので、終端まで待ちの記録を残す。
+    WorkspaceScan { generation: u64 },
+    /// ファインダの照合 (03 §12.7.4)。`chunks` は照合に渡した塊の写し (結果の番号はこの列を指す)。
+    FinderMatch {
+        generation: u64,
+        chunks: crate::workspace::finder::Chunks,
+    },
     /// スワップを書くジョブ (03 §10.2)。
     Swap { doc: DocumentId },
     /// スワップを消すジョブ。
@@ -164,6 +171,8 @@ impl EditorState {
                 | Pending::RecoveryScan
                 | Pending::LastVersion
                 | Pending::WorkspaceRoot
+                | Pending::WorkspaceScan { .. }
+                | Pending::FinderMatch { .. }
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
                 | Pending::SwapDiscard { .. }
@@ -233,6 +242,14 @@ impl EditorState {
             );
             return;
         }
+        // ファインダの走査は束が複数届く。待ちの記録は終端まで残す (03 §12.7.2)
+        if let Some(Pending::WorkspaceScan { generation }) = self.io.pending.get(&job) {
+            let generation = *generation;
+            if !self.on_scan_result(generation, r) {
+                self.io.pending.remove(&job);
+            }
+            return;
+        }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(JobOutput { job, body: r });
@@ -287,6 +304,10 @@ impl EditorState {
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::LastVersion => self.finish_last_version(r),
             Pending::WorkspaceRoot => self.finish_workspace_root(r),
+            Pending::WorkspaceScan { .. } => {}
+            Pending::FinderMatch { generation, chunks } => {
+                self.finish_finder_match(generation, chunks, r);
+            }
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),

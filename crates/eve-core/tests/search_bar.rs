@@ -229,7 +229,7 @@ fn クリップボードの最初の行を検索欄へ貼り付ける() {
 #[test]
 fn プロンプトにも貼り付けられる() {
     let mut h = Harness::new().with_size(40, 10);
-    h.keys("ctrl+o");
+    h.cmd("file.open");
     paste_into_field(&mut h, "/w/x.txt");
     let f = h.frame();
     let eve_view::OverlayModel::Prompt { input, .. } = &f.overlays[0] else {

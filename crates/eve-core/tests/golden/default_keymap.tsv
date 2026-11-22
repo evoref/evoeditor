@@ -38,7 +38,7 @@ search	Ctrl+H	search.replace_open	Args({})	ContextExpr(None)	true
 search	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
 search	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
 search	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
-search	Ctrl+O	file.open	Args({})	ContextExpr(None)	false
+search	Ctrl+O	workspace.open_file	Args({})	ContextExpr(None)	false
 search	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
 editor	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
 editor	Esc	ui.cancel	Args({})	ContextExpr(None)	false
@@ -77,7 +77,7 @@ editor	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
 editor	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
 editor	Ctrl+K S	file.save_as	Args({})	ContextExpr(None)	false
 editor	Ctrl+K A	file.save_all	Args({})	ContextExpr(None)	false
-editor	Ctrl+O	file.open	Args({})	ContextExpr(None)	false
+editor	Ctrl+O	workspace.open_file	Args({})	ContextExpr(None)	false
 editor	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
 editor	Ctrl+W	buffer.close	Args({})	ContextExpr(None)	false
 editor	Ctrl+K W	buffer.close	Args({})	ContextExpr(None)	false

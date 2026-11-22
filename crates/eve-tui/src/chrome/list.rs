@@ -5,7 +5,7 @@ use eve_view::{CellPos, CellSize, OverlayModel, Span};
 use super::input_field::draw_input;
 use super::keys::key_label_full;
 use super::overlay::{BoxRect, box_width, draw_box};
-use super::parts::{ascii_span, fill, glyph_span, put, text_width, truncate_end};
+use super::parts::{ascii_span, fill, glyph_span, put, text_width, truncate_end, truncate_indexed};
 use crate::buffer::Writer;
 use crate::glyphs::Glyphs;
 use crate::theme::{Theme, overlay_style};
@@ -111,9 +111,16 @@ pub(super) fn render_list(
         } else {
             left_room
         };
-        let label = truncate_end(&item.label.spans, label_room, &glyphs.ellipsis);
-        for (i, sp) in label.iter().enumerate() {
-            let hit = item.match_ranges.iter().any(|r| r.contains(&i));
+        // `cut` に従って切り (ファインダの相対パスは中間、04 §8.11)、強調は切った後の各 Span の元の番号で照らす (省略記号は
+        // 強調しない)
+        let label = truncate_indexed(
+            &item.label.spans,
+            label_room,
+            item.label.cut,
+            &glyphs.ellipsis,
+        );
+        for (orig, sp) in &label {
+            let hit = orig.is_some_and(|i| item.match_ranges.iter().any(|r| r.contains(&i)));
             let st = if hit {
                 overlay_style(base, theme.overlay_match)
             } else {

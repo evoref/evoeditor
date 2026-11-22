@@ -1138,7 +1138,7 @@ v0.1 で TUI は AI のコードを持たないが、v1.L で **ローカル LLM
 
 - **開く**: `Ctrl+O` (`workspace.open_file`。v0.5 から。07 §11.6)。起動の引数にフォルダ (`DIR`) を渡したときは、ルートの検出の後に開く (07 §18.2)。
 - **オーバーレイとペイン**: オーバーレイは画面全体に 1 つで、開いたときにフォーカスのあったペインに対して働く。選んだファイルはそのペインで開く (ペインの細目は M30 の仕様、§11)。横断検索 (§8.12) も同じ。
-- **位置・大きさ**: パレットと同じ (上部中央、幅 = min(80, 端末幅 − 4)、候補は最大 12 行)。長い相対パスは、中間を `…` で詰める (core が `ListItem.label` の `cut` を `CutPolicy::Middle` にし、TUI が幅に合わせて詰める。先頭のディレクトリと末尾のファイル名が残る。境界の型は変えない。v0.4 までの TUI の一覧は `cut` に依らず末尾で切り、強調を切った後の位置でそのまま照らしているので、M31 の段 6 で `cut` に従い、強調の書記素番号を切った後の位置に写すように直す)。
+- **位置・大きさ**: パレットと同じ (上部中央、幅 = min(80, 端末幅 − 4)、候補は最大 12 行)。長い相対パスは、中間を `…` で詰める (core が `ListItem.label` の `cut` を `CutPolicy::Middle` にし、TUI が幅に合わせて詰める。先頭のディレクトリと末尾のファイル名が残る。境界の型は変えない。v0.4 までの TUI の一覧は `cut` に依らず末尾で切り、強調を切った後の位置でそのまま照らしていた (末尾を切ると省略記号が強調されることがあった) ので、M31 の段 6 で `cut` に従い、強調の書記素番号を切った後の位置に写すように直した。省略記号は強調しない)。
 - **見出し**: `List.title` = `ui.finder.title` (`{root}` は 03 の短縮したパス。長いと前を `…` で詰める)。
 - **行**: ワークスペースのルートからの相対パス (区切りは全 OS で `/`)。一致した文字は下線 + 太字 (パレットと同じ、色だけに頼らない)。`detail` と `keys` は使わない。
 - **件数** (`List.footer`): `ui.palette.footer` (`{matched}/{total}`)。走査中は `ui.finder.footer_scanning`、上限 (20 万件) で打ち切ったときは `ui.finder.footer_truncated`、読めないフォルダがあれば `ui.finder.unreadable_suffix` を後ろに足す。ルートの検出を待つ間は `ui.finder.footer_waiting`。
@@ -1160,7 +1160,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.13 ワークスペースの文言の案 (v0.5 の M31)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で、`msg.save_as.open_in_other` は段 5 (SAF-28) の PR で §15.2 の目録へ移した。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で、`msg.save_as.open_in_other` は段 5 (SAF-28) の PR で、ファインダの文言 (`cmd.workspace.open_file.*`・`hint.workspace.open_file`・`ui.finder.*`・`msg.finder.not_found`・`msg.workspace.scan_failed`) は段 6 の PR で §15.2 の目録 (`cmd.*` と `hint.*` は 07 §11.6 のカタログ) へ移した (下の表は横断検索 (段 7) の分を含む案の一覧として残す)。
 
 | キー (案) | 出す場面 | ja (案) | en (案) |
 |---|---|---|---|
@@ -1418,7 +1418,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | 場所 | MessageKey | ja | セル数 |
 |---|---|---|---|
 | ヒントバー (`normal`) | `hint.app.quit` / `hint.ui.palette_open` | 終了 / コマンド | 4、8 |
-| ヒントバー (`normal`) | `hint.file.save` / `hint.search.open` / `hint.file.open` / `hint.edit.undo` / `hint.cursor.goto_line` | 保存 / 検索 / 開く / 元に戻す / 行へ移動 | 4、4、4、8、8 |
+| ヒントバー (`normal`) | `hint.file.save` / `hint.search.open` / `hint.file.open` (v0.5 の M31 の段 6 から `hint.workspace.open_file`。Ctrl+O をファインダに移した) / `hint.edit.undo` / `hint.cursor.goto_line` | 保存 / 検索 / 開く / 元に戻す / 行へ移動 | 4、4、4、8、8 |
 | ヒントバー (`overlay`) | `hint.ui.confirm` / `hint.ui.cancel` / `hint.ui.list_next` | 決定 / 取消 / 次へ | 4、4、4 |
 | ヒントバー (`overlay`、検索バー) | `hint.search.next` / `hint.search.prev` / `hint.search.toggle_case` / `hint.search.replace_all` | 次へ / 前へ / 大小 / 全置換 | 4、4、4、6 |
 | ステータスバー | `status.untitled` | 無題-{n} | 6 (n が 1 桁) |
@@ -1467,6 +1467,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.edit` | 編集 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.file` | ファイル | — |
 | パレットの行のカテゴリ (CommandId の名前空間。v0.5) | `ui.palette.category.pane` | ペイン | — |
+| パレットの行のカテゴリ (CommandId の名前空間。v0.5 の M31 の段 6) | `ui.palette.category.workspace` | ワークスペース | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.search` | 検索 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.select` | 選択 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.ui` | 画面 | — |
@@ -1630,6 +1631,13 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.buffer_list.title` | バッファ一覧 (`buffer.list`、§8.5。v0.2) の見出し | バッファ |
 | `ui.buffer_list.placeholder` | 同上。入力欄が空のときの案内 (名前とディレクトリで絞り込む) | 文書名で絞り込み |
 | `ui.buffer_list.no_match` | 同上。絞り込みに一致する文書が無いとき | 一致する文書はありません |
+| `ui.finder.title` | ファインダ (`workspace.open_file`、§8.11。v0.5 の M31 の段 6) の見出し (`{root}` はワークスペースのルート) | ファイルを開く ({root}) |
+| `ui.finder.placeholder` | 同上。入力欄が空のときの案内 | ファイル名・パスで絞り込み |
+| `ui.finder.footer_waiting` | 同上。ルートの検出を待つ間の件数の欄 | ワークスペースを調べています… |
+| `ui.finder.footer_scanning` | 同上。走査中の件数の欄 | {matched}/{total} 走査中… |
+| `ui.finder.footer_truncated` | 同上。候補の数の上限 (`{limit}`) で走査を打ち切ったときの件数の欄 | {matched}/{total} (ファイルが多いため {limit} 件で打ち切りました) |
+| `ui.finder.unreadable_suffix` | 同上。読めないフォルダがあるとき件数の欄の後ろに足す (横断検索の件数の欄も使う、§8.12) | ・読めないフォルダ {dirs} |
+| `ui.finder.no_match` | 同上。絞り込みに一致するファイルが無いとき | 一致するファイルはありません |
 | `ui.config_diagnostics.title` | 設定の診断の一覧 (`config.show_diagnostics`、§8.5a。v0.3) の見出し | 設定の診断 |
 | `ui.config_diagnostics.placeholder` | 同上。入力欄が空のときの案内 (本文と `ファイル:行` で絞り込む) | 診断の文で絞り込み |
 | `ui.config_diagnostics.no_match` | 同上。絞り込みに一致する診断が無いとき | 一致する診断はありません |
@@ -1851,6 +1859,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.cli.directory` | 位置引数にフォルダを渡した (07 §18.2。v0.1 は無題の文書を開く) | {path} はフォルダなので開けません。無題の文書を開きました / ファイルのパスを指定して起動してください |
 | `msg.cli.directory_ignored` | 起動の引数の 2 つ目以降のフォルダ、`--workspace` があるときのフォルダ (07 §18.2。v0.5 の M31 の段 1。ルートにしたフォルダには出さない、03 §12.7.1) | {path} はフォルダなので開けません。ワークスペースは {root} です / ワークスペースにするフォルダは 1 つだけ指定してください |
 | `msg.workspace.root_invalid` | `--workspace` がフォルダでない・無い・読めない (07 §18.3。v0.5 の M31 の段 1。ルートは 07 §12.1 の 2 以降で決める。`{reason}` はフォルダでなければ `not a directory`、03 §12.7.1) | {path} をワークスペースにできません: {reason} / フォルダのパスを指定してください。今は {root} をワークスペースにしています |
+| `msg.workspace.scan_failed` | ファインダの走査でワークスペースのルートを読めない (03 §12.7.2 の 7。v0.5 の M31 の段 6。`{reason}` は `ui.reason.*` と同じ分類の名前) | ワークスペース {root} を読めません: {reason} / フォルダの権限を確認してください |
+| `msg.finder.not_found` | ファインダ (横断検索も、§8.12) で選んだファイルが走査の後に消えていた (新規の文書にしない、03 §12.7.4。v0.5 の M31 の段 6) | {path} はもうありません / 一覧を開き直すと、今のファイルで探し直します |
 | `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
 | `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 

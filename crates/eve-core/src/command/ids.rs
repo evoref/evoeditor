@@ -105,10 +105,11 @@ pub const UI_REDRAW: &str = "ui.redraw";
 pub const UI_TOGGLE_HINT_BAR: &str = "ui.toggle_hint_bar";
 pub const UI_TOGGLE_MOUSE: &str = "ui.toggle_mouse";
 pub const VIEW_TOGGLE_WRAP: &str = "view.toggle_wrap";
+pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 103] = [
+pub const ALL: [&str; 104] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -212,6 +213,7 @@ pub const ALL: [&str; 103] = [
     UI_TOGGLE_HINT_BAR,
     UI_TOGGLE_MOUSE,
     VIEW_TOGGLE_WRAP,
+    WORKSPACE_OPEN_FILE,
 ];
 
 #[cfg(test)]

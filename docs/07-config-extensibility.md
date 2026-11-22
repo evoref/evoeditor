@@ -656,7 +656,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 - **`"none"`**: チョードの割当も、その列だけを解除する (同じ先頭のほかのチョードは残る)。解除した列を押し切ると「未割当」と同じで、文字を本文に入れない。`"none"` のチョードは単体の割当を無効にしない (§7.6)。
 - **`args`**: 割当の `args` (表) をコマンドに渡す。引数の名前・型・使える値・必須はコマンドの引数の形 (§11.2、§11.6 の `args` 列) で照らし、合わない割当はそれだけを使わずに警告する (§7.6)。`args` を書かない割当は v0.2 と同じ (引数なしで呼ぶ)。
 - **衝突の検出** (FR-608): §7.6 の表のとおり。診断は書かれた行・キーを示し、起動・`config.reload`・`--check-config` (§18.3) で同じに出る。
-- `finder` / `panel.*` のコンテキストは、引き続き「このバージョンでは未対応」の情報診断。**`finder` は v0.5 の M31 のファインダの実装の PR (03 §12.7.9 の段 6) から解決する** (その PR でこの行を直す)。
+- `panel.*` のコンテキストは、引き続き「このバージョンでは未対応」の情報診断。**`finder` は v0.5 の M31 のファインダの実装の PR (03 §12.7.9 の段 6) から解決する** (参照順は上の表の `finder` → `list` → `prompt` → `global`。段 6 では `finder` に既定の割当は無く、ユーザーの `[keys.finder]` の割当と、`list` / `prompt` / `global` の割当が届く)。
 
 ### 7.2 キー名
 
@@ -1317,8 +1317,8 @@ verb       := [a-z][a-z0-9_]*
 | `file.save` | `cmd.file.save` | File | — | `!doc.read_only` | `-` | `editor`, `search` | `mod+s` | normal:4 |
 | `file.save_as` | `cmd.file.save_as` | File | `path?` | — | `-` | `editor`, `search` | `editor`: `mod+shift+s` [E], `ctrl+k s` (alt)、`search`: `mod+shift+s` [E] | - |
 | `file.save_all` (v0.2) | `cmd.file.save_all` | File | — | — | `-` | `editor` | `ctrl+k a` (alt) | chord:3 |
-| `file.open` | `cmd.file.open` | File | `path?` | — | `-` | `editor`, `search` | `mod+o` (v0.5 でファインダ `workspace.open_file` に移す。パスを入力する `file.open` はパレットから使う。パスの補完は送る。PO の決定 2026-11-20、v0.5-plan §1.3 の (1)。移すのは M31 のファインダの実装の PR (03 §12.7.9 の段 6) で、その PR でこの行の既定キーを `—`・ヒントを `-` にし、下の `workspace.open_file` の行に移す。それまで実装と照らす検査 (09 §11.2) のためにこの行に残す) | normal:2 |
-| `workspace.open_file` (v0.5) | `cmd.workspace.open_file` | Ui | `query?` | — | `ui` | `editor`, `search` | `mod+o` (ファインダ、FR-125。03 §12.7.4。M31 の段 6 で上の `file.open` から移す) | normal:2 |
+| `file.open` | `cmd.file.open` | File | `path?` | — | `-` | パレット | — (v0.4 までは `editor` / `search` の `mod+o`。v0.5 の M31 の段 6 でファインダ `workspace.open_file` に移した。パスを入力する `file.open` はパレットから使う。パスの補完は送る。PO の決定 2026-11-20、v0.5-plan §1.3 の (1)) | - |
+| `workspace.open_file` (v0.5) | `cmd.workspace.open_file` | Ui | `query?` | — | `ui` | `editor`, `search` | `mod+o` (ファインダ、FR-125。03 §12.7.4。M31 の段 6 で上の `file.open` から移した) | normal:2 |
 | `file.new` | `cmd.file.new` | File | — | — | `-` | `editor`, `search` | `mod+n` | - |
 | `file.reload` | `cmd.file.reload` | File | — | `doc.has_path` | `-` | パレット | — | - |
 | `file.check_external_changes` (v0.2) | `cmd.file.check_external_changes` | File | — | `doc.has_path` | `-` | パレット | — | - |

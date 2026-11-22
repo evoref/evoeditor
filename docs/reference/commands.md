@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 103 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 104 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -51,7 +51,7 @@
 | `edit.undo` | 元に戻す | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Z` | 出す |
 | `file.check_external_changes` | 外部変更の確認 | File | — | `doc.has_path` | `-` | — | 出す |
 | `file.new` | 新規作成 | File | — | — | `-` | `editor`: `Ctrl+N`<br>`search`: `Ctrl+N` | 出す |
-| `file.open` | 開く | File | `path?`: `path` | — | `-` | `editor`: `Ctrl+O`<br>`search`: `Ctrl+O` | 出す |
+| `file.open` | 開く | File | `path?`: `path` | — | `-` | — | 出す |
 | `file.reload` | 再読込 | File | — | `doc.has_path` | `-` | — | 出す |
 | `file.reopen_with_encoding` | 文字コードを指定して開き直す | File | `encoding`: `enum(utf-8\|utf-16le\|utf-16be\|shift_jis\|euc-jp\|iso-2022-jp)` | `doc.has_path` | `-` | — | 出す |
 | `file.save` | 保存 | File | — | `!doc.read_only` | `-` | `editor`: `Ctrl+S`<br>`search`: `Ctrl+S` | 出す |
@@ -112,3 +112,4 @@
 | `ui.toggle_hint_bar` | ヒントバーの切り替え | Ui | — | — | `ui` | — | 出す |
 | `ui.toggle_mouse` | マウスの切り替え | Ui | — | `caps.mouse` | `-` | — | 出す |
 | `view.toggle_wrap` | 折り返しの切り替え | Ui | — | — | `ui` | `editor`: `Alt+Z`, `Ctrl+K O` | 出す |
+| `workspace.open_file` | ファイルを探して開く | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+O`<br>`search`: `Ctrl+O` | 出す |
