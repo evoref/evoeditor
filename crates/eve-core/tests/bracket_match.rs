@@ -191,13 +191,17 @@ fn 複数カーソルでは各_range_を動かし_主が動かなければ理由
     let mut h = scene("|(a) *|c");
     assert_eq!(press(&mut h, "ctrl+]"), ["info.bracket.none"]);
     assert_eq!(shown(&h), "(a|) |c");
-    // 同じ位置になった Range は 1 つになる
-    let mut h = scene("|(a|)");
+    // 2 つの Range が入れ替わる: ( の直前 (0) → ) の直前 (2)、主の ) の直前 (2) → ( の直前 (0)
+    let mut h = scene("|(a*|)");
     h.keys("ctrl+]");
+    let sel = selection(&h);
+    let heads: Vec<usize> = sel.iter().map(|r| r.head.0).collect();
+    assert_eq!(heads, [0, 2], "{}", shown(&h));
+    assert!(sel.iter().all(|r| r.is_empty()), "選択を解く");
     assert_eq!(
-        selection(&h).len(),
-        2,
-        "( の直前 → ) の直前、) の直前 → ( の直前"
+        sel.primary().head,
+        ByteOff(0),
+        "主は ) の直前から ( の直前へ移る"
     );
     let mut h = scene("(|a|)");
     set_selection(
@@ -284,4 +288,50 @@ fn フォーカスの無いペインは可視範囲の中だけで探す() {
     let f = h.frame();
     assert_eq!(marked_cells(&f, 0).len(), 2);
     assert_eq!(marked_cells(&f, 1).len(), 2);
+}
+
+// verifies: AC-FR-308-1
+#[test]
+fn フォーカスの無いペインは長い行でも可視範囲の程度だけを探す() {
+    // 1 行目の `(` の対応が同じ行の 100 KB 先。フォーカスのペインは探して ( を強調し、フォーカスの無いペイン (行数 × 桁数 × 4
+    // バイトまで) は強調しない
+    let body = format!("({})", "a".repeat(100_000));
+    let mut h = opened("/long.txt", body.as_bytes());
+    h.cmd("pane.split_right");
+    let f = h.frame();
+    let (focused, other) = if f.panes[0].active { (0, 1) } else { (1, 0) };
+    assert_eq!(marked_cells(&f, focused), [(0, "(".to_owned())]);
+    assert_eq!(marked_cells(&f, other), []);
+}
+
+// verifies: AC-FR-308-1
+#[test]
+fn ほかのペインで編集すると_フォーカスの無いペインの強調が追う() {
+    let mut h = opened("/edit.txt", b"(\nx\n)");
+    h.cmd("pane.split_right");
+    let f = h.frame();
+    let other = usize::from(f.panes[0].active);
+    assert_eq!(marked_cells(&f, other).len(), 2, "初めは両方を強調");
+    // フォーカスのペインで `)` を消すと、フォーカスの無いペインの強調も消え、戻すと出る
+    h.keys("ctrl+end backspace");
+    assert_eq!(h.doc_text(), "(\nx\n");
+    let f = h.frame();
+    assert_eq!(marked_cells(&f, other), []);
+    h.text(")");
+    let f = h.frame();
+    assert_eq!(marked_cells(&f, other).len(), 2);
+}
+
+// verifies: AC-FR-308-1
+#[test]
+fn 元に戻すとやり直しの後も強調が古くならない() {
+    let mut h = scene("(a|");
+    h.text(")");
+    assert_eq!(highlighted(&mut h), ["(", ")"]);
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "(a");
+    assert_eq!(highlighted(&mut h), Vec::<String>::new());
+    h.keys("ctrl+y");
+    assert_eq!(h.doc_text(), "(a)");
+    assert_eq!(highlighted(&mut h), ["(", ")"]);
 }

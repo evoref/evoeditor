@@ -202,7 +202,7 @@ pub(super) struct Marks<'a> {
     /// 保存先の文字コードで表せない文字 (E3、03 §8.6)。
     pub(super) unmappable: &'a [(usize, usize)],
     /// 対応括弧の強調のセル (文書のバイト位置。書記素の始まり。主のカーソルの括弧と対応の 2 つか空、03 §5.7 の BRK-5)。
-    pub(super) bracket: &'a [usize],
+    pub(super) bracket: Option<[usize; 2]>,
     /// 行の組み立てで使うロールのスタイル (フレームごとに 1 回引く)。
     pub(super) styles: &'a RowStyles,
 }
@@ -332,7 +332,7 @@ pub(super) fn build_row(
         if selected(at) {
             decor = over(decor, marks.styles.selection);
         }
-        if marks.bracket.contains(&at) {
+        if marks.bracket.is_some_and(|c| c.contains(&at)) {
             decor = over(decor, marks.styles.bracket_match);
         }
         let mut c = u.col - base + shift;

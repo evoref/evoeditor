@@ -1760,7 +1760,7 @@ mod tests {
                 found: &found,
                 current: None,
                 unmappable: &[],
-                bracket: &[],
+                bracket: None,
                 styles: &st,
             };
             for &(left, cols) in &x.views {

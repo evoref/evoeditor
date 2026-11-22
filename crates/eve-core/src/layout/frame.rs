@@ -302,7 +302,7 @@ fn pane_frame(
         found: found.as_deref().unwrap_or(&[]),
         current,
         unmappable: &unmappable,
-        bracket: &bracket,
+        bracket,
         styles: &styles,
     };
     let cursor_line = t.byte_to_line(view.selection.primary().head).0;

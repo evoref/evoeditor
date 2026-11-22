@@ -14,7 +14,8 @@
 //! - **BM-103b-search-multiline-1m** / **BM-103b-search-multiline** (v0.4 の M24): 行をまたぐ正規表現の検索欄への入力の
 //!   同じ区間。1 MB の文書 (可視範囲の同期検索、`--only 103m`) と、100 MB の全件の走査中 (`--only 404m`)。
 //! - **BM-103b-bracket** (v0.5 の M32 の段 4): 10 MB の文書の末尾の、対応する `(` の無い `)` の直前への入力の同じ区間
-//!   (`--only 103bk`。打鍵ごとに対応括弧の強調が前へ 1 MiB を探す。01 FR-308 AC-2、03 §5.7 の BRK-4)。
+//!   (`--only 103bk`。打鍵ごとに対応括弧の強調が前へ 1 MiB を探す。01 FR-308 AC-2、03 §5.7 の BRK-4)。日本語の本文 (`、` `。`
+//!   `　` が全角の括弧と同じ先頭 2 バイト) の末尾の `」` の直前は **BM-103b-bracket-ja** (`--only 103bkj`)。
 //! - **BM-108**: 100 MB の文書の中ほどにだけある語を検索欄に打って `Enter` し、読取完了 → 一致の行が編集面に出た最初の
 //!   Frame の `write` まで (`--only 108`。区間の記録 `search.first_match`)。
 //! - **BM-104v-100m / BM-104v-100m-sjis**: 100 MB (UTF-8 / `Shift_JIS`) をパスを入力するプロンプト (`file.open`) で開き、`Enter` の読取完了 → 文書の先頭部分を
@@ -45,7 +46,7 @@
 //! cargo bench -p evoeditor --bench bm_pty -- --runs 50             # 回数を減らす (記録には使わない)
 //! cargo bench -p evoeditor --bench bm_pty -- --json                # 1 行ずつの JSON
 //! cargo bench -p evoeditor --bench bm_pty -- --only 103,107        # 一部だけ (101 102 103 107)
-//! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 103bk  # BM-103b-bracket
+//! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 103bk,103bkj  # BM-103b-bracket(-ja)
 //! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 125 --workspace-tree <木>  # BM-125 / BM-103b-finder
 //! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 103ws,405 --workspace-tree <木>  # BM-103b-search-ws / BM-405 (数十分)
 //! ```
@@ -1234,29 +1235,46 @@ fn search_typing_multiline_1m(
 
 /// BM-103b-bracket の文書 (v0.5 の M32 の段 4、09 §5.2): BM-103 のコーパス (`make_one_mb` と同じ行) を 10 MB まで繰り返し、
 /// 最後の行に対応する `(` の無い `)` だけを置く (本文に括弧は無いので、`)` から前へ探す走査は 1 MiB の上限まで読む)。
-fn make_bracket_10m(dir: &Path) -> PathBuf {
-    let path = dir.join("bracket_10m.txt");
+/// `ja` なら、本文を `、` `。` `　` の多い日本語の行にし、最後に `」` を置く (`BM-103b-bracket-ja`。`」` の前へ探す走査は、
+/// 先頭 2 バイトが同じ (E3 80) `、` `。` `　` の全部で 3 バイト目を見る)。
+fn make_bracket_10m(dir: &Path, ja: bool) -> PathBuf {
+    let path = dir.join(if ja {
+        "bracket_10m_ja.txt"
+    } else {
+        "bracket_10m.txt"
+    });
     if !path.exists() {
         let mut body = String::with_capacity(10 * 1024 * 1024 + 64);
         let mut i = 0u64;
         while body.len() < 10 * 1024 * 1024 {
-            body.push_str(&format!(
-                "{i:08} the quick brown fox 日本語の行です 0123456789\n"
-            ));
+            if ja {
+                body.push_str(&format!(
+                    "{i:08} 日本語の行です、全角の空白　を含み、句点で終わります。テキストエディタの試験。\n"
+                ));
+            } else {
+                body.push_str(&format!(
+                    "{i:08} the quick brown fox 日本語の行です 0123456789\n"
+                ));
+            }
             i += 1;
         }
-        body.push(')');
+        body.push(if ja { '」' } else { ')' });
         std::fs::write(&path, &body).expect("BM-103b-bracket の文書");
     }
     path
 }
 
-/// BM-103b-bracket (v0.5 の M32 の段 4、01 FR-308 AC-2): 10 MB の文書の末尾の `)` の直前 (`Ctrl+End` → `←`) に 30 ms ごとに
-/// `a` を打つ。カーソルの直後は `)` のままなので、打鍵ごとに対応括弧の強調が前へ 1 MiB を探す (03 §5.7 の BRK-4 / BRK-5)。
-fn bracket_typing(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+/// BM-103b-bracket (v0.5 の M32 の段 4、01 FR-308 AC-2): 10 MB の文書の末尾の `)` (`ja` なら `」`) の直前 (`Ctrl+End` →
+/// `←`) に 30 ms ごとに `a` を打つ。カーソルの直後は閉じ括弧のままなので、打鍵ごとに対応括弧の強調が前へ 1 MiB を探す
+/// (03 §5.7 の BRK-4 / BRK-5)。
+fn bracket_typing(dir: &Path, runs: usize, warmup: usize, ja: bool) -> Vec<Duration> {
     const VK_A: u64 = 0x41;
-    let file = make_bracket_10m(dir);
-    let trace = dir.join("bracket.jsonl");
+    let file = make_bracket_10m(dir, ja);
+    let trace = dir.join(if ja {
+        "bracket-ja.jsonl"
+    } else {
+        "bracket.jsonl"
+    });
     let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
     t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
     // 読込を終えてから (先行表示の間は編集できない)、文書の末尾 (Ctrl+End) から 1 つ左 (`)` の直前) へ
@@ -2096,10 +2114,20 @@ fn main() {
         );
     }
     if traced && want("103bk") {
-        let v = bracket_typing(&dir, runs, warmup);
+        let v = bracket_typing(&dir, runs, warmup, false);
         report(
             "BM-103b-bracket",
             "10 MB の文書の末尾の、対応の無い ) の直前への入力 (打鍵ごとに前へ 1 MiB を探す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103bkj") {
+        let v = bracket_typing(&dir, runs, warmup, true);
+        report(
+            "BM-103b-bracket-ja",
+            "10 MB の日本語の文書 (、。全角の空白が多い) の末尾の、対応の無い 」 の直前への入力 (入力の読取完了 → 描画の write)",
             v,
             json,
             quick,

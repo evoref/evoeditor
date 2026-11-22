@@ -97,8 +97,10 @@ fn target_at(text: &dyn TextRead, head: ByteOff) -> Option<(ByteRange, usize, bo
 
 /// 組の括弧の UTF-8 の並び (開きと閉じで、最後のバイトだけが違う)。
 struct Pattern {
-    /// 共通の先頭 (ASCII は空、全角は 2 バイト)。
-    prefix: Vec<u8>,
+    /// 共通の先頭の置き場 (ASCII は 0 バイト、全角は 2 バイトを使う。10 組の括弧は 3 バイト以下)。
+    head: [u8; 2],
+    /// `head` のうち使うバイト数。
+    head_len: usize,
     open: u8,
     close: u8,
 }
@@ -112,19 +114,28 @@ impl Pattern {
             o.encode_utf8(&mut ob).as_bytes(),
             c.encode_utf8(&mut cb).as_bytes(),
         );
-        debug_assert!(
-            o.len() == c.len() && o[..o.len() - 1] == c[..c.len() - 1],
-            "組の括弧は最後のバイトだけが違う: {o:?} {c:?}"
+        let n = o.len() - 1;
+        assert!(
+            o.len() == c.len() && n <= 2 && o[..n] == c[..n],
+            "組の括弧は 3 バイト以下で、最後のバイトだけが違う: {o:?} {c:?}"
         );
+        let mut head = [0u8; 2];
+        head[..n].copy_from_slice(&o[..n]);
         Pattern {
-            prefix: o[..o.len() - 1].to_vec(),
-            open: o[o.len() - 1],
-            close: c[c.len() - 1],
+            head,
+            head_len: n,
+            open: o[n],
+            close: c[n],
         }
     }
 
+    /// 共通の先頭 (ASCII は空)。
+    fn prefix(&self) -> &[u8] {
+        &self.head[..self.head_len]
+    }
+
     fn len(&self) -> usize {
-        self.prefix.len() + 1
+        self.head_len + 1
     }
 }
 
@@ -137,7 +148,7 @@ fn visit(
     forward: bool,
     mut f: impl FnMut(bool) -> bool,
 ) -> Option<usize> {
-    if pat.prefix.is_empty() {
+    if pat.head_len == 0 {
         let mut hit = |i: usize| f(hay[i] == pat.open).then_some(i);
         return if forward {
             memchr::memchr2_iter(pat.open, pat.close, hay).find_map(&mut hit)
@@ -147,7 +158,7 @@ fn visit(
                 .find_map(&mut hit)
         };
     }
-    let last = pat.prefix.len();
+    let last = pat.head_len;
     let mut hit = |i: usize| match hay.get(i + last) {
         Some(&b) if b == pat.open || b == pat.close => f(b == pat.open).then_some(i),
         _ => None,
@@ -170,8 +181,8 @@ fn scan(
 ) -> (Option<ByteRange>, usize) {
     let pat = Pattern::new(pair);
     let finders = (
-        memmem::Finder::new(&pat.prefix),
-        memmem::FinderRev::new(&pat.prefix),
+        memmem::Finder::new(pat.prefix()),
+        memmem::FinderRev::new(pat.prefix()),
     );
     let n = pat.len();
     // 対象と同じ向きの括弧で深くなり、逆の向きで浅くなる。0 に戻った括弧が対応
@@ -230,6 +241,16 @@ pub(crate) fn find_pair(
     head: ByteOff,
     scope: Option<ByteRange>,
 ) -> (Lookup, usize) {
+    find_pair_within(text, head, scope, BRACKET_SCAN_MAX_BYTES)
+}
+
+/// `find_pair` の本体。探す範囲の上限 (`limit` バイト) を引数にする (試験は小さな上限で窓の端を確かめる)。
+fn find_pair_within(
+    text: &dyn TextRead,
+    head: ByteOff,
+    scope: Option<ByteRange>,
+    limit: usize,
+) -> (Lookup, usize) {
     let Some((target, pair, open)) = target_at(text, head) else {
         return (Lookup::NoBracket, 0);
     };
@@ -237,13 +258,10 @@ pub(crate) fn find_pair(
     let mut window = if open {
         ByteRange::new(
             target.end,
-            ByteOff(target.end.0.saturating_add(BRACKET_SCAN_MAX_BYTES).min(len)),
+            ByteOff(target.end.0.saturating_add(limit).min(len)),
         )
     } else {
-        ByteRange::new(
-            ByteOff(target.start.0.saturating_sub(BRACKET_SCAN_MAX_BYTES)),
-            target.start,
-        )
+        ByteRange::new(ByteOff(target.start.0.saturating_sub(limit)), target.start)
     };
     if let Some(s) = scope {
         if target.start < s.start || target.end > s.end {
@@ -267,6 +285,30 @@ fn cell_of(text: &dyn TextRead, r: ByteRange) -> ByteOff {
     snap_to_grapheme(text, r.start, Bias::Before)
 }
 
+/// 1 セルあたりに数える最大のバイト数 (フォーカスの無いペインの探す範囲の大きさの目安、03 §5.7 の BRK-5)。UTF-8 の 1 文字は
+/// 4 バイトまで。
+const SCOPE_BYTES_PER_CELL: usize = 4;
+
+/// フォーカスの無いペインの探す範囲 (03 §5.7 の BRK-5 の細目): 先頭の行の始端から、行数ぶん下の行の終端まで。ただし長い行でも
+/// 可視範囲の程度に収めるため、始端から `行数 × 桁数 × 4` バイトまで (書記素の境界へ前に寄せる) に切り詰める。
+fn visible_scope(text: &dyn TextRead, top: ByteOff, rows: u16, cols: u16) -> ByteRange {
+    let top_line = text.byte_to_line(top);
+    let last = eve_text::LineIdx(
+        (top_line.0 + usize::from(rows).saturating_sub(1)).min(text.len_lines().saturating_sub(1)),
+    );
+    let start = text.line_to_byte(top_line);
+    let cap = usize::from(rows)
+        .saturating_mul(usize::from(cols))
+        .saturating_mul(SCOPE_BYTES_PER_CELL);
+    let end = text.line_end_byte(last);
+    let end = if end.0 - start.0 > cap {
+        snap_to_grapheme(text, ByteOff(start.0 + cap), Bias::Before)
+    } else {
+        end
+    };
+    ByteRange::new(start, end)
+}
+
 /// View に覚える対応括弧の強調 (03 §5.7 の BRK-5)。鍵が今と同じ間は探し直さない。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BracketMark {
@@ -286,21 +328,25 @@ impl EditorState {
             return;
         };
         let (cols, rows) = self.viewport();
-        let panes: Vec<(ViewId, Option<u16>)> = w
+        let panes: Vec<(ViewId, Option<(u16, u16)>)> = w
             .layout(CellSize { cols, rows })
             .leaves
             .iter()
             .filter_map(|l| {
                 let p = w.panes.get(&l.pane)?;
-                Some((p.view, (l.pane != w.focus).then_some(l.body.rows)))
+                Some((
+                    p.view,
+                    (l.pane != w.focus).then_some((l.body.rows, l.body.cols)),
+                ))
             })
             .collect();
-        for (view, unfocused_rows) in panes {
-            self.sync_bracket_mark(view, unfocused_rows);
+        for (view, unfocused) in panes {
+            self.sync_bracket_mark(view, unfocused);
         }
     }
 
-    fn sync_bracket_mark(&mut self, view: ViewId, unfocused_rows: Option<u16>) {
+    /// `unfocused` はフォーカスの無いペインの本文の (行数, 桁数)。フォーカスのペインは `None`。
+    fn sync_bracket_mark(&mut self, view: ViewId, unfocused: Option<(u16, u16)>) {
         let Some(v) = self.docs.views.get(&view) else {
             return;
         };
@@ -309,14 +355,7 @@ impl EditorState {
         };
         let t = d.text();
         let head = v.selection.primary().head;
-        // フォーカスの無いペインの可視範囲 (先頭の行の始端から、行数ぶん下の行の終端まで)
-        let scope = unfocused_rows.map(|rows| {
-            let top = t.byte_to_line(v.scroll.top);
-            let last = eve_text::LineIdx(
-                (top.0 + usize::from(rows).saturating_sub(1)).min(t.len_lines().saturating_sub(1)),
-            );
-            ByteRange::new(t.line_to_byte(top), t.line_end_byte(last))
-        });
+        let scope = unfocused.map(|(rows, cols)| visible_scope(t, v.scroll.top, rows, cols));
         let (revision, len) = (d.revision(), t.len_bytes());
         let fresh = v.bracket.as_ref().is_some_and(|m| {
             m.revision == revision && m.len == len && m.head == head && m.scope == scope
@@ -340,14 +379,10 @@ impl EditorState {
         }
     }
 
-    /// View `view` の対応括弧の強調のセル (文書のバイト位置)。覚えた鍵が今の文書と主のカーソルに合わなければ空。
-    pub(crate) fn bracket_cells(&self, view: ViewId) -> Vec<usize> {
-        let Some(v) = self.docs.views.get(&view) else {
-            return Vec::new();
-        };
-        let Some(d) = self.docs.documents.get(&v.doc) else {
-            return Vec::new();
-        };
+    /// View `view` の対応括弧の強調の 2 つのセル (文書のバイト位置)。覚えた鍵が今の文書と主のカーソルに合わなければ `None`。
+    pub(crate) fn bracket_cells(&self, view: ViewId) -> Option<[usize; 2]> {
+        let v = self.docs.views.get(&view)?;
+        let d = self.docs.documents.get(&v.doc)?;
         v.bracket
             .as_ref()
             .filter(|m| {
@@ -356,8 +391,6 @@ impl EditorState {
                     && m.head == v.selection.primary().head
             })
             .and_then(|m| m.cells)
-            .map(|c| c.to_vec())
-            .unwrap_or_default()
     }
 
     /// `cursor.goto_bracket` の本体 (03 §5.7 の BRK-6)。
@@ -443,7 +476,7 @@ mod tests {
     fn 組の括弧は最後のバイトだけが違う() {
         for (i, pair) in PAIRS.iter().enumerate() {
             let p = Pattern::new(i);
-            assert!(p.prefix.is_empty() || p.prefix.len() == 2, "{pair:?}");
+            assert!(p.prefix().is_empty() || p.prefix().len() == 2, "{pair:?}");
             assert_ne!(p.open, p.close);
         }
     }
@@ -523,17 +556,42 @@ mod tests {
         assert_eq!(lookup(&short, 0), Lookup::NoMatch);
     }
 
-    /// 素朴な参照 (03 §4.7.1): コードポイントを 1 つずつ読み、同じ組の括弧をスタックで数える (範囲の上限は小さな文書では
-    /// 効かない)。対象の括弧の決め方 (BRK-2) は実装と同じ。
-    fn naive(s: &str, head: usize) -> Lookup {
-        let t = Text::from(s);
-        let Some((target, pair, open)) = target_at(&t, ByteOff(head)) else {
+    /// 素朴な参照の対象の括弧 (03 §5.7 の BRK-2 を独立に書いたもの): 文字列を書記素に分け、`head` から始まる書記素の
+    /// 最初のコードポイントが組の括弧ならそれ、無ければ `head` で終わる書記素の最初のコードポイントで同じく見る。
+    fn naive_target(s: &str, head: usize) -> Option<(ByteRange, char, char, bool)> {
+        let gs = eve_text::grapheme_indices(s);
+        let bracket_of = |g: &(usize, &str)| {
+            let c = g.1.chars().next()?;
+            let (o, cl) = PAIRS.iter().copied().find(|&(o, cl)| c == o || c == cl)?;
+            Some((
+                ByteRange::new(ByteOff(g.0), ByteOff(g.0 + c.len_utf8())),
+                o,
+                cl,
+                c == o,
+            ))
+        };
+        let after = gs.iter().find(|g| g.0 == head);
+        let before = gs.iter().rev().find(|g| g.0 < head);
+        after
+            .and_then(bracket_of)
+            .or_else(|| before.and_then(bracket_of))
+    }
+
+    /// 素朴な参照 (03 §4.7.1): コードポイントを 1 つずつ読み、同じ組の括弧をスタックで数える。探す範囲は対象の括弧から
+    /// `limit` バイトの窓で、対応の括弧の全体が窓に入るものだけを数える (BRK-4)。
+    fn naive(s: &str, head: usize, limit: usize) -> Lookup {
+        let Some((target, o, c, open)) = naive_target(s, head) else {
             return Lookup::NoBracket;
         };
-        let (o, c) = PAIRS[pair];
+        let (lo, hi) = if open {
+            (target.end.0, (target.end.0 + limit).min(s.len()))
+        } else {
+            (target.start.0.saturating_sub(limit), target.start.0)
+        };
         let mut depth = 0i64;
         let hit = |(i, ch): (usize, char)| {
-            if ch == o || ch == c {
+            let inside = lo <= i && i + ch.len_utf8() <= hi;
+            if inside && (ch == o || ch == c) {
                 depth += if (ch == o) == open { 1 } else { -1 };
             }
             (depth < 0).then(|| ByteRange::new(ByteOff(i), ByteOff(i + ch.len_utf8())))
@@ -548,29 +606,30 @@ mod tests {
         };
         match found {
             Some(p) => Lookup::Found { target, pair: p },
-            None => Lookup::NoMatch,
+            None if (open && hi == s.len()) || (!open && lo == 0) => Lookup::NoMatch,
+            None => Lookup::TooFar,
         }
     }
 
-    /// 括弧を重み付けした文字列の片 (10 組・ASCII・日本語・結合文字・チャンクの境目にかかる長い片)。
-    fn piece() -> impl Strategy<Value = String> {
+    /// 括弧を重み付けした文字列の片 (10 組・ASCII・日本語・結合文字・CRLF)。`long` なら、チャンクの境目にかかる長い片も
+    /// 混ぜる。
+    fn piece(long: bool) -> impl Strategy<Value = String> {
         let mut v: Vec<String> = PAIRS
             .iter()
             .flat_map(|&(o, c)| [o.to_string(), c.to_string()])
             .collect();
-        v.extend(
-            [
-                "a",
-                "あ",
-                "\u{0301}",
-                "\n",
-                "\r\n",
-                "x".repeat(300).as_str(),
-                "日本語".repeat(80).as_str(),
-            ]
-            .map(str::to_owned),
-        );
+        v.extend(["a", "あ", "、", "。", "　", "\u{0301}", "\n", "\r\n"].map(str::to_owned));
+        if long {
+            v.extend(["x".repeat(300), "日本語".repeat(80)]);
+        } else {
+            v.extend(["xxxxxxx".to_owned(), "日本語".to_owned()]);
+        }
         proptest::sample::select(v)
+    }
+
+    /// 文字列 `s` の中の書記素の境界のカーソル (`at` で文字列の全体に散らす)。
+    fn cursor(t: &Text, s: &str, at: proptest::sample::Index) -> ByteOff {
+        snap_to_grapheme(t, ByteOff(at.index(s.len() + 1)), Bias::Before)
     }
 
     proptest! {
@@ -579,15 +638,14 @@ mod tests {
         // 上限の内側では素朴な参照と一致し、対応のある括弧の直前から 2 回移ると元の位置に戻る
         #[test]
         fn 素朴な参照と一致し_直前からの往復で戻る(
-            pieces in proptest::collection::vec(piece(), 0..60),
-            at in 0usize..10_000,
+            pieces in proptest::collection::vec(piece(true), 0..60),
+            at in any::<proptest::sample::Index>(),
         ) {
             let s: String = pieces.concat();
             let t = Text::from(s.as_str());
-            // 書記素の境界のカーソル
-            let head = snap_to_grapheme(&t, ByteOff(at.min(s.len())), Bias::Before);
+            let head = cursor(&t, &s, at);
             let got = find_pair(&t, head, None).0;
-            prop_assert_eq!(got, naive(&s, head.0), "{:?} @ {}", s, head.0);
+            prop_assert_eq!(got, naive(&s, head.0, BRACKET_SCAN_MAX_BYTES), "{:?} @ {}", s, head.0);
             if let Lookup::Found { target, pair } = got
                 && target.start == head
             {
@@ -598,6 +656,74 @@ mod tests {
                 );
             }
         }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(512))]
+
+        // 小さな上限 (窓) でも、窓を切った素朴な参照と一致する (全角の括弧が窓の端で切れる場合・後ろ向きを含む)
+        #[test]
+        fn 小さな上限でも窓を切った参照と一致する(
+            pieces in proptest::collection::vec(piece(false), 0..80),
+            at in any::<proptest::sample::Index>(),
+            limit in 1usize..64,
+        ) {
+            let s: String = pieces.concat();
+            let t = Text::from(s.as_str());
+            let head = cursor(&t, &s, at);
+            let got = find_pair_within(&t, head, None, limit).0;
+            prop_assert_eq!(got, naive(&s, head.0, limit), "{:?} @ {} limit {}", s, head.0, limit);
+        }
+    }
+
+    #[test]
+    fn 窓の端で切れた全角の括弧は数えない() {
+        // `（` の終端 (3) から 5 バイトの窓 [3, 8) に、`）` (5..8) の全体は入る。4 バイトの窓 [3, 7) では切れる
+        let s = "（ab）";
+        let t = Text::from(s);
+        assert!(matches!(
+            find_pair_within(&t, ByteOff(0), None, 5).0,
+            Lookup::Found { .. }
+        ));
+        assert_eq!(find_pair_within(&t, ByteOff(0), None, 4).0, Lookup::TooFar);
+        // 後ろ向き: `）` の始端 (5) から 5 バイト前 (0) までなら `（` (0..3) は入る、4 バイト前 (1) からでは切れる
+        assert!(matches!(
+            find_pair_within(&t, ByteOff(8), None, 5).0,
+            Lookup::Found { .. }
+        ));
+        assert_eq!(find_pair_within(&t, ByteOff(8), None, 4).0, Lookup::TooFar);
+    }
+
+    #[test]
+    fn エスケープ文字は括弧ではない() {
+        // 不正バイト 0x9A のエスケープ文字 (U+10FF9A、03 §8.3) と、括弧のバイト値に当たる私用文字 (U+10FF28 = `(` の値)
+        let esc = "\u{10FF9A}(a)";
+        assert_eq!(lookup(esc, 0), Lookup::NoBracket, "直後がエスケープ文字");
+        assert!(
+            matches!(lookup(esc, 4), Lookup::Found { .. }),
+            "エスケープ文字の後ろの ("
+        );
+        assert_eq!(lookup("\u{10FF28}a\u{10FF29}", 0), Lookup::NoBracket);
+    }
+
+    #[test]
+    fn フォーカスの無いペインの範囲は長い行でも可視範囲の程度() {
+        // 1 行が 10,000 バイトの文書を 2 行 × 10 桁のペインに出すと、範囲は 2 × 10 × 4 = 80 バイトまで
+        let s = "a".repeat(10_000);
+        let t = Text::from(s.as_str());
+        assert_eq!(visible_scope(&t, ByteOff(0), 2, 10), br(0, 80));
+        // 書記素の境界へ前に寄せる (3 バイトの `あ` の途中で切らない)
+        let s = "あ".repeat(100);
+        let t = Text::from(s.as_str());
+        assert_eq!(visible_scope(&t, ByteOff(0), 2, 10), br(0, 78));
+        // 短い行は行の終端まで
+        let t = Text::from("ab\ncd\nef");
+        assert_eq!(visible_scope(&t, ByteOff(3), 2, 10), br(3, 8));
+        // 長い行の先の対応は探さない
+        let s = format!("({})", "a".repeat(200));
+        let t = Text::from(s.as_str());
+        let scope = visible_scope(&t, ByteOff(0), 2, 10);
+        assert_eq!(find_pair(&t, ByteOff(0), Some(scope)).0, Lookup::TooFar);
     }
 
     #[test]
