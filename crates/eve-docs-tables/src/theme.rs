@@ -229,7 +229,7 @@ pub fn contrast(a: (u8, u8, u8), b: (u8, u8, u8)) -> f64 {
 }
 
 /// mono の段が空であってはならない、意味のあるロール (09 §3.5 (d))。
-pub const MEANINGFUL_ROLES: [&str; 8] = [
+pub const MEANINGFUL_ROLES: [&str; 9] = [
     "ui.message.error",
     "ui.message.warning",
     "ui.selection",
@@ -239,6 +239,8 @@ pub const MEANINGFUL_ROLES: [&str; 8] = [
     "ui.search_bar.toggle_on",
     // フォーカスのあるペインの見出し (v0.5 の M30。07 §8.2)
     "ui.pane.bar.active",
+    // アクティブなタブ (v0.5 の M32。07 §8.2)
+    "ui.tab_line.active",
 ];
 
 /// 表そのものの検査 (09 §3.5 (a)(b)(c)(d))。エラーを列挙して返す。

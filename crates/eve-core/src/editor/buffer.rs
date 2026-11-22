@@ -26,20 +26,15 @@ impl EditorState {
     /// (ステータスバーの `(2/3)`、03 §9.8)。置き換えの読込中の文書は数えない。
     pub(crate) fn buffer_position(&self) -> Option<(usize, usize)> {
         let active = self.active_document()?;
-        let ids: Vec<DocumentId> = self
-            .docs
-            .documents
-            .keys()
-            .copied()
-            .filter(|d| *d == active || !self.is_loading_replacement(*d))
-            .collect();
+        // タブライン (03 §9.9 の PANE-12) と同じ集合
+        let ids = self.tab_documents();
         let pos = ids.iter().position(|d| *d == active)?;
         (ids.len() >= 2).then_some((pos + 1, ids.len()))
     }
 
     /// 置き換えで読込中の文書か (まだ表示されておらず、読込が終わるまで集合の外のものとして扱う)。先行表示 (`Partial`)
     /// の文書は先頭を表示できるので、一覧に載せる (03 §9.8 の「読込中のバッファ」)。
-    fn is_loading_replacement(&self, doc: DocumentId) -> bool {
+    pub(crate) fn is_loading_replacement(&self, doc: DocumentId) -> bool {
         let loading = self
             .docs
             .documents

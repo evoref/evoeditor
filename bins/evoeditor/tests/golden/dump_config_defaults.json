@@ -25,6 +25,7 @@
   "ui.locale": "auto",
   "ui.mouse": true,
   "ui.hint_bar": true,
+  "ui.tab_line": "auto",
   "ui.mouse_wheel_lines": 3,
   "ui.which_key_delay_ms": 500,
   "search.newline_sugar": true,

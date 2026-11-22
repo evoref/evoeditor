@@ -1,6 +1,7 @@
 //! マウスの入力の変換 (docs/04 §6.8)。OS を呼ばない。Windows のコンソールの `MOUSE_EVENT_RECORD` を、押した位置のペインの
-//! 本文の左上を原点とする `MouseEvent` にする。ペインの見出しの左の押下は `ChromeMouse` (`ChromeTarget::PaneBar`) にする
-//! (03 §9.9 の PANE-7 (d))。区切りの上の操作は v0.5 では渡さない。ペインの外 (クローム) で始まった操作は捨て、ペインで押したボタンの間だけは、
+//! 本文の左上を原点とする `MouseEvent` にする。タブラインのタブの左の押下は `ChromeMouse` (`ChromeTarget::Tab`)、ペインの
+//! 見出しの左の押下は `ChromeMouse` (`ChromeTarget::PaneBar`) にする (03 §9.9 の PANE-7 (d) / (e)、PANE-12 (g))。判定の順は
+//! タブライン → 見出し → 本文 (区切りは何もしない。オーバーレイの間の入力は core が捨てる)。区切りの上の操作は v0.5 では渡さない。ペインの外 (クローム) で始まった操作は捨て、ペインで押したボタンの間だけは、
 //! 面の外の座標も押したペインの原点のまま渡す (ドラッグの自動スクロールのため、03 §5.8.1 / §9.9 の PANE-7)。
 //!
 //! 変換は「(幾何, マウスの記録) → 入力」で、幾何 ([`Geometry`]) は描画側が Frame ごとに作って入力スレッドへ差し替える。
@@ -9,9 +10,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use eve_view::{
-    CellRect, ChromeMouseEvent, ChromeTarget, Frame, InputEvent, Modifiers, MouseAt, MouseButton,
-    MouseEvent, MouseKind, ViewId,
+    CellRect, ChromeMouseEvent, ChromeTarget, DocumentId, Frame, InputEvent, Modifiers, MouseAt,
+    MouseButton, MouseEvent, MouseKind, ViewId,
 };
+
+use crate::glyphs::Glyphs;
 
 /// `MouseRec` のビット (Windows の `MOUSE_EVENT_RECORD` の値。VT の SGR マウスもこの形にして渡す、`vt_input`)。
 pub mod button_bits {
@@ -49,17 +52,29 @@ pub struct MouseRec {
 pub struct PaneGeom {
     /// ペインが表示している View (`MouseAt.view`)。
     pub view: ViewId,
-    /// ペインの本文 (ガター + テキスト) の矩形。端末の左上が原点 (編集面は端末の最上行から始まる)。
+    /// ペインの本文 (ガター + テキスト) の矩形。端末の左上が原点 (タブラインを出すときは、Frame の矩形を 1 行下げたもの)。
     pub rect: CellRect,
-    /// ペインの見出しの矩形 (`PaneFrame.bar.rect`。見出しが無ければ `None`)。
+    /// ペインの見出しの矩形 (`PaneFrame.bar.rect`。端末の左上が原点。見出しが無ければ `None`)。
     pub bar: Option<CellRect>,
+}
+
+/// タブラインの 1 つのタブの位置 (`chrome::tab_line::layout` で並べたもの)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TabGeom {
+    /// タブの文書 (`ChromeTarget::Tab { doc }`)。
+    pub doc: DocumentId,
+    /// タブの矩形 (`[` から `]` まで。端末の左上が原点で、行は 0)。
+    pub rect: CellRect,
+}
+
+fn rect_contains(r: CellRect, col: i32, row: i32) -> bool {
+    let (c0, r0) = (i32::from(r.col), i32::from(r.row));
+    col >= c0 && col < c0 + i32::from(r.cols) && row >= r0 && row < r0 + i32::from(r.rows)
 }
 
 impl PaneGeom {
     fn contains(&self, col: i32, row: i32) -> bool {
-        let r = self.rect;
-        let (c0, r0) = (i32::from(r.col), i32::from(r.row));
-        col >= c0 && col < c0 + i32::from(r.cols) && row >= r0 && row < r0 + i32::from(r.rows)
+        rect_contains(self.rect, col, row)
     }
 
     /// 端末の座標を、このペインの本文の左上を原点とする位置にする (面の外も負や本文の大きさ以上の値のまま)。
@@ -72,27 +87,58 @@ impl PaneGeom {
     }
 }
 
-/// マウスの変換に使う画面の幾何 (全ペインの位置)。空は未設定 (最初の Frame の前)。
+/// マウスの変換に使う画面の幾何 (全ペインの位置とタブラインのタブ)。空は未設定 (最初の Frame の前)。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Geometry {
     /// ペイン (Frame の `panes` の順)。
     pub panes: Vec<PaneGeom>,
+    /// タブラインに並べたタブ (左から。タブラインが無ければ空)。省いた側の印・タブの間・行の残りは入れない。
+    pub tabs: Vec<TabGeom>,
 }
 
 impl Geometry {
-    /// Frame から作る。
-    pub fn from_frame(frame: &Frame) -> Geometry {
+    /// Frame から作る。タブの位置は描画と同じ記号 (`glyphs`) で並べる (03 §9.9 の PANE-12 (g))。タブラインを出すときは、
+    /// ペインの矩形を 1 行下げる (編集面はタブラインの下)。
+    pub fn from_frame(frame: &Frame, glyphs: &Glyphs) -> Geometry {
+        let top = crate::chrome::layout::tab_rows(frame);
+        let down = |r: CellRect| CellRect {
+            row: r.row.saturating_add(top),
+            ..r
+        };
+        let tabs = frame
+            .tab_line
+            .as_ref()
+            .map(|m| {
+                crate::chrome::tab_line::layout(m, frame.size.cols, glyphs)
+                    .tabs
+                    .into_iter()
+                    .map(|t| TabGeom {
+                        doc: t.doc,
+                        rect: t.rect,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         Geometry {
             panes: frame
                 .panes
                 .iter()
                 .map(|p| PaneGeom {
                     view: p.view,
-                    rect: p.rect,
-                    bar: p.bar.as_ref().map(|b| b.rect),
+                    rect: down(p.rect),
+                    bar: p.bar.as_ref().map(|b| down(b.rect)),
                 })
                 .collect(),
+            tabs,
         }
+    }
+
+    /// 端末の位置 (`col`, `row`) にあるタブ。
+    fn hit_tab(&self, col: i32, row: i32) -> Option<TabGeom> {
+        self.tabs
+            .iter()
+            .copied()
+            .find(|t| rect_contains(t.rect, col, row))
     }
 
     /// 端末の位置 (`col`, `row`) にあるペイン。
@@ -104,12 +150,7 @@ impl Geometry {
     fn hit_bar(&self, col: i32, row: i32) -> Option<(PaneGeom, CellRect)> {
         self.panes.iter().find_map(|p| {
             let b = p.bar?;
-            let (c0, r0) = (i32::from(b.col), i32::from(b.row));
-            let inside = col >= c0
-                && col < c0 + i32::from(b.cols)
-                && row >= r0
-                && row < r0 + i32::from(b.rows);
-            inside.then_some((*p, b))
+            rect_contains(b, col, row).then_some((*p, b))
         })
     }
 }
@@ -176,23 +217,32 @@ impl MouseTracker {
         MouseTracker::default()
     }
 
-    /// マウスの記録 `r` を、幾何 `geom` で入力 (`Mouse` と、見出しの `ChromeMouse`) にする (ボタンの状態は自分が覚える)。
+    /// マウスの記録 `r` を、幾何 `geom` で入力 (`Mouse` と、タブ・見出しの `ChromeMouse`) にする (ボタンの状態は自分が覚える)。
     pub fn feed(&mut self, r: MouseRec, geom: &Geometry) -> Vec<InputEvent> {
-        // 見出しの左の押下 (ペインで押したボタンが無いとき)。区切り・見出しのほかの操作は渡さない (PANE-7 (f))
+        // タブ・見出しの左の押下 (ペインで押したボタンが無いとき)。区切り・タブと見出しのほかの操作 (離す・ドラッグ・
+        // ホイール・中と右のボタン) は渡さない (PANE-7 (f)、PANE-12 (g))
         if r.flags & (MOVED | WHEELED | HWHEELED) == 0
             && self.pressed_in_pane == 0
             && r.buttons & LEFT != 0
             && self.buttons & LEFT == 0
-            && let Some((p, b)) = geom.hit_bar(r.col, r.row)
         {
-            self.buttons = r.buttons & (LEFT | RIGHT | MIDDLE);
-            return vec![InputEvent::ChromeMouse(ChromeMouseEvent {
-                kind: MouseKind::Down(MouseButton::Left),
-                mods: mods(r.state),
-                target: ChromeTarget::PaneBar { view: p.view },
-                row: r.row - i32::from(b.row),
-                col: r.col - i32::from(b.col),
-            })];
+            let hit = geom
+                .hit_tab(r.col, r.row)
+                .map(|t| (ChromeTarget::Tab { doc: t.doc }, t.rect))
+                .or_else(|| {
+                    geom.hit_bar(r.col, r.row)
+                        .map(|(p, b)| (ChromeTarget::PaneBar { view: p.view }, b))
+                });
+            if let Some((target, rect)) = hit {
+                self.buttons = r.buttons & (LEFT | RIGHT | MIDDLE);
+                return vec![InputEvent::ChromeMouse(ChromeMouseEvent {
+                    kind: MouseKind::Down(MouseButton::Left),
+                    mods: mods(r.state),
+                    target,
+                    row: r.row - i32::from(rect.row),
+                    col: r.col - i32::from(rect.col),
+                })];
+            }
         }
         self.feed_body(r, geom)
             .into_iter()
@@ -291,6 +341,7 @@ mod tests {
     fn geom() -> Geometry {
         Geometry {
             panes: vec![pane(7, 0, 0, 80, 10)],
+            tabs: Vec::new(),
         }
     }
 
@@ -397,6 +448,7 @@ mod tests {
     fn two() -> Geometry {
         Geometry {
             panes: vec![pane(1, 0, 0, 40, 9), pane(2, 41, 0, 40, 9)],
+            tabs: Vec::new(),
         }
     }
 
@@ -478,6 +530,7 @@ mod tests {
         // 左のペインが別の文書 (View 3) に切り替わった Frame の幾何
         let g2 = Geometry {
             panes: vec![pane(3, 0, 0, 40, 9), pane(2, 41, 0, 40, 9)],
+            tabs: Vec::new(),
         };
         let d = feed(&mut t, rec(6, 1, LEFT | RIGHT, 0), &g2);
         assert_eq!(kinds(&d), [MouseKind::Down(MouseButton::Right)]);
@@ -546,5 +599,96 @@ mod tests {
         assert_eq!(*s.get(), two());
         s.set(geom());
         assert_eq!(*s.get(), geom());
+    }
+
+    /// 2 つの文書を開いてタブラインを出した 40 × 6 の Frame の幾何 (`glyphs` で並べる)。
+    fn with_tab_line(glyphs: &Glyphs) -> (Geometry, eve_view::Frame) {
+        let mut h = eve_testkit::Harness::new()
+            .with_size(40, 6)
+            .with_file("/w/a.txt", b"a\n")
+            .with_file("/w/bb.txt", b"b\n");
+        h.open("/w/a.txt");
+        h.run_jobs();
+        h.open("/w/bb.txt");
+        h.run_jobs();
+        let f = h.frame();
+        (Geometry::from_frame(&f, glyphs), f)
+    }
+
+    // verifies: AC-FR-510-2
+    #[test]
+    fn タブの左の押下は_chrome_mouse_でタブの文書を指し_間と行の残りは何もしない() {
+        let (g, f) = with_tab_line(&Glyphs::unicode());
+        let docs: Vec<DocumentId> = f
+            .tab_line
+            .as_ref()
+            .expect("タブライン")
+            .tabs
+            .iter()
+            .map(|t| t.doc)
+            .collect();
+        // `[ a.txt ] [▶bb.txt ]`: 1 つ目は 0..9 列、2 つ目は 10..20 列
+        assert_eq!(
+            g.tabs
+                .iter()
+                .map(|t| (t.doc, t.rect.col, t.rect.cols))
+                .collect::<Vec<_>>(),
+            vec![(docs[0], 0, 9), (docs[1], 10, 10)]
+        );
+        let mut t = MouseTracker::new();
+        for (col, doc, at) in [
+            (0, docs[0], 0),
+            (8, docs[0], 8),
+            (10, docs[1], 0),
+            (19, docs[1], 9),
+        ] {
+            let e = t.feed(rec(col, 0, LEFT, 0), &g);
+            assert_eq!(
+                e,
+                vec![InputEvent::ChromeMouse(ChromeMouseEvent {
+                    kind: MouseKind::Down(MouseButton::Left),
+                    mods: Modifiers::NONE,
+                    target: ChromeTarget::Tab { doc },
+                    row: 0,
+                    col: at,
+                })],
+                "{col} 列"
+            );
+            // 離す・押したままのドラッグは渡さない
+            let actual = t.feed(rec(col + 1, 0, LEFT, MOVED), &g);
+            assert!(actual.is_empty(), "{actual:?}");
+            let actual = t.feed(rec(col, 0, 0, 0), &g);
+            assert!(actual.is_empty(), "{actual:?}");
+        }
+        // タブの間・行の残り・タブの上のホイールと右ボタンは何もしない
+        for r in [
+            rec(9, 0, LEFT, 0),
+            rec(30, 0, LEFT, 0),
+            rec(3, 0, 120u32 << 16, WHEELED),
+            rec(3, 0, RIGHT, 0),
+        ] {
+            let actual = t.feed(r, &g);
+            assert!(actual.is_empty(), "{r:?}: {actual:?}");
+            t.feed(rec(r.col, 0, 0, 0), &g);
+        }
+    }
+
+    // verifies: AC-FR-510-2
+    #[test]
+    fn タブラインを出すとペインの本文は_1_行下で_本文の左上が原点のまま() {
+        let (g, f) = with_tab_line(&Glyphs::unicode());
+        assert_eq!(f.panes[0].rect.row, 0, "Frame は編集面の座標");
+        assert_eq!(g.panes[0].rect.row, 1, "端末の座標は 1 行下");
+        let mut t = MouseTracker::new();
+        let d = feed(&mut t, rec(5, 1, LEFT, 0), &g);
+        assert_eq!(kinds(&d), [MouseKind::Down(MouseButton::Left)]);
+        assert_eq!((d[0].at.row, d[0].at.col), (0, 5));
+        // 本文で押したドラッグはタブラインの上でもペインのまま (面の外の負の行)
+        let m = feed(&mut t, rec(5, 0, LEFT, MOVED), &g);
+        assert_eq!(
+            (kinds(&m), m[0].at.row),
+            (vec![MouseKind::Drag(MouseButton::Left)], -1)
+        );
+        feed(&mut t, rec(5, 0, 0, 0), &g);
     }
 }

@@ -26,6 +26,8 @@ default	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 default	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default	TrueColor	ui.status_bar.chord	Default	Default	0x01
+default	TrueColor	ui.tab_line	Default	Default	0x00
+default	TrueColor	ui.tab_line.active	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default	TrueColor	ui.text	Default	Default	0x00
 default	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Default	0x00
 default	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
@@ -55,6 +57,8 @@ default	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 default	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
 default	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
 default	Ansi256	ui.status_bar.chord	Default	Default	0x01
+default	Ansi256	ui.tab_line	Default	Default	0x00
+default	Ansi256	ui.tab_line.active	Ansi(254)	Ansi(237)	0x00
 default	Ansi256	ui.text	Default	Default	0x00
 default	Ansi256	ui.whitespace	Ansi(244)	Default	0x00
 default	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -84,6 +88,8 @@ default	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 default	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 default	Ansi16	ui.status_bar	Default	Default	0x04
 default	Ansi16	ui.status_bar.chord	Default	Default	0x01
+default	Ansi16	ui.tab_line	Default	Default	0x00
+default	Ansi16	ui.tab_line.active	Default	Default	0x04
 default	Ansi16	ui.text	Default	Default	0x00
 default	Ansi16	ui.whitespace	Ansi(8)	Default	0x00
 default	Mono	ui.control_char	Default	Default	0x04
@@ -113,6 +119,8 @@ default	Mono	ui.search_bar.toggle_on	Default	Default	0x04
 default	Mono	ui.selection	Default	Default	0x04
 default	Mono	ui.status_bar	Default	Default	0x04
 default	Mono	ui.status_bar.chord	Default	Default	0x01
+default	Mono	ui.tab_line	Default	Default	0x00
+default	Mono	ui.tab_line.active	Default	Default	0x04
 default	Mono	ui.text	Default	Default	0x00
 default	Mono	ui.whitespace	Default	Default	0x08
 default-dark	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
@@ -142,6 +150,8 @@ default-dark	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default-dark	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default-dark	TrueColor	ui.status_bar.chord	Default	Default	0x01
+default-dark	TrueColor	ui.tab_line	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.tab_line.active	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default-dark	TrueColor	ui.text	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
 default-dark	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
@@ -171,6 +181,8 @@ default-dark	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
 default-dark	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
 default-dark	Ansi256	ui.status_bar.chord	Default	Default	0x01
+default-dark	Ansi256	ui.tab_line	Ansi(252)	Ansi(234)	0x00
+default-dark	Ansi256	ui.tab_line.active	Ansi(254)	Ansi(237)	0x00
 default-dark	Ansi256	ui.text	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.whitespace	Ansi(244)	Ansi(234)	0x00
 default-dark	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -200,6 +212,8 @@ default-dark	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 default-dark	Ansi16	ui.status_bar	Ansi(7)	Ansi(0)	0x04
 default-dark	Ansi16	ui.status_bar.chord	Default	Default	0x01
+default-dark	Ansi16	ui.tab_line	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.tab_line.active	Ansi(7)	Ansi(0)	0x04
 default-dark	Ansi16	ui.text	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.whitespace	Ansi(8)	Ansi(0)	0x00
 default-dark	Mono	ui.control_char	Default	Default	0x04
@@ -229,6 +243,8 @@ default-dark	Mono	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	Mono	ui.selection	Default	Default	0x04
 default-dark	Mono	ui.status_bar	Default	Default	0x04
 default-dark	Mono	ui.status_bar.chord	Default	Default	0x01
+default-dark	Mono	ui.tab_line	Default	Default	0x00
+default-dark	Mono	ui.tab_line.active	Default	Default	0x04
 default-dark	Mono	ui.text	Default	Default	0x00
 default-dark	Mono	ui.whitespace	Default	Default	0x08
 default-light	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
@@ -258,6 +274,8 @@ default-light	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default-light	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default-light	TrueColor	ui.status_bar.chord	Default	Default	0x01
+default-light	TrueColor	ui.tab_line	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.tab_line.active	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default-light	TrueColor	ui.text	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
 default-light	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
@@ -287,6 +305,8 @@ default-light	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
 default-light	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
 default-light	Ansi256	ui.status_bar.chord	Default	Default	0x01
+default-light	Ansi256	ui.tab_line	Ansi(235)	Ansi(255)	0x00
+default-light	Ansi256	ui.tab_line.active	Ansi(254)	Ansi(237)	0x00
 default-light	Ansi256	ui.text	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.whitespace	Ansi(244)	Ansi(255)	0x00
 default-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -316,6 +336,8 @@ default-light	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 default-light	Ansi16	ui.status_bar	Ansi(0)	Ansi(15)	0x04
 default-light	Ansi16	ui.status_bar.chord	Default	Default	0x01
+default-light	Ansi16	ui.tab_line	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.tab_line.active	Ansi(0)	Ansi(15)	0x04
 default-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.whitespace	Ansi(8)	Ansi(15)	0x00
 default-light	Mono	ui.control_char	Default	Default	0x04
@@ -345,6 +367,8 @@ default-light	Mono	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	Mono	ui.selection	Default	Default	0x04
 default-light	Mono	ui.status_bar	Default	Default	0x04
 default-light	Mono	ui.status_bar.chord	Default	Default	0x01
+default-light	Mono	ui.tab_line	Default	Default	0x00
+default-light	Mono	ui.tab_line.active	Default	Default	0x04
 default-light	Mono	ui.text	Default	Default	0x00
 default-light	Mono	ui.whitespace	Default	Default	0x08
 ansi	TrueColor	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -374,6 +398,8 @@ ansi	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 ansi	TrueColor	ui.selection	Ansi(15)	Ansi(4)	0x00
 ansi	TrueColor	ui.status_bar	Default	Default	0x04
 ansi	TrueColor	ui.status_bar.chord	Default	Default	0x01
+ansi	TrueColor	ui.tab_line	Default	Default	0x00
+ansi	TrueColor	ui.tab_line.active	Default	Default	0x04
 ansi	TrueColor	ui.text	Default	Default	0x00
 ansi	TrueColor	ui.whitespace	Ansi(8)	Default	0x00
 ansi	Ansi256	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -403,6 +429,8 @@ ansi	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 ansi	Ansi256	ui.selection	Ansi(15)	Ansi(4)	0x00
 ansi	Ansi256	ui.status_bar	Default	Default	0x04
 ansi	Ansi256	ui.status_bar.chord	Default	Default	0x01
+ansi	Ansi256	ui.tab_line	Default	Default	0x00
+ansi	Ansi256	ui.tab_line.active	Default	Default	0x04
 ansi	Ansi256	ui.text	Default	Default	0x00
 ansi	Ansi256	ui.whitespace	Ansi(8)	Default	0x00
 ansi	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -432,6 +460,8 @@ ansi	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 ansi	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 ansi	Ansi16	ui.status_bar	Default	Default	0x04
 ansi	Ansi16	ui.status_bar.chord	Default	Default	0x01
+ansi	Ansi16	ui.tab_line	Default	Default	0x00
+ansi	Ansi16	ui.tab_line.active	Default	Default	0x04
 ansi	Ansi16	ui.text	Default	Default	0x00
 ansi	Ansi16	ui.whitespace	Ansi(8)	Default	0x00
 ansi	Mono	ui.control_char	Default	Default	0x04
@@ -461,6 +491,8 @@ ansi	Mono	ui.search_bar.toggle_on	Default	Default	0x04
 ansi	Mono	ui.selection	Default	Default	0x04
 ansi	Mono	ui.status_bar	Default	Default	0x04
 ansi	Mono	ui.status_bar.chord	Default	Default	0x01
+ansi	Mono	ui.tab_line	Default	Default	0x00
+ansi	Mono	ui.tab_line.active	Default	Default	0x04
 ansi	Mono	ui.text	Default	Default	0x00
 ansi	Mono	ui.whitespace	Default	Default	0x08
 high-contrast-dark	TrueColor	ui.control_char	Rgb(0, 0, 0)	Rgb(224, 168, 255)	0x00
@@ -490,6 +522,8 @@ high-contrast-dark	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-dark	TrueColor	ui.selection	Rgb(0, 0, 0)	Rgb(156, 207, 255)	0x00
 high-contrast-dark	TrueColor	ui.status_bar	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-dark	TrueColor	ui.status_bar.chord	Default	Default	0x01
+high-contrast-dark	TrueColor	ui.tab_line	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.tab_line.active	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-dark	TrueColor	ui.text	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-dark	TrueColor	ui.whitespace	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
 high-contrast-dark	Ansi256	ui.control_char	Ansi(16)	Ansi(183)	0x00
@@ -519,6 +553,8 @@ high-contrast-dark	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-dark	Ansi256	ui.selection	Ansi(16)	Ansi(153)	0x00
 high-contrast-dark	Ansi256	ui.status_bar	Ansi(16)	Ansi(231)	0x00
 high-contrast-dark	Ansi256	ui.status_bar.chord	Default	Default	0x01
+high-contrast-dark	Ansi256	ui.tab_line	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.tab_line.active	Ansi(16)	Ansi(231)	0x00
 high-contrast-dark	Ansi256	ui.text	Ansi(231)	Ansi(16)	0x00
 high-contrast-dark	Ansi256	ui.whitespace	Ansi(250)	Ansi(16)	0x00
 high-contrast-dark	Ansi16	ui.control_char	Ansi(0)	Ansi(7)	0x00
@@ -548,6 +584,8 @@ high-contrast-dark	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-dark	Ansi16	ui.selection	Ansi(0)	Ansi(14)	0x00
 high-contrast-dark	Ansi16	ui.status_bar	Ansi(0)	Ansi(15)	0x00
 high-contrast-dark	Ansi16	ui.status_bar.chord	Default	Default	0x02
+high-contrast-dark	Ansi16	ui.tab_line	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.tab_line.active	Ansi(0)	Ansi(15)	0x00
 high-contrast-dark	Ansi16	ui.text	Ansi(15)	Ansi(0)	0x00
 high-contrast-dark	Ansi16	ui.whitespace	Ansi(6)	Ansi(0)	0x00
 high-contrast-dark	Mono	ui.control_char	Default	Default	0x04
@@ -577,6 +615,8 @@ high-contrast-dark	Mono	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-dark	Mono	ui.selection	Default	Default	0x04
 high-contrast-dark	Mono	ui.status_bar	Default	Default	0x04
 high-contrast-dark	Mono	ui.status_bar.chord	Default	Default	0x01
+high-contrast-dark	Mono	ui.tab_line	Default	Default	0x00
+high-contrast-dark	Mono	ui.tab_line.active	Default	Default	0x04
 high-contrast-dark	Mono	ui.text	Default	Default	0x00
 high-contrast-dark	Mono	ui.whitespace	Default	Default	0x01
 high-contrast-light	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(106, 27, 154)	0x00
@@ -606,6 +646,8 @@ high-contrast-light	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-light	TrueColor	ui.selection	Rgb(255, 255, 255)	Rgb(10, 61, 145)	0x00
 high-contrast-light	TrueColor	ui.status_bar	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-light	TrueColor	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	TrueColor	ui.tab_line	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.tab_line.active	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-light	TrueColor	ui.text	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-light	TrueColor	ui.whitespace	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
 high-contrast-light	Ansi256	ui.control_char	Ansi(231)	Ansi(54)	0x00
@@ -635,6 +677,8 @@ high-contrast-light	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-light	Ansi256	ui.selection	Ansi(231)	Ansi(19)	0x00
 high-contrast-light	Ansi256	ui.status_bar	Ansi(231)	Ansi(16)	0x00
 high-contrast-light	Ansi256	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	Ansi256	ui.tab_line	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.tab_line.active	Ansi(231)	Ansi(16)	0x00
 high-contrast-light	Ansi256	ui.text	Ansi(16)	Ansi(231)	0x00
 high-contrast-light	Ansi256	ui.whitespace	Ansi(238)	Ansi(231)	0x00
 high-contrast-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -664,6 +708,8 @@ high-contrast-light	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-light	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 high-contrast-light	Ansi16	ui.status_bar	Ansi(15)	Ansi(0)	0x00
 high-contrast-light	Ansi16	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	Ansi16	ui.tab_line	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.tab_line.active	Ansi(15)	Ansi(0)	0x00
 high-contrast-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
 high-contrast-light	Ansi16	ui.whitespace	Ansi(4)	Ansi(15)	0x00
 high-contrast-light	Mono	ui.control_char	Default	Default	0x04
@@ -693,5 +739,7 @@ high-contrast-light	Mono	ui.search_bar.toggle_on	Default	Default	0x04
 high-contrast-light	Mono	ui.selection	Default	Default	0x04
 high-contrast-light	Mono	ui.status_bar	Default	Default	0x04
 high-contrast-light	Mono	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	Mono	ui.tab_line	Default	Default	0x00
+high-contrast-light	Mono	ui.tab_line.active	Default	Default	0x04
 high-contrast-light	Mono	ui.text	Default	Default	0x00
 high-contrast-light	Mono	ui.whitespace	Default	Default	0x01

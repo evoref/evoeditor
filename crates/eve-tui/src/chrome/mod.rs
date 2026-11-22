@@ -7,6 +7,7 @@
 //! - `layout`: 画面の行の割り当て (`ScreenLayout`、04 §3.1 / §3.5)。
 //! - `parts` / `keys`: 共通の部品とキー表記 (04 §7.8)。
 //! - `status` / `message` / `hints` / `search_bar`: 編集面の下の行 (04 §8.4 / §8.7〜§8.9)。
+//! - `tab_line`: 画面の最上行のタブライン (FR-510、04 §3.4 (f))。
 //! - `overlay` / `input_field` / `confirm` / `prompt` / `list` / `help` / `which_key`: オーバーレイ (04 §7.4 / §8.1〜§8.6)。
 
 use eve_view::{CellPos, CellSize, ColorDepth, Frame, OverlayModel};
@@ -31,6 +32,7 @@ mod parts;
 mod prompt;
 mod search_bar;
 mod status;
+pub mod tab_line;
 mod which_key;
 
 pub use keys::{key_label_compact, key_label_full};
@@ -112,6 +114,13 @@ pub fn render_screen(
             clamped: r.clamped_cells,
             sanitized: r.sanitized,
         };
+        // タブライン (画面の最上行、03 §9.9 の PANE-12)
+        if let Some(model) = &frame.tab_line
+            && layout.tab_rows > 0
+        {
+            let lay = tab_line::layout(model, cols, glyphs);
+            tab_line::render_tab_line(&mut w, 0, cols, &lay, &theme, glyphs);
+        }
         render_status(
             &mut w,
             layout.status_row(),
@@ -140,7 +149,8 @@ pub fn render_screen(
             cursor =
                 render_search_bar(&mut w, layout.bar_row(), cols, bar, &theme, glyphs).or(cursor);
         }
-        // オーバーレイ (前面順なので、奥から描く)
+        // オーバーレイ (前面順なので、奥から描く)。置く範囲は端末の編集面の全体 (タブラインの行を含む。オーバーレイは
+        // Window に 1 つで画面の全体に対して出す、03 §9.9 の PANE-6 (b))
         for ov in frame.overlays.iter().rev() {
             let c = match ov {
                 OverlayModel::Confirm { .. } => render_confirm(&mut w, area, ov, &theme, glyphs),

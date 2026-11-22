@@ -30,6 +30,7 @@ impl Default for AsciiOptions {
 }
 
 /// 1 セル分の内容。継続セルは `None`。
+#[derive(Clone)]
 struct Cell {
     text: Option<String>,
     reverse: bool,
@@ -179,6 +180,190 @@ fn push_line(out: &mut String, mut line: String) {
     out.push('\n');
 }
 
+/// タブの名前の幅の上限 (セル。03 §9.9 の PANE-12 (e)。eve-tui の `chrome::tab_line::TAB_NAME_MAX` と同じ)。
+const TAB_NAME_MAX: usize = 32;
+/// ASCII の縮退の省略記号。
+const ELLIPSIS: &str = "...";
+
+fn plain(t: &str) -> Cell {
+    Cell {
+        text: Some(t.to_owned()),
+        reverse: false,
+    }
+}
+
+/// `spans` を `max` セルに収める。入らなければ中間を `...` にして先頭と末尾を残す (eve-tui の `truncate_middle` と同じ規則)。
+fn truncate_middle(spans: &[eve_view::Span], max: usize) -> Vec<eve_view::Span> {
+    let width = |s: &[eve_view::Span]| s.iter().map(|x| usize::from(x.width)).sum::<usize>();
+    if width(spans) <= max {
+        return spans.to_vec();
+    }
+    if max < ELLIPSIS.len() {
+        return Vec::new();
+    }
+    let budget = max - ELLIPSIS.len();
+    let head_budget = budget / 2;
+    let tail_budget = budget - head_budget;
+    let mut head = Vec::new();
+    let mut acc = 0;
+    for s in spans {
+        if acc + usize::from(s.width) > head_budget {
+            break;
+        }
+        acc += usize::from(s.width);
+        head.push(s.clone());
+    }
+    let mut tail = Vec::new();
+    let mut acc = 0;
+    for s in spans[head.len()..].iter().rev() {
+        if acc + usize::from(s.width) > tail_budget {
+            break;
+        }
+        acc += usize::from(s.width);
+        tail.push(s.clone());
+    }
+    tail.reverse();
+    head.push(eve_view::Span::new(ELLIPSIS, 3, eve_view::Style::DEFAULT));
+    head.extend(tail);
+    head
+}
+
+/// タブ 1 つのセル (`[`・印の欄 (`>` か空白)・項目 (間は 1 セル)・空白・`]`。PANE-12 (e))。名前 (`cut` が中間の項目) は
+/// `name_max` セルまで、印は短い形があれば短い形。
+fn tab_cells(tab: &eve_view::TabItem, active: bool, name_max: usize) -> Vec<Cell> {
+    let mut cells = vec![plain("["), plain(if active { ">" } else { " " })];
+    for (i, item) in tab.items.iter().enumerate() {
+        if i > 0 {
+            cells.push(plain(" "));
+        }
+        let spans = if item.long.cut == eve_view::CutPolicy::Middle {
+            truncate_middle(&item.long.spans, name_max)
+        } else {
+            item.short.as_ref().unwrap_or(&item.long).spans.clone()
+        };
+        put_spans(&mut cells, &spans, eve_view::Color::Default);
+    }
+    cells.push(plain(" "));
+    cells.push(plain("]"));
+    for c in &mut cells {
+        c.reverse = false;
+    }
+    cells
+}
+
+/// タブの並べ方 (PANE-12 (e)。eve-tui の `chrome::tab_line::arrange` と同じ手順): (出す範囲, 最初の列, 左を省いた,
+/// 右を省いた, アクティブだけでも入らないときにそのタブに使える幅)。
+fn arrange(
+    widths: &[usize],
+    active: usize,
+    cols: usize,
+) -> (std::ops::Range<usize>, usize, bool, bool, Option<usize>) {
+    let n = widths.len();
+    if n == 0 {
+        return (0..0, 0, false, false, None);
+    }
+    let a = active.min(n - 1);
+    if widths.iter().sum::<usize>() + (n - 1) <= cols {
+        return (0..n, 0, false, false, None);
+    }
+    let avail = cols.saturating_sub(2);
+    if widths[a] > avail {
+        return (a..a + 1, 1, a > 0, a + 1 < n, Some(avail));
+    }
+    let mut used = widths[a];
+    let (mut lo, mut hi) = (a, a + 1);
+    let (mut right, mut left) = (true, true);
+    while right || left {
+        if right {
+            match widths.get(hi) {
+                Some(&w) if used + 1 + w <= avail => {
+                    used += 1 + w;
+                    hi += 1;
+                }
+                _ => right = false,
+            }
+        }
+        if left {
+            match lo.checked_sub(1).map(|i| widths[i]) {
+                Some(w) if used + 1 + w <= avail => {
+                    used += 1 + w;
+                    lo -= 1;
+                }
+                _ => left = false,
+            }
+        }
+    }
+    (lo..hi, 1, lo > 0, hi < n, None)
+}
+
+/// タブラインの 1 行の文字列 (03 §9.9 の PANE-12 (h))。eve-tui と同じ並べ方を、ASCII の縮退の記号 (アクティブの印は `>`、
+/// 省いた側は `<` / `>`、省略記号は `...`) で出す。末尾の空白は落とす。
+pub fn tab_line_text(model: &eve_view::TabLineModel, cols: u16) -> String {
+    let cols = usize::from(cols);
+    let active = model.active.unwrap_or(usize::MAX);
+    let tabs: Vec<Vec<Cell>> = model
+        .tabs
+        .iter()
+        .enumerate()
+        .map(|(i, t)| tab_cells(t, i == active, TAB_NAME_MAX))
+        .collect();
+    let widths: Vec<usize> = tabs.iter().map(Vec::len).collect();
+    let (range, start, more_left, more_right, squeeze) = arrange(&widths, active, cols);
+    let mut line: Vec<Cell> = (0..start).map(|_| plain(" ")).collect();
+    for i in range {
+        if line.len() > start {
+            line.push(plain(" "));
+        }
+        let cells = match squeeze {
+            Some(room) => {
+                let fixed = tab_cells(&model.tabs[i], i == active, 0).len();
+                tab_cells(
+                    &model.tabs[i],
+                    i == active,
+                    room.saturating_sub(fixed).min(TAB_NAME_MAX),
+                )
+            }
+            None => tabs[i].clone(),
+        };
+        line.extend(cells);
+    }
+    while line.len() < cols {
+        line.push(plain(" "));
+    }
+    // 幅で切る所が全角の文字の途中なら、その文字の先頭から空白にする (行の幅を崩さない)
+    if line.get(cols).is_some_and(|c| c.text.is_none()) {
+        for i in (0..cols).rev() {
+            let head = line[i].text.is_some();
+            line[i] = plain(" ");
+            if head {
+                break;
+            }
+        }
+    }
+    line.truncate(cols);
+    if more_left && cols > 0 {
+        line[0] = plain("<");
+    }
+    if more_right && cols > 0 {
+        // 最後の列が全角の文字の続きなら、その文字の先頭を空白にする
+        if line[cols - 1].text.is_none() {
+            for i in (0..cols - 1).rev() {
+                let head = line[i].text.is_some();
+                line[i] = plain(" ");
+                if head {
+                    break;
+                }
+            }
+        }
+        line[cols - 1] = plain(">");
+    }
+    let mut s: String = line.iter().filter_map(|c| c.text.as_deref()).collect();
+    while s.ends_with(' ') {
+        s.pop();
+    }
+    s
+}
+
 /// 見出しの 1 行のセル (03 §9.9 の PANE-13): フォーカスのペイン (`active`) は `> ` と項目の後ろを `=` で、ほかのペインは
 /// 先頭の空白と項目の後ろを `-` で埋める (無色・ASCII でもフォーカスが分かる)。項目は長い形を空白 1 つで並べる。
 fn bar_cells(pane: &eve_view::PaneFrame, bar: &eve_view::PaneBarModel) -> Vec<Cell> {
@@ -309,9 +494,14 @@ fn render_panes(out: &mut String, frame: &Frame, opts: AsciiOptions, sel_bg: eve
 }
 
 /// Frame を ASCII の文字列にする。ペインが 1 つなら各行をそのまま、2 つ以上なら矩形の位置に並べる (03 §9.9 の PANE-13)。
+/// タブラインがあれば最上行に出す (PANE-12 (h))。
 pub fn render_ascii(frame: &Frame, opts: AsciiOptions) -> String {
     let mut out = String::new();
     let sel_bg = frame.roles.get("ui.selection").bg;
+    if let Some(t) = &frame.tab_line {
+        out.push_str(&tab_line_text(t, frame.size.cols));
+        out.push('\n');
+    }
     if frame.panes.len() > 1 {
         render_panes(&mut out, frame, opts, sel_bg);
     } else {
@@ -361,6 +551,7 @@ mod tests {
                 bar: None,
             }],
             dividers: Vec::new(),
+            tab_line: None,
             search: None,
             focus: FocusTarget::Pane(ViewId(1)),
             primary_cursor: Some(CursorPlacement {

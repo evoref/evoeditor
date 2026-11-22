@@ -559,6 +559,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "theme.background",
         "ui.mouse",
         "ui.hint_bar",
+        "ui.tab_line",
         "ui.mouse_wheel_lines",
         "ui.which_key_delay_ms",
         "clipboard.osc52",
@@ -607,6 +608,7 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("theme.background", "auto"),
         ("ui.mouse", "true"),
         ("ui.hint_bar", "true"),
+        ("ui.tab_line", "auto"),
         ("ui.mouse_wheel_lines", "3"),
         ("ui.which_key_delay_ms", "500"),
         ("clipboard.osc52", "auto"),
@@ -634,13 +636,14 @@ fn 既定値の表記は全公開キーで決まった値() {
 /// 列挙値の許容値 (診断の「使える値: …」) の並びを固定する。
 #[test]
 fn 列挙値の許容値は決まった並び() {
-    let cases: [(&[&str], &[&str]); 12] = [
+    let cases: [(&[&str], &[&str]); 13] = [
         (IndentUnit::NAMES, &["tab", "space"]),
         (BackspaceUnit::NAMES, &["grapheme", "codepoint"]),
         (SearchCase::NAMES, &["smart", "sensitive", "insensitive"]),
         (ThemeBackground::NAMES, &["auto", "dark", "light"]),
         (ShowWhitespace::NAMES, &["off", "minimal"]),
         (Osc52Policy::NAMES, &["auto", "always", "never"]),
+        (TabLineMode::NAMES, &["auto", "always", "never"]),
         (
             ExternalChangePolicy::NAMES,
             &["ask", "auto_if_unmodified", "never"],
@@ -1129,4 +1132,30 @@ fn 検索の_4_キーの範囲外と不正な値は警告して既定値に戻�
         }
     );
     assert_eq!(d.value, "Smart");
+}
+
+// verifies: AC-FR-510-2
+#[test]
+fn ui_tab_line_は_3_値を読み_不正な値は警告して_auto() {
+    assert_eq!(Config::default().tab_line, TabLineMode::Auto);
+    for name in TabLineMode::NAMES {
+        let l = load_str(&format!("[ui]\ntab_line = \"{name}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{name}: {:?}", l.diagnostics);
+        assert_eq!(l.config.tab_line.name(), *name);
+    }
+    let l = load_str("ui.tab_line = \"never\"\n");
+    assert_eq!(l.config.tab_line, TabLineMode::Never);
+    for bad in ["\"Always\"", "\"on\"", "true", "1"] {
+        let l = load_str(&format!("ui.tab_line = {bad}\n"));
+        assert_eq!(l.config.tab_line, TabLineMode::Auto, "{bad}");
+        let d = only_diag(&l, "ui.tab_line");
+        assert_eq!(d.severity, Severity::Warning, "{bad}");
+    }
+    let l = load_str("ui.tab_line = \"on\"\n");
+    assert_eq!(
+        only_diag(&l, "ui.tab_line").kind,
+        DiagKind::InvalidValue {
+            allowed: owned(TabLineMode::NAMES)
+        }
+    );
 }

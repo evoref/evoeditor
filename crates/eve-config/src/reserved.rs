@@ -88,7 +88,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "ui.screen_reader_mode",
     "ui.status_bar",
     "ui.synchronized_output",
-    "ui.tab_line",
     "ui.visual_bell_ms",
     "view.control_char_style",
     "view.cursor_line_highlight",

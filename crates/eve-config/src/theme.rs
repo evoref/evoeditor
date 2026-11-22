@@ -320,6 +320,21 @@ const DEFAULT_ROLES: &[Role] = &[
         ansi16: st(D, D, REVERSE),
         mono: REVERSE,
     },
+    // タブライン (v0.5 の M32、FR-510。07 §8.2 の表の v0.5 の行。値は ui.hint_bar と ui.pane.bar.active と同じ)
+    Role {
+        name: "ui.tab_line",
+        truecolor: st(D, D, NONE),
+        ansi256: st(D, D, NONE),
+        ansi16: st(D, D, NONE),
+        mono: NONE,
+    },
+    Role {
+        name: "ui.tab_line.active",
+        truecolor: st(rgb(0xe8e8e8), rgb(0x2f3340), NONE),
+        ansi256: st(ansi(254), ansi(237), NONE),
+        ansi16: st(D, D, REVERSE),
+        mono: REVERSE,
+    },
 ];
 
 const fn role(
@@ -544,6 +559,15 @@ const HIGH_CONTRAST_DARK_ROLES: &[Role] = &[
         st(BLACK, BRIGHT_WHITE, NONE),
         REVERSE,
     ),
+    // タブライン (v0.5 の M32、FR-510。値は ui.pane.bar と ui.pane.bar.active と同じ)
+    role("ui.tab_line", attrs(NONE), attrs(NONE), attrs(NONE), NONE),
+    role(
+        "ui.tab_line.active",
+        st(rgb(0x000000), rgb(0xffffff), NONE),
+        st(ansi(16), ansi(231), NONE),
+        st(BLACK, BRIGHT_WHITE, NONE),
+        REVERSE,
+    ),
 ];
 
 /// 組込みテーマ `high-contrast-light` (07 §8.7.2 の表。4 段とも明示値。背景を塗る)。
@@ -729,6 +753,15 @@ const HIGH_CONTRAST_LIGHT_ROLES: &[Role] = &[
     role("ui.pane.bar", attrs(NONE), attrs(NONE), attrs(NONE), NONE),
     role(
         "ui.pane.bar.active",
+        st(rgb(0xffffff), rgb(0x000000), NONE),
+        st(ansi(231), ansi(16), NONE),
+        st(BRIGHT_WHITE, BLACK, NONE),
+        REVERSE,
+    ),
+    // タブライン (v0.5 の M32、FR-510。値は ui.pane.bar と ui.pane.bar.active と同じ)
+    role("ui.tab_line", attrs(NONE), attrs(NONE), attrs(NONE), NONE),
+    role(
+        "ui.tab_line.active",
         st(rgb(0xffffff), rgb(0x000000), NONE),
         st(ansi(231), ansi(16), NONE),
         st(BRIGHT_WHITE, BLACK, NONE),
@@ -981,7 +1014,7 @@ mod tests {
             assert!(t.paints, "{name}");
             let names: Vec<&str> = t.roles.iter().map(|r| r.name).collect();
             let default: Vec<&str> = DEFAULT_ROLES.iter().map(|r| r.name).collect();
-            assert_eq!(names, default, "{name}: ロールは default と同じ 29 個");
+            assert_eq!(names, default, "{name}: ロールは default と同じ 31 個");
             for r in &t.roles {
                 for m in [r.truecolor.mods, r.ansi256.mods, r.ansi16.mods, r.mono] {
                     assert_eq!(m & DIM, 0, "{name} {}", r.name);
