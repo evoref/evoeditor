@@ -215,7 +215,6 @@ mod tests {
             "native-tls",
             "rustls",
             "socket2",
-            "mio",
             "tokio",
             "tungstenite",
             "h2",
@@ -230,6 +229,9 @@ mod tests {
                 found.push(format!("依存 {b}"));
             }
         }
+        // (1b) mio はファイルの知らせ (notify の Linux の backend が inotify の fd を待つ) にだけ使い、ソケットの型を持つ
+        // `net` の feature が有効でないなら許す (09 §3.6 の「無通信」、v0.5 の M33 の段 7)。全 target の resolve で見る
+        found.extend(mio_net_features(&root));
         // (2) windows-sys のネットワークの feature を使わない
         for dir in ["crates", "bins"] {
             let Ok(rd) = std::fs::read_dir(root.join(dir)) else {
@@ -275,6 +277,57 @@ mod tests {
             }
         }
         assert!(found.is_empty(), "ネットワーク通信の可能性: {found:?}");
+    }
+
+    /// `cargo metadata` の resolve (全 target の和) で、`mio` に `net` の feature が有効なら、その知らせ。
+    fn mio_net_features(root: &std::path::Path) -> Vec<String> {
+        let out = std::process::Command::new(
+            std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()),
+        )
+        .args(["metadata", "--format-version", "1", "--locked"])
+        .current_dir(root)
+        .output()
+        .expect("cargo metadata を起動できる");
+        assert!(
+            out.status.success(),
+            "cargo metadata が失敗した: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let meta: serde_json::Value =
+            serde_json::from_slice(&out.stdout).expect("cargo metadata の JSON");
+        let nodes = meta["resolve"]["nodes"].as_array().expect("resolve.nodes");
+        let mut found = Vec::new();
+        for node in nodes {
+            let id = node["id"].as_str().unwrap_or_default();
+            let is_mio = meta["packages"]
+                .as_array()
+                .expect("packages")
+                .iter()
+                .any(|p| p["id"].as_str() == Some(id) && p["name"].as_str() == Some("mio"));
+            if !is_mio {
+                continue;
+            }
+            let features: Vec<&str> = node["features"]
+                .as_array()
+                .map(|f| f.iter().filter_map(serde_json::Value::as_str).collect())
+                .unwrap_or_default();
+            if features.contains(&"net") {
+                found.push(format!("依存 mio の net の feature ({features:?})"));
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn mio_の_net_の判定は_feature_を見る() {
+        // 判定の元 (resolve) に mio があり、features を読めていること (今の依存では net が無い)
+        let root = crate::util::workspace_root();
+        assert_eq!(mio_net_features(&root), Vec::<String>::new());
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect("Cargo.lock");
+        assert!(
+            lock.contains("name = \"mio\""),
+            "mio が依存に無くなったら (1b) の検査を見直す"
+        );
     }
 
     // verifies: AC-NFR-502-1

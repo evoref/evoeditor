@@ -15,11 +15,16 @@
 //!
 //! spec: 02 §4.4, 05 §12.1, 05 §12.2
 
+// 選り分け (`route`) と FS の判定は Windows と Linux だけで使う (ほかの OS は登録を `Unsupported` で失敗させるだけ)
+#[cfg(any(windows, target_os = "linux", test))]
 use std::ffi::OsString;
+#[cfg(any(windows, target_os = "linux", test))]
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use eve_core::{FileWatcher, FsEvent, FsPath, WatchError, WatchId};
+#[cfg(any(windows, target_os = "linux", test))]
+use eve_core::WatchError;
+use eve_core::{FileWatcher, FsEvent, FsPath, WatchId};
 
 /// io のレーンに作業を積む口 (Host の `HostTasks::spawn_io_task` を包んだもの。02 §4.4)。主スレッドから呼ぶ。
 pub type IoSpawn = Box<dyn Fn(Box<dyn FnOnce() + Send>)>;
@@ -77,6 +82,7 @@ impl Drop for NotifyWatcher {
 }
 
 /// `io::Error` の種類から登録の失敗の理由 (`statfs`・ディレクトリを開くとき)。
+#[cfg(any(windows, target_os = "linux"))]
 fn io_watch_error(e: &std::io::Error) -> WatchError {
     match e.kind() {
         std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory => WatchError::NotFound,
@@ -86,6 +92,7 @@ fn io_watch_error(e: &std::io::Error) -> WatchError {
 }
 
 /// 監視の知らせの元 (notify の 1 つのイベントを選り分けた結果)。純粋な値で、試験で表にできる。
+#[cfg(any(windows, target_os = "linux", test))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Route {
     /// 監視しているディレクトリ `dir` の直下の `name` に何か起きた。
@@ -99,29 +106,36 @@ enum Route {
 }
 
 /// 監視している側から見たイベントの種類 (notify の `EventKind` を、選り分けに要る分だけにしたもの)。
+#[cfg(any(windows, target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     /// 読むだけの開閉など (捨てる)。
     Access,
     /// 書いた後の閉じ (`Access(Close(Write))`。変化として送る)。
     CloseWrite,
+    /// 作成。
+    Create,
     /// 削除。
     Remove,
     /// 改名。
     Rename,
-    /// 属性だけの変更。
-    Metadata,
-    /// ほか (作成・内容の変更・`Any`・`Other`)。
-    Other,
+    /// 内容・属性・種類の分からない変更 (`Modify` のうち改名でないもの)。
+    Modify,
+    /// 種類の分からないもの (`Any`・`Other`)。
+    Unknown,
 }
 
 /// 1 つのイベントを選り分ける (05 §12.2 の 10)。`is_dir` は監視しているディレクトリそのものか。
 ///
 /// - 取りこぼしの恐れ (`rescan`): パスのあるものはそのディレクトリ、パスの無いものはすべての監視。
 /// - 読むだけの開閉は捨てる。書いた後の閉じは変化として送る。
-/// - パスが監視しているディレクトリそのもの: 削除・改名は `Lost`、属性だけの変更は捨てる (中の項目は変わらない)、ほかは
-///   中で何が起きたか分からないので `Rescan`。
+/// - パスが監視しているディレクトリそのもの: 削除・改名は `Lost`。変更 (`Modify`。属性・更新時刻) と開閉は捨てる
+///   (中の項目は変わらない。Windows で親と子の両方を監視すると、親の監視が子のディレクトリの更新時刻の変化を子の
+///   パスで届けるので、ここで捨てないと子の中の保存のたびに子の全文書を照合する)。作成も捨てる (親の監視が届ける、
+///   子を頼む前の作成の知らせが、子を表に載せた後に届くと、張ったばかりの監視を失効にする。消して作り直したときは、
+///   消したときの削除で `Lost` が出ている)。種類の分からないものは、中で何が起きたか分からないので `Rescan`。
 /// - パスの親が監視しているディレクトリ: 名前を `Changed` で送る (改名は元と先の両方)。どちらでもないパスは捨てる。
+#[cfg(any(windows, target_os = "linux", test))]
 fn route(
     kind: Kind,
     rescan: bool,
@@ -156,8 +170,8 @@ fn route(
         if is_dir(p) {
             match kind {
                 Kind::Remove | Kind::Rename => push(Route::Lost { dir: p.clone() }),
-                Kind::Metadata | Kind::Access => {}
-                Kind::CloseWrite | Kind::Other => push(Route::Rescan { dir: p.clone() }),
+                Kind::Create | Kind::Modify | Kind::Access | Kind::CloseWrite => {}
+                Kind::Unknown => push(Route::Rescan { dir: p.clone() }),
             }
             continue;
         }
@@ -175,6 +189,7 @@ fn route(
 
 /// 誤りの知らせ (`Err`) を選り分ける。パスが監視しているディレクトリなら `Lost` (notify 9.0 の Windows は読取の失敗の後に
 /// その監視を外す)、パスの無いものはすべての監視の `Rescan` (inotify の読取の失敗。監視は続く)。
+#[cfg(any(windows, target_os = "linux", test))]
 fn route_error(paths: &[PathBuf], is_dir: &dyn Fn(&Path) -> bool) -> Vec<Route> {
     let dirs: Vec<Route> = paths
         .iter()
@@ -249,6 +264,13 @@ fn check_fs(dir: &Path) -> Result<(), WatchError> {
     const BACKUP_SEMANTICS: u32 = 0x0200_0000;
     /// 読み・書き・削除のどれも妨げない共有 (`FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`)。
     const SHARE_ALL: u32 = 0x7;
+    let network = || WatchError::Unsupported {
+        fs: "network".to_owned(),
+    };
+    // 開く前にパスの形とドライブの種類で見る (応答しない共有のディレクトリを開いて `io` を止めない)
+    if crate::sys::is_remote(dir) {
+        return Err(network());
+    }
     let f = std::fs::OpenOptions::new()
         .access_mode(READ_ATTRIBUTES)
         .share_mode(SHARE_ALL)
@@ -258,13 +280,11 @@ fn check_fs(dir: &Path) -> Result<(), WatchError> {
     if !f.metadata().is_ok_and(|m| m.is_dir()) {
         return Err(WatchError::NotFound);
     }
-    let remote = crate::sys::is_remote(dir)
-        || crate::sys::is_remote_handle(&f)
+    // シンボリックリンク・ジャンクションの先が共有フォルダのものは、開いたハンドルで見分ける
+    let remote = crate::sys::is_remote_handle(&f)
         || crate::sys::owner::final_path(&f).is_ok_and(|p| crate::read_checked::is_mup(&p));
     if remote {
-        return Err(WatchError::Unsupported {
-            fs: "network".to_owned(),
-        });
+        return Err(network());
     }
     let (fs, _) = crate::sys::volume_info(&f).ok_or(WatchError::Other)?;
     if crate::sys::trusted_id_fs(&f) {
@@ -279,12 +299,16 @@ fn check_fs(dir: &Path) -> Result<(), WatchError> {
 #[cfg(any(windows, target_os = "linux"))]
 mod backend {
     //! notify を使う部分 (Windows と Linux)。
+    //!
+    //! ロックの順は `backend` → `dirs` → `last` で、逆向きには取らない。`dirs` を持ったまま OS の `watch` / `unwatch` を
+    //! 呼ばない (notify はそこで監視のスレッドの応答を待ち、監視のスレッドはコールバックで `dirs` を取る)。どのロックも、
+    //! 持ち主のパニックで毒になった後も中身をそのまま使う (表は 1 回の操作の途中で壊れる形を持たない)。
 
     use std::collections::HashMap;
     use std::ffi::OsString;
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::path::{Path, PathBuf};
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
     use std::time::{Duration, Instant};
 
     use eve_core::{FsEvent, FsEventKind, WatchError, WatchId};
@@ -294,10 +318,16 @@ mod backend {
     use super::{FsSink, Kind, Route};
 
     /// 続けて届いた同じ (監視, 名前) の `Changed` を 1 つにまとめる間隔 (05 §12.2 の 2)。core の待ち合わせ
-    /// (`WATCH_SETTLE` = 100 ms、03 §9.5.1 の WATCH-4) 以下にする: まとめて捨てた知らせの後の書込は、core が照合する時刻
-    /// (送った知らせの 100 ms 後) より前に起きているので、照合が取り込む。照合の後の書込は、送った知らせから 100 ms 以上
-    /// 後なので、この間隔を過ぎていて捨てない。
+    /// (`WATCH_SETTLE` = 100 ms、03 §9.5.1 の WATCH-4) より短くする: 捨てた知らせの元の書込は、送った知らせから 50 ms の内に
+    /// 済んでいて、core がその知らせから `WATCH_SETTLE` の後に行う照合が取り込む。1 s の打ち切りで照合した後も、core は
+    /// 最後の知らせから `WATCH_SETTLE` の後にもう 1 回照合する (WATCH-4) ので、打ち切りの後に捨てた書込も取り込む。
+    /// 同じディレクトリに要求が 2 つ以上あると (失効の後の張り直しの間)、交互に送るのでまとまらない (まれなので構わない)。
     const COALESCE: Duration = Duration::from_millis(50);
+
+    /// ロックを取る (毒になっていても中身を使う)。
+    fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+        m.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 
     /// 監視の表 (`io` の作業が書き、notify のコールバックが読む)。
     #[derive(Default)]
@@ -310,7 +340,7 @@ mod backend {
     struct Dir {
         /// このディレクトリの要求 (失効の後に張り直す間は 2 つになり得る)。
         ids: Vec<WatchId>,
-        /// 失効した (OS の監視が外れている恐れがある。次の登録で張り直す)。
+        /// OS の監視が無い・外れた恐れがある (新しい項目と失効したもの)。次の登録で OS の `watch` をし直す。
         lost: bool,
     }
 
@@ -331,7 +361,7 @@ mod backend {
         Ready(RecommendedWatcher),
         /// 作れなかった (以後の登録はすべて `Other` で失敗させる、05 §12.2 の 5)。
         Failed,
-        /// 後片付けを終えた (以後の登録は何もしない)。
+        /// 後片付けを終えた (以後の登録は `Other` で失敗させる)。
         Closed,
     }
 
@@ -357,16 +387,31 @@ mod backend {
             (self.routing.sink)(FsEvent { watch, kind });
         }
 
-        /// 登録 (`io` の作業)。結果を `Started` / `Failed` で送る。
+        /// 登録 (`io` の作業)。結果を `Started` / `Failed` で 1 回だけ送る (途中のパニックも `Failed { Other }` にする)。
         pub(super) fn register(&self, id: WatchId, dir: PathBuf) {
-            let mut backend = self.backend.lock().expect("監視の状態の Mutex");
-            if matches!(*backend, Backend::Closed) {
-                return;
+            let done = catch_unwind(AssertUnwindSafe(|| self.register_inner(id, &dir)));
+            if done.is_err() {
+                // 表に載ったままにしない (毒になったロックも中身を使う)
+                let _ = catch_unwind(AssertUnwindSafe(|| self.forget(id)));
+                self.send(
+                    id,
+                    FsEventKind::Failed {
+                        err: WatchError::Other,
+                    },
+                );
             }
-            if let Err(err) = super::check_fs(&dir) {
+        }
+
+        fn register_inner(&self, id: WatchId, dir: &Path) {
+            let fail = |err: WatchError| self.send(id, FsEventKind::Failed { err });
+            let mut backend = lock(&self.backend);
+            if matches!(*backend, Backend::Closed) {
                 drop(backend);
-                self.send(id, FsEventKind::Failed { err });
-                return;
+                return fail(WatchError::Other);
+            }
+            if let Err(err) = super::check_fs(dir) {
+                drop(backend);
+                return fail(err);
             }
             if matches!(*backend, Backend::NotCreated) {
                 *backend = match create(Arc::clone(&self.routing)) {
@@ -376,63 +421,52 @@ mod backend {
             }
             let Backend::Ready(w) = &mut *backend else {
                 drop(backend);
-                self.send(
-                    id,
-                    FsEventKind::Failed {
-                        err: WatchError::Other,
-                    },
-                );
-                return;
+                return fail(WatchError::Other);
             };
-            // 表に先に載せる (OS の監視が始まった直後の知らせを捨てない)。新しい項目は OS の監視がまだ無いので、
-            // 失効したものと同じく `lost` から始め、OS の `watch` が通ったら外す
+            // 表に先に載せる (OS の監視が始まった直後の知らせを捨てない)。OS の `watch` が要るなら、その前に `lost` を
+            // 外す (`watch` の後に外すと、その間に届いた失効を上書きする)。`watch` が失敗したら表から外す
             let need_os = {
-                let mut dirs = self.routing.dirs.lock().expect("監視の表の Mutex");
-                dirs.by_id.insert(id, dir.clone());
-                let entry = dirs.by_path.entry(dir.clone()).or_insert(Dir {
+                let mut dirs = lock(&self.routing.dirs);
+                dirs.by_id.insert(id, dir.to_path_buf());
+                let entry = dirs.by_path.entry(dir.to_path_buf()).or_insert(Dir {
                     ids: Vec::new(),
                     lost: true,
                 });
                 entry.ids.push(id);
-                entry.lost
+                std::mem::replace(&mut entry.lost, false)
             };
             let result = if need_os {
                 // 失効した監視が OS に残っていれば外してから張り直す (外れていれば誤りになるが構わない)
-                let _ = w.unwatch(&dir);
-                w.watch(&dir, RecursiveMode::NonRecursive)
+                let _ = w.unwatch(dir);
+                w.watch(dir, RecursiveMode::NonRecursive)
             } else {
                 Ok(())
             };
             drop(backend);
             match result {
                 Ok(()) => {
-                    if let Some(d) = self
-                        .routing
-                        .dirs
-                        .lock()
-                        .expect("監視の表の Mutex")
-                        .by_path
-                        .get_mut(&dir)
-                    {
-                        d.lost = false;
-                    }
+                    // 表のロックの中で送る: 失効の知らせ (`Lost`。印と送るのを同じロックの中で行う) と前後が入れ替わらない。
+                    // `watch` の後に失効していれば、`Started` の後にもう一度 `Lost` を送る (最後の状態を失効にする)
+                    let dirs = lock(&self.routing.dirs);
                     self.send(id, FsEventKind::Started);
+                    if dirs.by_path.get(dir).is_some_and(|d| d.lost) {
+                        self.send(id, FsEventKind::Lost);
+                    }
                 }
                 Err(e) => {
+                    if let Some(d) = lock(&self.routing.dirs).by_path.get_mut(dir) {
+                        // 残る要求 (失効した古い要求) があれば、張り直しが要るままにする
+                        d.lost = true;
+                    }
                     self.forget(id);
-                    self.send(
-                        id,
-                        FsEventKind::Failed {
-                            err: watch_error(&e),
-                        },
-                    );
+                    fail(watch_error(&e));
                 }
             }
         }
 
         /// 表から外す。そのディレクトリの最後の要求なら、外したディレクトリを返す。
         fn forget(&self, id: WatchId) -> Option<PathBuf> {
-            let mut dirs = self.routing.dirs.lock().expect("監視の表の Mutex");
+            let mut dirs = lock(&self.routing.dirs);
             let dir = dirs.by_id.remove(&id)?;
             let d = dirs.by_path.get_mut(&dir)?;
             d.ids.retain(|i| *i != id);
@@ -446,32 +480,31 @@ mod backend {
 
         /// 解除 (`io` の作業)。そのディレクトリの最後の要求なら OS の監視を外す。
         pub(super) fn unregister(&self, id: WatchId) {
-            let mut backend = self.backend.lock().expect("監視の状態の Mutex");
+            let mut backend = lock(&self.backend);
             if let Some(dir) = self.forget(id)
                 && let Backend::Ready(w) = &mut *backend
             {
                 // 失効して OS が既に外していれば誤りになるが構わない
-                let _ = w.unwatch(&dir);
+                let _ = catch_unwind(AssertUnwindSafe(|| w.unwatch(&dir)));
             }
         }
 
         /// 後片付け (`io` の作業): watcher を手放し (notify のスレッドが止まり、監視のハンドルが閉じる)、表を空にする。
         pub(super) fn shutdown(&self) {
-            let old = std::mem::replace(
-                &mut *self.backend.lock().expect("監視の状態の Mutex"),
-                Backend::Closed,
-            );
+            let old = std::mem::replace(&mut *lock(&self.backend), Backend::Closed);
             drop_backend(old);
-            *self.routing.dirs.lock().expect("監視の表の Mutex") = Dirs::default();
+            *lock(&self.routing.dirs) = Dirs::default();
         }
     }
 
     impl Drop for Shared {
         fn drop(&mut self) {
             // `io` のキューが閉じていて後片付けの作業が走らなかったとき
-            if let Ok(b) = self.backend.get_mut() {
-                drop_backend(std::mem::replace(b, Backend::Closed));
-            }
+            let b = self
+                .backend
+                .get_mut()
+                .unwrap_or_else(PoisonError::into_inner);
+            drop_backend(std::mem::replace(b, Backend::Closed));
         }
     }
 
@@ -489,7 +522,10 @@ mod backend {
         let config = notify::Config::default()
             .with_event_kinds(EventKindMask::CORE | EventKindMask::ACCESS_CLOSE);
         RecommendedWatcher::new(
-            move |res: notify::Result<notify::Event>| routing.handle(res),
+            move |res: notify::Result<notify::Event>| {
+                // コールバックのパニックで notify のスレッドを止めない (その知らせだけを捨てる)
+                let _ = catch_unwind(AssertUnwindSafe(|| routing.handle(res)));
+            },
             config,
         )
         .ok()
@@ -515,10 +551,11 @@ mod backend {
         match k {
             EventKind::Access(AccessKind::Close(AccessMode::Write)) => Kind::CloseWrite,
             EventKind::Access(_) => Kind::Access,
+            EventKind::Create(_) => Kind::Create,
             EventKind::Remove(_) => Kind::Remove,
             EventKind::Modify(ModifyKind::Name(_)) => Kind::Rename,
-            EventKind::Modify(ModifyKind::Metadata(_)) => Kind::Metadata,
-            _ => Kind::Other,
+            EventKind::Modify(_) => Kind::Modify,
+            _ => Kind::Unknown,
         }
     }
 
@@ -526,39 +563,35 @@ mod backend {
         /// notify のコールバック (notify のスレッド)。選り分けて知らせの口へ送るだけにする。
         fn handle(&self, res: notify::Result<notify::Event>) {
             let routes = {
-                let dirs = self.dirs.lock().expect("監視の表の Mutex");
+                let dirs = lock(&self.dirs);
                 let is_dir = |p: &Path| dirs.by_path.contains_key(p);
                 match &res {
                     Ok(ev) => super::route(kind_of(&ev.kind), ev.need_rescan(), &ev.paths, &is_dir),
                     Err(e) => super::route_error(&e.paths, &is_dir),
                 }
             };
+            let now = Instant::now();
             for r in routes {
-                self.deliver(r);
+                self.deliver(r, now);
             }
         }
 
-        fn ids_of(&self, dir: &Path, mark_lost: bool) -> Vec<WatchId> {
-            let mut dirs = self.dirs.lock().expect("監視の表の Mutex");
-            match dirs.by_path.get_mut(dir) {
-                Some(d) => {
-                    if mark_lost {
-                        d.lost = true;
-                    }
-                    d.ids.clone()
-                }
-                None => Vec::new(),
-            }
+        fn ids_of(&self, dir: &Path) -> Vec<WatchId> {
+            lock(&self.dirs)
+                .by_path
+                .get(dir)
+                .map(|d| d.ids.clone())
+                .unwrap_or_default()
         }
 
-        fn deliver(&self, r: Route) {
+        /// 知らせを送る。`now` は知らせを受けた時刻 (まとめの判定に使う。試験は時刻を渡す)。
+        fn deliver(&self, r: Route, now: Instant) {
             let (ids, kind) = match r {
                 Route::Changed { dir, name } => {
-                    let now = Instant::now();
-                    for id in self.ids_of(&dir, false) {
-                        let mut last = self.last.lock().expect("知らせのまとめの Mutex");
+                    for id in self.ids_of(&dir) {
+                        let mut last = lock(&self.last);
                         let dup = last.as_ref().is_some_and(|(w, n, at)| {
-                            *w == id && *n == name && now.duration_since(*at) < COALESCE
+                            *w == id && *n == name && now.saturating_duration_since(*at) < COALESCE
                         });
                         if dup {
                             continue;
@@ -572,16 +605,29 @@ mod backend {
                     }
                     return;
                 }
-                Route::Rescan { dir } => (self.ids_of(&dir, false), FsEventKind::Rescan),
-                Route::Lost { dir } => (self.ids_of(&dir, true), FsEventKind::Lost),
+                Route::Lost { dir } => {
+                    *lock(&self.last) = None;
+                    // 失効の印と送るのを表のロックの中で行う (登録の `Started` と前後が入れ替わらない)
+                    let mut dirs = lock(&self.dirs);
+                    if let Some(d) = dirs.by_path.get_mut(&dir) {
+                        d.lost = true;
+                        for id in &d.ids {
+                            (self.sink)(FsEvent {
+                                watch: *id,
+                                kind: FsEventKind::Lost,
+                            });
+                        }
+                    }
+                    return;
+                }
+                Route::Rescan { dir } => (self.ids_of(&dir), FsEventKind::Rescan),
                 Route::RescanAll => {
-                    let dirs = self.dirs.lock().expect("監視の表の Mutex");
-                    let mut ids: Vec<WatchId> = dirs.by_id.keys().copied().collect();
+                    let mut ids: Vec<WatchId> = lock(&self.dirs).by_id.keys().copied().collect();
                     ids.sort_unstable();
                     (ids, FsEventKind::Rescan)
                 }
             };
-            *self.last.lock().expect("知らせのまとめの Mutex") = None;
+            *lock(&self.last) = None;
             for id in ids {
                 (self.sink)(FsEvent {
                     watch: id,
@@ -595,8 +641,7 @@ mod backend {
     mod tests {
         use super::*;
 
-        #[test]
-        fn 続けて届いた同じ名前はまとめる() {
+        fn routing() -> (Routing, Arc<Mutex<Vec<FsEvent>>>, PathBuf) {
             let got: Arc<Mutex<Vec<FsEvent>>> = Arc::default();
             let sink: FsSink = {
                 let got = Arc::clone(&got);
@@ -619,26 +664,41 @@ mod backend {
                 );
                 d.by_id.insert(WatchId(1), w.clone());
             }
+            (r, got, w)
+        }
+
+        fn c(n: &str) -> FsEventKind {
+            FsEventKind::Changed {
+                name: OsString::from(n),
+            }
+        }
+
+        #[test]
+        fn 続けて届いた同じ名前はまとめる() {
+            let (r, got, w) = routing();
             let ch = |n: &str| Route::Changed {
                 dir: w.clone(),
                 name: OsString::from(n),
             };
-            r.deliver(ch("a"));
-            r.deliver(ch("a"));
-            r.deliver(ch("b"));
-            r.deliver(ch("a"));
-            r.deliver(Route::Rescan { dir: w.clone() });
-            r.deliver(ch("a"));
-            r.deliver(Route::Lost { dir: w.clone() });
-            r.deliver(Route::RescanAll);
+            let t0 = Instant::now();
+            let at = |ms: u64| t0 + Duration::from_millis(ms);
+            r.deliver(ch("a"), at(0));
+            r.deliver(ch("a"), at(49)); // 送ってから 50 ms の内: 捨てる
+            r.deliver(ch("a"), at(50)); // 送ってから 50 ms: 送る
+            r.deliver(ch("b"), at(51));
+            r.deliver(ch("a"), at(52)); // 間に別の名前: 送る
+            r.deliver(Route::Rescan { dir: w.clone() }, at(53));
+            r.deliver(ch("a"), at(54)); // Rescan の後: 送る
+            r.deliver(Route::Lost { dir: w.clone() }, at(55));
+            r.deliver(Route::RescanAll, at(56));
             // 監視していないディレクトリは捨てる
-            r.deliver(Route::Changed {
-                dir: PathBuf::from("/x"),
-                name: OsString::from("a"),
-            });
-            let c = |n: &str| FsEventKind::Changed {
-                name: OsString::from(n),
-            };
+            r.deliver(
+                Route::Changed {
+                    dir: PathBuf::from("/x"),
+                    name: OsString::from("a"),
+                },
+                at(57),
+            );
             let kinds: Vec<FsEventKind> = got
                 .lock()
                 .expect("試験の記録")
@@ -648,6 +708,7 @@ mod backend {
             assert_eq!(
                 kinds,
                 vec![
+                    c("a"),
                     c("a"),
                     c("b"),
                     c("a"),
@@ -722,11 +783,12 @@ mod tests {
     #[test]
     fn 直下の項目の変化は名前で送る() {
         for k in [
-            Kind::Other,
+            Kind::Create,
             Kind::Remove,
             Kind::Rename,
-            Kind::Metadata,
+            Kind::Modify,
             Kind::CloseWrite,
+            Kind::Unknown,
         ] {
             assert_eq!(
                 route_in(k, false, &["/w/a.txt"]),
@@ -753,12 +815,12 @@ mod tests {
             Vec::<Route>::new()
         );
         assert_eq!(
-            route_in(Kind::Other, false, &["/x/a.txt"]),
+            route_in(Kind::Modify, false, &["/x/a.txt"]),
             Vec::<Route>::new()
         );
         // 孫 (非再帰なので本来は届かない) も捨てる
         assert_eq!(
-            route_in(Kind::Other, false, &["/w/sub/a.txt"]),
+            route_in(Kind::Modify, false, &["/w/sub/a.txt"]),
             Vec::<Route>::new()
         );
     }
@@ -773,26 +835,32 @@ mod tests {
             route_in(Kind::Rename, false, &["/w"]),
             vec![Route::Lost { dir: p("/w") }]
         );
+        // 変更 (Windows の入れ子の監視で、親の監視が子のディレクトリの更新時刻の変化を子のパスで届ける)・開閉・作成
+        // (親の監視が届ける、子を頼む前の作成の知らせ) は捨てる
+        for k in [Kind::Create, Kind::Modify, Kind::Access, Kind::CloseWrite] {
+            assert_eq!(route_in(k, false, &["/w"]), Vec::<Route>::new(), "{k:?}");
+        }
+        // 入れ子: /w の直下の /w/sub は、/w の監視には名前の変化、/w/sub の監視には何も送らない
+        let nested = |d: &Path| d == Path::new("/w") || d == Path::new("/w/sub");
         assert_eq!(
-            route_in(Kind::Metadata, false, &["/w"]),
+            route(Kind::Modify, false, &[p("/w/sub")], &nested),
             Vec::<Route>::new()
         );
-        assert_eq!(route_in(Kind::Access, false, &["/w"]), Vec::<Route>::new());
         assert_eq!(
-            route_in(Kind::Other, false, &["/w"]),
+            route_in(Kind::Unknown, false, &["/w"]),
             vec![Route::Rescan { dir: p("/w") }]
         );
     }
 
     #[test]
     fn 取りこぼしの恐れ() {
-        assert_eq!(route_in(Kind::Other, true, &[]), vec![Route::RescanAll]);
+        assert_eq!(route_in(Kind::Unknown, true, &[]), vec![Route::RescanAll]);
         assert_eq!(
-            route_in(Kind::Other, true, &["/w"]),
+            route_in(Kind::Unknown, true, &["/w"]),
             vec![Route::Rescan { dir: p("/w") }]
         );
         assert_eq!(
-            route_in(Kind::Other, true, &["/w/a.txt"]),
+            route_in(Kind::Unknown, true, &["/w/a.txt"]),
             vec![Route::Rescan { dir: p("/w") }]
         );
     }

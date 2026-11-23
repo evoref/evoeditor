@@ -64,19 +64,63 @@ impl Drop for Tmp {
     }
 }
 
+/// 後片付けが済んだか (Windows: 監視していたディレクトリの祖先を改名できる。Linux: notify のスレッドが無い)。
+fn wait_released(root: &std::path::Path) {
+    let end = Instant::now() + WAIT;
+    #[cfg(windows)]
+    {
+        let moved = root.with_extension("moved");
+        loop {
+            match fs::rename(root, &moved) {
+                Ok(()) => {
+                    let _ = fs::rename(&moved, root);
+                    return;
+                }
+                Err(e) => assert!(Instant::now() < end, "手放した後も祖先を改名できない: {e}"),
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = root;
+        loop {
+            let n = fs::read_dir("/proc/self/task")
+                .expect("/proc/self/task")
+                .filter_map(Result::ok)
+                .filter(|e| {
+                    fs::read_to_string(e.path().join("comm"))
+                        .is_ok_and(|c| c.starts_with("notify-rs"))
+                })
+                .count();
+            if n == 0 {
+                return;
+            }
+            assert!(
+                Instant::now() < end,
+                "手放した後も notify のスレッドが {n} 本残る"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
 #[test]
-fn io_のレーンで登録し_知らせは受信口に届く() {
+fn io_のレーンで登録し_知らせは受信口に届き_手放すと後片付けする() {
     let base = std::env::temp_dir().join(format!("eve-host-watch-{}", std::process::id()));
     let _ = fs::remove_dir_all(&base);
-    fs::create_dir_all(&base).expect("一時ディレクトリ");
+    fs::create_dir_all(base.join("sub")).expect("一時ディレクトリ");
     let tmp = Tmp(fs::canonicalize(&base).expect("canonicalize"));
-    let dir = {
+    let root = {
         let s = tmp.0.to_string_lossy().into_owned();
         PathBuf::from(s.strip_prefix(r"\\?\").map_or(s.clone(), str::to_owned))
     };
+    let dir = root.join("sub");
 
     let (spawner, tx, rx) = spawner();
-    let mut w = file_watcher(Rc::clone(&spawner) as Rc<dyn HostTasks>, tx);
+    let tasks: Rc<dyn HostTasks> = spawner.clone();
+    let mut w = file_watcher(&tasks, tx);
+    drop(tasks);
     let id = w.watch_dir(&FsPath::new(&dir));
     next_fs(&rx, "Started", |e| {
         e.watch == id && e.kind == FsEventKind::Started
@@ -92,6 +136,23 @@ fn io_のレーンで登録し_知らせは受信口に届く() {
     // 手放すと後片付けの作業を io に積む。spawner を手放すと io のワーカーが作業を走らせ切ってから終わる
     drop(w);
     drop(spawner);
+    wait_released(&root);
+}
+
+#[test]
+fn spawner_が無くなった後の要求は捨てる() {
+    let (spawner, tx, rx) = spawner();
+    let tasks: Rc<dyn HostTasks> = spawner.clone();
+    let mut w = file_watcher(&tasks, tx);
+    drop(tasks);
+    drop(spawner);
+    // 監視は spawner を弱い参照で持つので、spawner は手放した所で終わり、後の要求は走らない (パニックもしない)
+    let _ = w.watch_dir(&FsPath::new(std::env::temp_dir()));
+    drop(w);
+    assert!(
+        rx.recv_timeout(Duration::from_millis(300)).is_err(),
+        "結果は届かない"
+    );
 }
 
 #[test]

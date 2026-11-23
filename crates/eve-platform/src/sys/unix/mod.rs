@@ -152,11 +152,7 @@ pub(crate) fn fs_class(path: &Path) -> FsClass {
     if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
         return FsClass::UNKNOWN;
     }
-    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
-    match u32::try_from(st.f_type & 0xFFFF_FFFF) {
-        Ok(t) => classify(t),
-        Err(_) => FsClass::UNKNOWN,
-    }
+    classify(f_type_bits(&st))
 }
 
 /// `path` のある FS の `statfs` の `f_type` (下位 32 bit。シンボリックリンクは辿った先の FS)。ファイル監視の FS の判定
@@ -176,8 +172,21 @@ pub(crate) fn statfs_type(path: &Path) -> io::Result<u32> {
     if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
-    u32::try_from(st.f_type & 0xFFFF_FFFF).map_err(|_| io::Error::other("f_type"))
+    Ok(f_type_bits(&st))
+}
+
+/// `statfs` の `f_type` の下位 32 bit (`linux/magic.h` の値と比べる形)。`f_type` の型は libc と target ごとに違い
+/// (glibc は符号付きで 64 bit では `i64`・32 bit では `i32`、musl は符号無し、macOS は `u32`)、`0x9123683E` のような値は
+/// 符号付きの型では負になる。`as` でビットをそのまま下位 32 bit にする (`try_from` は負の値で失敗し、`& 0xFFFF_FFFF` は
+/// 32 bit の型で桁あふれのリテラルになる)。
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::unnecessary_cast,
+    reason = "f_type の型が target ごとに違い、どの lint が出るかも target で変わる (expect にすると出ない target で警告になる)"
+)]
+pub(crate) fn f_type_bits(st: &libc::statfs) -> u32 {
+    st.f_type as u32
 }
 
 /// Linux 以外の Unix: 判定しない (`Unknown`。識別は信頼しない)。macOS へ移すときは `statfs` の `f_fstypename` で見分ける。

@@ -272,17 +272,115 @@ fn イベントのあふれは_rescan() {
     let (mut w, rx) = watcher_with_gate(Arc::clone(&gate));
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
+    // Linux は待ち行列の長さ (`max_queued_events`) を超える数を書く (1 ファイルで少なくとも 2 つ (作成・書いた後の閉じ)
+    // 積む)。Windows は notify の読取の受け皿 (64 KiB) と OS の受け皿を超える数 (1 ファイルで 30 バイト以上の記録が 2 つ以上)
+    let files = overflow_files();
+    if files == 0 {
+        eprintln!("待ち行列が長すぎてあふれさせられないので飛ばす");
+        return;
+    }
     {
-        // 知らせの口を止めて (notify のスレッドが読まない)、OS の待ち行列をあふれさせる。
-        // Linux の既定の `max_queued_events` は 16384 で、1 ファイルで 3 つ (作成・変更・書いた後の閉じ) 積む
+        // 知らせの口を止めて (notify のスレッドが読まない)、OS の待ち行列をあふれさせる
         let _held = gate.lock().unwrap_or_else(PoisonError::into_inner);
-        for i in 0..8000 {
+        for i in 0..files {
             fs::write(tmp.0.join(format!("f{i:05}.txt")), b"x").expect("書く");
         }
     }
     wait_for(&rx, "Rescan", |e| {
         e.watch == id && e.kind == FsEventKind::Rescan
     });
+}
+
+/// あふれさせるのに書くファイルの数。あふれさせられないほど待ち行列が長ければ 0。
+fn overflow_files() -> usize {
+    /// 試験で書くファイルの数の上限 (これを超える長さの待ち行列の機械では飛ばす)。
+    const MAX_FILES: usize = 60_000;
+    #[cfg(target_os = "linux")]
+    {
+        let queued: usize = fs::read_to_string("/proc/sys/fs/inotify/max_queued_events")
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(16_384);
+        let n = queued / 2 + 1_000;
+        if n > MAX_FILES { 0 } else { n }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = MAX_FILES;
+        8_000
+    }
+}
+
+/// Windows の入れ子の監視 (親と子のディレクトリの両方): 子の中の保存で、親の監視が子のディレクトリの更新時刻の変化を
+/// 子のパスで届けても、子の監視には `Rescan` も `Lost` も送らない (05 §12.2 の 10)。Linux でも同じ結果になる。
+#[test]
+fn 入れ子の監視で子の中の保存は子に_rescan_を出さない() {
+    let _s = serial();
+    let tmp = Tmp::new("nested");
+    let sub = tmp.0.join("sub");
+    fs::create_dir(&sub).expect("作る");
+    let (mut w, rx) = watcher();
+    let parent = w.watch_dir(&fsp(&tmp.0));
+    started(&rx, parent);
+    let child = w.watch_dir(&fsp(&sub));
+    started(&rx, child);
+    drain_quiet(&rx);
+    // 原子的保存と同じ形 (一時ファイルに書いて改名で置き換える) を何度か
+    for i in 0..3 {
+        let t = sub.join(format!(".a.txt.tmp{i}"));
+        fs::write(&t, format!("v{i}")).expect("書く");
+        fs::rename(&t, sub.join("a.txt")).expect("置き換える");
+    }
+    let seen = wait_for(&rx, "子の Changed", |e| is_changed(e, child, "a.txt"));
+    let seen: Vec<FsEvent> = seen.into_iter().chain(drain_quiet(&rx)).collect();
+    assert!(
+        !seen
+            .iter()
+            .any(|e| e.watch == child && matches!(e.kind, FsEventKind::Rescan | FsEventKind::Lost)),
+        "子の監視に Rescan / Lost を出さない: {seen:?}"
+    );
+}
+
+/// 読むだけの開閉 (`IN_OPEN`・`IN_CLOSE_NOWRITE`) を購読しない (05 §12.2 の 8)。inotify の fd の `fdinfo` の `mask:` で見る。
+#[cfg(target_os = "linux")]
+#[test]
+fn 読むだけの開閉は購読しない() {
+    /// `IN_CLOSE_WRITE`・`IN_CLOSE_NOWRITE`・`IN_OPEN` (`linux/inotify.h`)。
+    const IN_CLOSE_WRITE: u32 = 0x8;
+    const IN_CLOSE_NOWRITE: u32 = 0x10;
+    const IN_OPEN: u32 = 0x20;
+    let _s = serial();
+    let tmp = Tmp::new("mask");
+    let (mut w, rx) = watcher();
+    let id = w.watch_dir(&fsp(&tmp.0));
+    started(&rx, id);
+    let masks: Vec<u32> = fs::read_dir("/proc/self/fd")
+        .expect("/proc/self/fd")
+        .filter_map(Result::ok)
+        .filter(|e| fs::read_link(e.path()).is_ok_and(|l| l.to_string_lossy().contains("inotify")))
+        .filter_map(|e| {
+            fs::read_to_string(format!(
+                "/proc/self/fdinfo/{}",
+                e.file_name().to_string_lossy()
+            ))
+            .ok()
+        })
+        .flat_map(|info| {
+            info.lines()
+                .filter_map(|l| l.split_whitespace().find_map(|f| f.strip_prefix("mask:")))
+                .filter_map(|m| u32::from_str_radix(m, 16).ok())
+                .collect::<Vec<u32>>()
+        })
+        .collect();
+    assert!(!masks.is_empty(), "inotify の監視の mask が読めない");
+    for m in masks {
+        assert_eq!(m & (IN_OPEN | IN_CLOSE_NOWRITE), 0, "mask {m:#x}");
+        assert_ne!(
+            m & IN_CLOSE_WRITE,
+            0,
+            "書いた後の閉じは購読する: mask {m:#x}"
+        );
+    }
 }
 
 /// 後片付け: watcher を手放すと notify のスレッドが止まり、監視のハンドルが閉じる (Windows は監視中のディレクトリの
