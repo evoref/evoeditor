@@ -64,6 +64,8 @@ pub(crate) type UnmappableMarks = (DocumentId, eve_view::Revision, Vec<(usize, u
 pub struct EditorState {
     /// Editor の「今」。Host が各メッセージの処理の前に `tick` で渡した値で、コマンドの実行中に読み直さない。
     pub(crate) now: Tick,
+    /// ファイル監視の状態 (03 §9.5.1。v0.5 の M33)。監視の Port を `jobs` より先に手放す (宣言の順)。
+    pub(crate) watch: crate::io::watch_doc::WatchState,
     /// ジョブの投入口 (`Ports.jobs`)。
     pub(crate) jobs: Rc<dyn JobSpawner>,
     pub(crate) paths: Arc<dyn Paths>,
@@ -340,6 +342,7 @@ impl EditorState {
     pub fn new(caps: Capabilities, jobs: Rc<dyn JobSpawner>, paths: Arc<dyn Paths>) -> EditorState {
         EditorState {
             now: Tick(0),
+            watch: Default::default(),
             jobs,
             paths,
             clipboard: Default::default(),
@@ -494,6 +497,8 @@ impl EditorState {
         }
         // `ui.tab_line` は即時に効く (03 §9.9 の PANE-12 (f))
         self.sync_tab_line();
+        // `file.watch.enabled`・`file.reload_on_external_change` は即時に効く (監視を張る・外す、03 §9.5.1 の WATCH-1)
+        self.watch_reconfigure();
         self.out.needs_render = true;
     }
 

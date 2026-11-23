@@ -459,11 +459,14 @@ pub fn run_job(
                         err: JobError::Cancelled,
                     }
                 } else {
-                    // 未変更の保存の可否と外部変更の確認は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない
+                    // 未変更の保存の可否と外部変更の確認は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない。
+                    // 監視の照合は、読むと呼び戻しが起きるファイル (オンライン専用) では取らない (照合でファイルを呼び戻さない、
+                    // 03 §9.5.1 の WATCH-5)
                     let hash = if matches!(
                         purpose,
                         MetaPurpose::UnchangedSave | MetaPurpose::ExternalCheck
-                    ) {
+                    ) || (*purpose == MetaPurpose::WatchCheck && !meta.offline)
+                    {
                         crate::io::content_hash::hash_file(ports.fs.as_ref(), path, meta.len)
                             .ok()
                             .flatten()
@@ -603,6 +606,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: None,
+            offline: false,
             file_id_unique: false,
         }
     }

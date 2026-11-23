@@ -30,10 +30,11 @@ pub use ui_model::palette::hidden as command_hidden;
 mod search;
 pub use document::eol::build_eol_conversion;
 pub use document::{
-    Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
-    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, PreservedError, PreservedMap, ReadOnlyReason,
-    ReadOnlyReasons, RecordOutcome, StdinDoc, TextFormat, Transaction, TransactionMeta, UndoBudget,
-    UndoGroupHint, UndoHistory, count_long_lines, trim_to_total_budget,
+    Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, ExternalPending,
+    HistoryStep, LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, PreservedError, PreservedMap,
+    ReadOnlyReason, ReadOnlyReasons, RecordOutcome, StdinDoc, TextFormat, Transaction,
+    TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory, count_long_lines,
+    trim_to_total_budget,
 };
 pub use editor::{
     Affinity, ArgValue, Args, Binding, CONFIG_FILE, CONTEXT_VARS, CommandCtx, CommandInvocation,
@@ -75,6 +76,9 @@ pub use io::rescue::{RescueError, RescueOutcome, RescueReason, RescueWriter};
 pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use io::watch::{FileWatcher, FsEvent, FsEventKind, WatchError, WatchId};
+pub use io::watch_doc::{
+    WATCH_RELOAD_MAX_BYTES, WATCH_RELOAD_MIN_INTERVAL, WATCH_SETTLE, WATCH_SETTLE_MAX,
+};
 pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
     JobRequest, JobResult, JobSpawner, JobStep, KnownFileId, MetaPurpose, OpenNotes, Ports,

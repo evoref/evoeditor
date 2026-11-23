@@ -72,7 +72,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "file.save_strategy",
     "file.swap.compact_bytes",
     "file.swap.large_interval_ms",
-    "file.watch.enabled",
     "file.watch.poll_interval_ms",
     "file.write_bom",
     "keys.chord_timeout_ms",

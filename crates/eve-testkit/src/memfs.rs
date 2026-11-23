@@ -88,6 +88,8 @@ struct State {
     specials: BTreeSet<FsPath>,
     /// 呼び戻しの属性を持つファイル (`read_dir` の `offline`)。
     offline: BTreeSet<FsPath>,
+    /// ネットワークの FS とするディレクトリ (`set_network_dir`)。
+    network_dirs: BTreeSet<FsPath>,
     /// 列挙できないディレクトリ (`read_dir` が `PermissionDenied`)。
     unreadable: BTreeSet<FsPath>,
     /// 列挙が途中で失敗するディレクトリと、失敗するまでに返す項目の数 (`read_dir` の `incomplete`)。
@@ -152,6 +154,7 @@ impl MemFs {
                 dirs: BTreeSet::new(),
                 specials: BTreeSet::new(),
                 offline: BTreeSet::new(),
+                network_dirs: BTreeSet::new(),
                 unreadable: BTreeSet::new(),
                 read_dir_fail_after: BTreeMap::new(),
                 links: BTreeMap::new(),
@@ -401,7 +404,14 @@ impl MemFs {
         s.specials.insert(p);
     }
 
-    /// 呼び戻しの属性 (`OneDrive` のオンライン専用など) を付け外しする。`read_dir` の `offline` に出る。
+    /// `dir` の下のファイルを、ネットワークの FS (`FsKind::Network`) の上のものとして `metadata` に出す (監視しない FS の
+    /// 縮退の試験、03 §9.5.1 の WATCH-2)。
+    pub fn set_network_dir(&self, dir: &str) {
+        self.st().network_dirs.insert(FsPath::from(dir));
+    }
+
+    /// 呼び戻しの属性 (`OneDrive` のオンライン専用など) を付け外しする。`read_dir` の `offline` と、ファイルの `metadata` の
+    /// `offline` に出る。
     pub fn set_offline(&self, path: &str, offline: bool) {
         let mut s = self.st();
         let p = FsPath::from(path);
@@ -584,6 +594,7 @@ fn meta_of(e: &Entry) -> FileMeta {
         link: None,
         fs_kind: FsKind::Local,
         owner_is_me: Some(true),
+        offline: false,
         file_id_unique: true,
     }
 }
@@ -599,6 +610,7 @@ fn dir_meta() -> FileMeta {
         link: None,
         fs_kind: FsKind::Local,
         owner_is_me: Some(true),
+        offline: false,
         file_id_unique: false,
     }
 }
@@ -807,8 +819,18 @@ impl FileSystem for MemFs {
         injected(&mut s, FsOp::Metadata)?;
         let path = &link_target(&s, path);
         if let Some(e) = s.files.get(path) {
+            let network = s
+                .network_dirs
+                .iter()
+                .any(|d| path.as_path().starts_with(d.as_path()));
             return Ok(FileMeta {
                 file_id_unique: s.file_id_unique,
+                offline: s.offline.contains(path),
+                fs_kind: if network {
+                    FsKind::Network
+                } else {
+                    FsKind::Local
+                },
                 ..meta_of(e)
             });
         }

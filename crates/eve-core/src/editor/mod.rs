@@ -97,6 +97,7 @@ impl Editor {
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
         let registry = builtin_registry();
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
+        state.set_watcher(ports.watcher.clone());
         state.set_palette_entries(
             registry
                 .iter()
@@ -201,6 +202,7 @@ impl Editor {
         self.state.quit_wait_tick();
         self.state.mouse_tick();
         self.state.finder_tick();
+        self.state.watch_tick();
         if self.keymap.pending().is_empty() {
             self.chord_since = None;
             self.which_key_shown = false;
@@ -232,6 +234,7 @@ impl Editor {
             self.state.quit_wait_deadline(),
             self.state.mouse_deadline(),
             self.state.finder_deadline(),
+            self.state.watch_deadline(),
             self.chord_since
                 .filter(|_| !self.which_key_shown && !self.keymap.pending().is_empty())
                 .map(|t| t + self.which_key_delay()),
@@ -273,12 +276,20 @@ impl Editor {
     /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
     pub fn on_job_result(&mut self, r: crate::jobs::JobOutput) {
         self.state.on_job_result(r);
+        // 延ばした監視の照合を、その文書のジョブが終わったら待たずに積む (03 §9.5.1 の WATCH-5)
+        self.state.watch_resume();
         // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
         self.finish_reload_keymap();
         // ワークスペース層の読込の結果: キーマップのワークスペース層を差し替える (07 §7.4 の WKEY-1。ユーザー層の後)
         self.finish_workspace_keymap();
         self.state.flush_open_switches();
         self.state.sync_tab_line();
+    }
+
+    /// ファイル監視の知らせ (`HostMsg::Fs`、02 §4.4 / §5.4)。登録の結果と、監視しているディレクトリの変化を受け、文書ごとに
+    /// 待ち合わせてから照合する (03 §9.5.1)。I/O はしない。
+    pub fn on_fs_event(&mut self, ev: crate::io::watch::FsEvent) {
+        self.state.on_fs_event(ev);
     }
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
@@ -360,6 +371,17 @@ impl Editor {
         if self.state.window(window).is_none() {
             return;
         }
+        // 表示中の文書を監視で読み直している最中の打鍵: 読込を取り消して印にし、打った文字を読込で捨てない (03 §9.5.1 の
+        // WATCH-6)
+        if matches!(&ev, InputEvent::Key(k) if k.kind != KeyKind::Release)
+            || matches!(ev, InputEvent::Text(_) | InputEvent::Paste(_))
+        {
+            self.state.watch_cancel_reload_on_input();
+        }
+        // 待っている貼り付けの応答も同じ (貼り付けの内容を読込で捨てない)
+        if let InputEvent::ClipboardContent { token, .. } = &ev {
+            self.state.watch_cancel_reload_on_paste(*token);
+        }
         match ev {
             InputEvent::Key(k) => {
                 if k.kind != KeyKind::Release {
@@ -412,6 +434,8 @@ impl Editor {
             InputEvent::CapabilitiesChanged(caps) => self.set_caps(caps),
             // フォーカス復帰: 表示中の文書の外部変更を確かめる (03 §9.5)
             InputEvent::Focus(true) => self.state.on_focus_gained(),
+            // フォーカスを失った: 延ばしたフォーカス復帰の確かめを捨てる (03 §9.5.1 の WATCH-8 の (b))
+            InputEvent::Focus(false) => self.state.watch_focus_lost(),
             // システムクリップボードの読み取りの応答。最後の要求の token と違えば捨てる
             InputEvent::ClipboardContent { token, text } => {
                 self.state.on_clipboard_content(token, text);

@@ -79,6 +79,7 @@ fn main() {
     )
     .expect("ワーカースレッドを起動できる");
     let ports = Ports {
+        watcher: None,
         fs: fs.clone(),
         clock,
         jobs: Rc::new(jobs),

@@ -188,6 +188,7 @@ impl EditorState {
 
     /// 再読込の適用 (03 §9.5 手順 5): 新しい内容を全置換の `Origin::Reload` の Transaction として適用する。
     /// 書式と読み取り専用の理由は本文と一緒に差し替え、前後の値を Undo ノードに持たせる (Undo で一緒に戻る)。
+    /// `watch` はファイル監視からの再読込 (完了の知らせを `info.external.reloaded` にする、03 §9.5.1 の WATCH-6)。
     #[allow(clippy::too_many_arguments)] // 読込の結果 (JobResult::Complete) をそのまま受ける
     pub(crate) fn apply_reload(
         &mut self,
@@ -200,6 +201,7 @@ impl EditorState {
         stamp: crate::io::fs::FileStamp,
         detected: crate::document::ReadOnlyReasons,
         read_only_requested: bool,
+        watch: bool,
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ChangeSet, InsertText, Op, Selection, TextRead};
@@ -285,10 +287,20 @@ impl EditorState {
             .is_some_and(|d| !d.read_only.is_empty());
         let key = if read_only {
             keys::INFO_RELOAD_DONE_READ_ONLY
+        } else if watch {
+            keys::INFO_EXTERNAL_RELOADED
         } else {
             keys::INFO_RELOAD_DONE
         };
-        self.show_message(MessageLevel::Info, key, &[("path", &path.display())]);
+        let name = path.file_name().unwrap_or_default();
+        let args = [("path", path.display()), ("name", name)];
+        let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        if watch {
+            // 監視の読み直しの知らせは、表示中の警告・エラーを置き換えない (03 §9.5.1 の WATCH-7)
+            self.show_watch_message(key, &args);
+        } else {
+            self.show_message(MessageLevel::Info, key, &args);
+        }
     }
 
     /// 開き直しの取消し・失敗: 旧本文・書式・履歴をそのまま保って `Ready` に戻す。
@@ -297,6 +309,9 @@ impl EditorState {
             d.load_state = crate::document::LoadState::Ready;
         }
         self.mark_dirty_render();
+        // 横断検索の結果から、この文書へ移ろうとしていた: 旧本文に戻って `Ready` になったので移る (03 §12.7.5 の段 7 の
+        // 細目 (11)。監視の読み直しの取消し・開く前の確認の中止など、旧本文に戻すどの経路でも残さない)
+        self.finish_ws_jump(doc);
     }
 
     pub(crate) fn finish_reopen(
@@ -308,11 +323,17 @@ impl EditorState {
         kind: OpenKind,
         r: JobResult,
     ) {
+        if kind == OpenKind::WatchReload {
+            self.finish_watch_reload(doc_id, view, path, r);
+            self.finish_ws_jump(doc_id);
+            return;
+        }
         match r {
             JobResult::Complete {
                 text,
                 format,
                 preserved,
+                meta,
                 stamp,
                 changed_during_load,
                 detected,
@@ -328,7 +349,11 @@ impl EditorState {
                     stamp,
                     detected,
                     opts.read_only_requested,
+                    false,
                 );
+                // 再読込した: 監視があることを確かめる (03 §9.5.1 の WATCH-1)
+                self.watch_note_fs(doc_id, meta.fs_kind);
+                self.watch_sync_doc(doc_id);
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
@@ -341,6 +366,7 @@ impl EditorState {
                 text,
                 format,
                 preserved,
+                meta,
                 stamp,
                 changed_during_load,
                 detected,
@@ -360,6 +386,8 @@ impl EditorState {
                 self.reset_views_of(doc_id);
                 self.mark_snapshot_update(doc_id);
                 self.mark_dirty_render();
+                self.watch_note_fs(doc_id, meta.fs_kind);
+                self.watch_sync_doc(doc_id);
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,

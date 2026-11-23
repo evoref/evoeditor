@@ -54,6 +54,7 @@ fn utf8_で表せない名前のファイルを選んで開く() {
     });
     let mut editor = Editor::new(
         Ports {
+            watcher: None,
             fs,
             clock: Arc::new(clock),
             jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,

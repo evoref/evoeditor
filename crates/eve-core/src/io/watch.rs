@@ -18,6 +18,9 @@ use super::fspath::FsPath;
 pub struct WatchId(pub u64);
 
 /// ファイル監視の Port (02 §4.4)。メインスレッドから呼ぶ。どのメソッドも要求を積むだけで、OS を呼ばない。
+///
+/// `JobSpawner` と同じく、メソッドは `&self` で、識別の採番は内部可変性で行う (core は `Ports.watcher` の
+/// `Rc<dyn FileWatcher>` を複製して持つ。M33 の段 8)。
 pub trait FileWatcher {
     /// ディレクトリ `dir` を非再帰で監視する要求を積み、要求の識別を返す。
     ///
@@ -33,10 +36,10 @@ pub trait FileWatcher {
     /// - `Started` の後に `Lost` が届いたら、その監視は失効している (登録の直後にディレクトリが消えたときは、`Started` の
     ///   後にもう一度 `Lost` を送る)。
     /// - 終了の後 (Host の `io` のキューが閉じた後) の要求には、結果が届かない。
-    fn watch_dir(&mut self, dir: &FsPath) -> WatchId;
+    fn watch_dir(&self, dir: &FsPath) -> WatchId;
 
     /// 監視を外す要求を積む。結果は送らない。外した後に届いた知らせは、呼び出し側が捨てる。
-    fn unwatch(&mut self, id: WatchId);
+    fn unwatch(&self, id: WatchId);
 }
 
 /// 監視の知らせ (`HostMsg::Fs` の中身)。

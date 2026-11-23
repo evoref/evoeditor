@@ -32,6 +32,7 @@ impl Scene {
         };
         let jobs = ManualJobSpawner::new(jp);
         let ports = Ports {
+            watcher: None,
             fs,
             clock: Arc::new(clock),
             jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,

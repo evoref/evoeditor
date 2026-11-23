@@ -16,8 +16,8 @@ pub(crate) mod preserved;
 mod transaction;
 
 pub use doc::{
-    Applied, AppliedTx, ApplyError, DisplaySettings, DocLanguage, Document, IndentSettings,
-    StdinDoc,
+    Applied, AppliedTx, ApplyError, DisplaySettings, DocLanguage, Document, ExternalPending,
+    IndentSettings, StdinDoc,
 };
 pub(crate) use format::count_escape_chars;
 pub use format::{

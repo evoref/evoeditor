@@ -40,6 +40,7 @@ fn 実スレッドで開き_編集し_保存して_終了する() {
     let (tx, rx) = channel();
     let spawner = ThreadJobSpawner::new(jp, tx.clone()).unwrap();
     let ports = Ports {
+        watcher: None,
         fs: fs.clone(),
         clock,
         jobs: std::rc::Rc::new(spawner),

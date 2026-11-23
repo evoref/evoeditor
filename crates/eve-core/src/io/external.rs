@@ -27,6 +27,13 @@ impl EditorState {
         {
             return;
         }
+        // その文書のジョブ (監視の照合など) の間は、終わってから確かめ直す (黙って飛ばさない。03 §9.5.1 の WATCH-8 の (b))
+        if let Some(doc) = self.active_document()
+            && self.doc_has_job(doc)
+        {
+            self.defer_focus_check(doc);
+            return;
+        }
         self.start_external_check(false);
     }
 
@@ -35,13 +42,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let busy = self.io.pending.values().any(|p| {
-            matches!(p,
-                Pending::Open { doc, .. }
-                | Pending::Save { doc, .. }
-                | Pending::CheckUnchanged { doc }
-                | Pending::ExternalCheck { doc, .. } if *doc == doc_id)
-        });
+        let busy = self.doc_has_job(doc_id);
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -94,6 +95,10 @@ impl EditorState {
         match r {
             JobResult::Meta { stamp, .. } => {
                 if disk.is_some_and(|d| same_on_disk(&d, &stamp)) {
+                    // 監視の印は外す (元の内容に戻された、03 §9.5.1 の WATCH-6)
+                    if let Some(d) = self.docs.documents.get_mut(&doc_id) {
+                        d.external_pending = None;
+                    }
                     if explicit {
                         self.show_message(
                             MessageLevel::Info,
@@ -189,6 +194,13 @@ impl EditorState {
         }
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.external_seen = Some(stamp);
+            // 監視の印は、尋ねた変更のものだけを外す (尋ねている間に届いた新しい変更の印は残す、WATCH-8)
+            // (オンライン専用のファイルの監視の照合は内容ハッシュを持たないので、`same_on_disk` で比べる)
+            if matches!(d.external_pending,
+                Some(crate::document::ExternalPending::Modified(s)) if same_on_disk(&s, &stamp))
+            {
+                d.external_pending = None;
+            }
         }
         CommandResult::Done
     }
@@ -206,6 +218,7 @@ impl EditorState {
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.disk_stamp = None;
             d.external_seen = None;
+            d.external_pending = None;
         }
         CommandResult::Done
     }
