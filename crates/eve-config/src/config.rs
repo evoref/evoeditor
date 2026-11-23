@@ -238,7 +238,9 @@ macro_rules! config_enum {
                 }
             }
 
-            pub(crate) fn name(self) -> &'static str {
+            /// 設定ファイルに書く値。
+            #[must_use]
+            pub fn name(self) -> &'static str {
                 match self {
                     $($ty::$var => $name,)*
                 }

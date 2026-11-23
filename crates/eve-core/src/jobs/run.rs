@@ -461,7 +461,7 @@ fn read_config_file(fs: &dyn crate::io::fs::FileSystem, path: &FsPath) -> Config
     let mut r = match fs.open_read(path) {
         Ok(r) => r,
         Err(e) if e.kind == crate::io::fs::FsErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(format!("{:?}", e.kind)),
+        Err(e) => return Err(crate::io::languages::fs_reason(&e)),
     };
     let mut out = Vec::new();
     loop {

@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (990 件)。
+/// `locales/en.toml` の文言 (996 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -480,14 +480,20 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.language.bad_first_line.text"), B("The regular expression {value} of {item} is invalid ({reason})")),
     (B("msg.language.bad_glob.hint"), B("Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This glob is not used")),
     (B("msg.language.bad_glob.text"), B("The glob {value} of {item} is too complex")),
+    (B("msg.language.dir_unreadable.hint"), B("Check the permissions of the folder. Language files are not read; other settings are used")),
+    (B("msg.language.dir_unreadable.text"), B("Cannot read languages/ ({reason})")),
     (B("msg.language.file_too_large.hint"), B("Keep it at 256 KiB or less")),
     (B("msg.language.file_too_large.text"), B("This language definition file is too large and is not read")),
+    (B("msg.language.file_type_dot.hint"), B("Write file_types without the leading . (rs). This value never matches")),
+    (B("msg.language.file_type_dot.text"), B("{value} in {item} starts with .")),
     (B("msg.language.invalid_name.hint"), B("Use lowercase letters, digits, _, + and - (up to 32; plain is reserved)")),
     (B("msg.language.invalid_name.text"), B("Language name {value} is invalid")),
     (B("msg.language.missing_name.hint"), B("Write the language name, as in name = \"rust\". This definition is not used")),
     (B("msg.language.missing_name.text"), B("The language definition has no name")),
     (B("msg.language.too_long.hint"), B("display_name is up to 64 characters, first_line and array items up to 256 bytes, and arrays up to 64 items. This item is not used")),
     (B("msg.language.too_long.text"), B("{item} is too long")),
+    (B("msg.language.too_many_definitions.hint"), B("The definitions beyond the limit are not used")),
+    (B("msg.language.too_many_definitions.text"), B("There are more than {count} language definitions")),
     (B("msg.language.too_many_files.hint"), B("The first {count} files in name order are read; the rest are not")),
     (B("msg.language.too_many_files.text"), B("languages/ has more than {count} language definition files")),
     (B("msg.leftover.failed.hint"), B("Check the path and permissions")),
@@ -1003,7 +1009,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (990 件)。
+/// `locales/ja.toml` の文言 (996 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1475,14 +1481,20 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.language.bad_first_line.text"), B("{item} の正規表現 {value} を組めません ({reason})")),
     (B("msg.language.bad_glob.hint"), B("{{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。この glob は使いません")),
     (B("msg.language.bad_glob.text"), B("{item} の glob {value} は複雑すぎます")),
+    (B("msg.language.dir_unreadable.hint"), B("フォルダの権限を確かめてください。言語定義のファイルは読まず、ほかの設定は使います")),
+    (B("msg.language.dir_unreadable.text"), B("languages/ を読めません ({reason})")),
     (B("msg.language.file_too_large.hint"), B("256 KiB 以下にしてください")),
     (B("msg.language.file_too_large.text"), B("この言語定義のファイルは大きすぎるため読みません")),
+    (B("msg.language.file_type_dot.hint"), B("file_types は先頭の . を付けずに書いてください (rs)。この値は当たりません")),
+    (B("msg.language.file_type_dot.text"), B("{item} の {value} は . で始まっています")),
     (B("msg.language.invalid_name.hint"), B("英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません)")),
     (B("msg.language.invalid_name.text"), B("言語の名前 {value} は使えません")),
     (B("msg.language.missing_name.hint"), B("name = \"rust\" のように言語の名前を書いてください。この定義は使いません")),
     (B("msg.language.missing_name.text"), B("言語定義に name がありません")),
     (B("msg.language.too_long.hint"), B("display_name は 64 文字、first_line と配列の要素は 256 バイト、配列は 64 個までです。この項目は使いません")),
     (B("msg.language.too_long.text"), B("{item} が長すぎます")),
+    (B("msg.language.too_many_definitions.hint"), B("超えた分の定義は使いません")),
+    (B("msg.language.too_many_definitions.text"), B("言語定義が {count} 個を超えています")),
     (B("msg.language.too_many_files.hint"), B("名前の順で {count} 個までを読みます。残りは読みません")),
     (B("msg.language.too_many_files.text"), B("languages/ の言語定義のファイルが {count} 個を超えています")),
     (B("msg.leftover.failed.hint"), B("パスと権限を確認してください")),

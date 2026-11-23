@@ -93,7 +93,7 @@ impl EditorState {
                         Some((v.indent_width.value.to_string(), &v.indent_width.origin))
                     }
                     "editor.indent_unit" => Some((
-                        format!("\"{}\"", indent_unit_name(v.indent_unit.value)),
+                        format!("\"{}\"", v.indent_unit.value.name()),
                         &v.indent_unit.origin,
                     )),
                     _ => None,
@@ -260,14 +260,6 @@ impl EditorState {
             footer: cell_text(&footer, CutPolicy::Never),
             no_match: cell_text(&render(keys::UI_CONFIG_SHOW_NO_MATCH, &[]), CutPolicy::End),
         }
-    }
-}
-
-/// `editor.indent_unit` の値の表記 (設定ファイルの値)。
-fn indent_unit_name(u: eve_config::IndentUnit) -> &'static str {
-    match u {
-        eve_config::IndentUnit::Tab => "tab",
-        eve_config::IndentUnit::Space => "space",
     }
 }
 

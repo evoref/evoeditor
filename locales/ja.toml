@@ -957,6 +957,18 @@ text = "{item} の正規表現 {value} を組めません ({reason})"
 hint = "{{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。この glob は使いません"
 text = "{item} の glob {value} は複雑すぎます"
 
+[msg.language.dir_unreadable]
+hint = "フォルダの権限を確かめてください。言語定義のファイルは読まず、ほかの設定は使います"
+text = "languages/ を読めません ({reason})"
+
+[msg.language.file_type_dot]
+hint = "file_types は先頭の . を付けずに書いてください (rs)。この値は当たりません"
+text = "{item} の {value} は . で始まっています"
+
+[msg.language.too_many_definitions]
+hint = "超えた分の定義は使いません"
+text = "言語定義が {count} 個を超えています"
+
 [msg.language.file_too_large]
 hint = "256 KiB 以下にしてください"
 text = "この言語定義のファイルは大きすぎるため読みません"

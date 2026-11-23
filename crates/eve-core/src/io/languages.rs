@@ -31,14 +31,28 @@ fn whole(severity: Severity, kind: DiagKind, value: String) -> Diagnostic {
 }
 
 /// `dir` の言語定義のファイルを名前の順に読む。戻り値は (定義 (読んだ順), 表示名ごとの診断)。ディレクトリが無ければ空。
+/// ディレクトリを読めない (権限など) ときは `languages/` の名前で 1 件の警告にする (FR-703。ほかの設定は使う)。
 pub fn read_language_dir(
     fs: &dyn FileSystem,
     dir: &FsPath,
 ) -> (Vec<LanguageDef>, Vec<(String, Vec<Diagnostic>)>) {
-    let mut names = list_toml(fs, dir);
-    names.sort();
     let mut defs = Vec::new();
     let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
+    let mut names = match list_toml(fs, dir) {
+        Ok(n) => n,
+        Err(reason) => {
+            reports.push((
+                LANGUAGES_PREFIX.to_owned(),
+                vec![whole(
+                    Severity::Warning,
+                    DiagKind::Language(LanguageProblem::DirUnreadable),
+                    reason,
+                )],
+            ));
+            return (defs, reports);
+        }
+    };
+    names.sort();
     let mut read = 0usize;
     for (name, known) in &names {
         let path = dir.join(name);
@@ -48,13 +62,15 @@ pub fn read_language_dir(
             Some(len) => (FileKind::File, *len),
             None => match fs.metadata(&path) {
                 Ok(m) => (m.kind, m.len),
+                // 壊れたシンボリックリンク (Emacs の `.#x.toml` など) と、列挙の後に消えたファイルは読み飛ばす
+                Err(e) if e.kind == FsErrorKind::NotFound => continue,
                 Err(e) => {
                     reports.push((
                         shown,
                         vec![whole(
                             Severity::Error,
                             DiagKind::Syntax {
-                                message: format!("{:?}", e.kind),
+                                message: fs_reason(&e),
                             },
                             String::new(),
                         )],
@@ -118,32 +134,52 @@ const LIST_MAX_ENTRIES: usize = 4_096;
 
 /// `dir` の `*.toml` の (名前, 列挙で分かった大きさ)。大きさは、列挙で通常のファイルとその大きさが分かったとき (Windows) だけ。
 /// ディレクトリ・FIFO などは除き、シンボリックリンクと大きさの分からないものは `None` (呼び側が `metadata` で辿る)。列挙を
-/// 実装していない Port は名前の一覧で代える。無ければ空。
-fn list_toml(fs: &dyn FileSystem, dir: &FsPath) -> Vec<(String, Option<u64>)> {
+/// 実装していない Port は名前の一覧で代える。無ければ空。読めなければ理由。
+fn list_toml(fs: &dyn FileSystem, dir: &FsPath) -> Result<Vec<(String, Option<u64>)>, String> {
     let toml = |n: &str| n.ends_with(".toml");
-    match fs.read_dir(dir, LIST_MAX_ENTRIES) {
-        Ok(listing) => listing
-            .entries
-            .into_iter()
-            .filter_map(|e| {
-                let name = e.name.to_str()?.to_owned();
-                let known = match e.kind {
-                    EntryKind::File => e.len,
-                    EntryKind::Symlink => None,
-                    EntryKind::Dir | EntryKind::Other => return None,
-                };
-                toml(&name).then_some((name, known))
-            })
-            .collect(),
-        Err(e) if e.kind == FsErrorKind::Unsupported => fs
-            .list_dir_names(dir)
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|n| toml(n))
-            .map(|n| (n, None))
-            .collect(),
-        Err(_) => Vec::new(),
+    let listing = match fs.read_dir(dir, LIST_MAX_ENTRIES) {
+        Ok(listing) => listing,
+        Err(e) if e.kind == FsErrorKind::Unsupported => {
+            return match fs.list_dir_names(dir) {
+                Ok(names) => Ok(names
+                    .into_iter()
+                    .filter(|n| toml(n))
+                    .map(|n| (n, None))
+                    .collect()),
+                Err(e) if e.kind == FsErrorKind::NotFound => Ok(Vec::new()),
+                Err(e) => Err(fs_reason(&e)),
+            };
+        }
+        Err(e) if e.kind == FsErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(fs_reason(&e)),
+    };
+    Ok(listing
+        .entries
+        .into_iter()
+        .filter_map(|e| {
+            let name = e.name.to_str()?.to_owned();
+            let known = match e.kind {
+                EntryKind::File => e.len,
+                EntryKind::Symlink => None,
+                EntryKind::Dir | EntryKind::Other => return None,
+            };
+            toml(&name).then_some((name, known))
+        })
+        .collect())
+}
+
+/// ファイルを読めなかった理由の短い英語 (`permission denied` など。診断の `{reason}` とログに出す。設定ファイルの読めない
+/// 理由 (`config.reload`) と同じ書き方)。
+pub(crate) fn fs_reason(e: &crate::io::fs::FsError) -> String {
+    let name = format!("{:?}", e.kind);
+    let mut out = String::with_capacity(name.len() + 4);
+    for (i, c) in name.chars().enumerate() {
+        if c.is_ascii_uppercase() && i > 0 {
+            out.push(' ');
+        }
+        out.push(c.to_ascii_lowercase());
     }
+    out
 }
 
 /// 1 ファイルを上限まで読み、UTF-8 の文字列にする。
@@ -151,7 +187,7 @@ fn read_limited(fs: &dyn FileSystem, path: &FsPath) -> Result<String, String> {
     let mut r = match fs.open_read(path) {
         Ok(r) => r,
         Err(e) if e.kind == FsErrorKind::NotFound => return Ok(String::new()),
-        Err(e) => return Err(format!("{:?}", e.kind)),
+        Err(e) => return Err(fs_reason(&e)),
     };
     let mut out = Vec::new();
     loop {
@@ -163,7 +199,8 @@ fn read_limited(fs: &dyn FileSystem, path: &FsPath) -> Result<String, String> {
                 }
             }
             Ok(None) => break,
-            Err(e) => return Err(format!("{e:?}")),
+            Err(crate::io::fs::ChunkError::Io(e)) => return Err(fs_reason(&e)),
+            Err(_) => return Err("read failed".to_owned()),
         }
     }
     String::from_utf8(out).map_err(|_| "not valid UTF-8".to_owned())

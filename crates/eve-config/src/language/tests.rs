@@ -453,3 +453,112 @@ proptest! {
         prop_assert_eq!(matches!(v.indent_unit.origin, ValueOrigin::Language { .. }), from_lang);
     }
 }
+
+// verifies: AC-FR-704-1
+#[test]
+fn 同じ層の後の定義は書いた順で決まり_ファイルをまたいで組込みを拡張しても同じ() {
+    // a.toml で新しい言語 tmpl に tpl を、後の b.toml で組込みの html に tpl を足す。書いた順で後の html が勝つ
+    let (a, _) = load_language_str(
+        "languages/a.toml",
+        "[[language]]\nname = \"tmpl\"\nfile_types = [\"tpl\"]\n",
+    );
+    let (b, _) = load_language_str(
+        "languages/b.toml",
+        "[[language]]\nname = \"html\"\n\"file_types+\" = [\"tpl\"]\n",
+    );
+    let all: Vec<LanguageDef> = a.into_iter().chain(b).collect();
+    let (set, _) = LanguageSet::build(&all);
+    let r = set.detect(&DetectInput {
+        file_name: Some("x.tpl"),
+        ..DetectInput::default()
+    });
+    assert_eq!(r.language.map(Language::name), Some("html"));
+    let amb = r.ambiguous.expect("知らせる");
+    assert_eq!((amb.first.as_str(), amb.second.as_str()), ("tmpl", "html"));
+    // 逆の順なら tmpl
+    let (b2, _) = load_language_str(
+        "languages/a.toml",
+        "[[language]]\nname = \"html\"\n\"file_types+\" = [\"tpl\"]\n",
+    );
+    let (a2, _) = load_language_str(
+        "languages/b.toml",
+        "[[language]]\nname = \"tmpl\"\nfile_types = [\"tpl\"]\n",
+    );
+    let all: Vec<LanguageDef> = b2.into_iter().chain(a2).collect();
+    let (set, _) = LanguageSet::build(&all);
+    assert_eq!(detect(&set, "x.tpl"), Some("tmpl"));
+}
+
+#[test]
+fn 組めない先頭行は正規表現を組む前と後で同じ判定になる() {
+    // 行頭の `@x` が合わない行でも、下の層 (組込みの python) が当たるなら、組めない上の層の値は使わずに python
+    let (set, _) = LanguageSet::build(&defs(
+        "[[language]]\nname = \"python\"\nfirst_line = \"^@x(\"\n",
+    ));
+    let d = |set: &LanguageSet| {
+        set.detect(&DetectInput {
+            file_name: None,
+            rel_path: None,
+            first_line: Some("#!/usr/bin/env python3"),
+        })
+        .language
+        .map(Language::name)
+        .map(str::to_owned)
+    };
+    let before = d(&set);
+    let reports = set.precompile();
+    assert_eq!(reports.len(), 1, "{reports:?}");
+    assert_eq!(before, d(&set));
+    assert_eq!(before.as_deref(), Some("python"));
+}
+
+#[test]
+fn 上の層に隠れた組めない先頭行も警告する() {
+    let (set, _) = LanguageSet::build(&defs(
+        "[[language]]\nname = \"x\"\nfirst_line = \"(\"\n[[language]]\nname = \"x\"\nfirst_line = \"^ok\"\n",
+    ));
+    let reports = set.precompile();
+    let lines: Vec<u32> = reports
+        .iter()
+        .flat_map(|(_, ds)| ds.iter().map(|d| d.line))
+        .collect();
+    assert_eq!(lines, [3], "{reports:?}");
+}
+
+#[test]
+fn auto_と_plain_は言語の名前に使えない() {
+    assert!(!is_language_name("auto"));
+    assert!(!is_language_name("plain"));
+    assert!(is_language_name("autox"));
+}
+
+#[test]
+fn 定義の数の上限を超えた分は使わずに_1_件警告する() {
+    let text: String = (0..LANGUAGE_DEFS_MAX + 2)
+        .map(|i| format!("[[language]]\nname = \"l{i}\"\nfile_types = [\"e{i}\"]\n"))
+        .collect();
+    let (d, diags) = load_language_str("languages/a.toml", &text);
+    assert!(diags.is_empty(), "{diags:?}");
+    let (set, reports) = LanguageSet::build(&d);
+    assert_eq!(reports.len(), 1);
+    assert_eq!(
+        reports[0].1.iter().map(|x| &x.kind).collect::<Vec<_>>(),
+        [&DiagKind::Language(LanguageProblem::TooManyDefinitions)]
+    );
+    assert_eq!(detect(&set, "a.e255"), Some("l255"));
+    assert_eq!(detect(&set, "a.e256"), None, "上限を超えた定義は使わない");
+}
+
+#[test]
+fn 拡張子に先頭の点を書くと警告する() {
+    let (d, diags) = load_language_str(
+        "languages/a.toml",
+        "[[language]]\nname = \"x\"\nfile_types = [\"x1\", \".x2\"]\n",
+    );
+    assert_eq!(diags.len(), 1);
+    assert_eq!(
+        (&diags[0].kind, diags[0].value.as_str(), diags[0].line),
+        (&DiagKind::Language(LanguageProblem::FileTypeDot), ".x2", 3)
+    );
+    assert_eq!(d.len(), 1, "定義は使う");
+}

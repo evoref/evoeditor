@@ -38,10 +38,10 @@ pub use config::{
 };
 pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use language::{
-    Ambiguity, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection, DocValue, DocValues,
-    FIRST_LINE_BYTES, LangOrigin, LangValue, Language, LanguageDef, LanguageLayer, LanguageProblem,
-    LanguageSet, ListValue, PLAIN, ValueOrigin, doc_values, first_line_of, is_language_name,
-    precompile_builtin,
+    AUTO, Ambiguity, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection, DocValue,
+    DocValues, FIRST_LINE_BYTES, LANGUAGE_DEFS_MAX, LangOrigin, LangValue, Language, LanguageDef,
+    LanguageLayer, LanguageProblem, LanguageSet, ListValue, PLAIN, ValueOrigin, doc_values,
+    first_line_of, is_language_name, precompile_builtin,
 };
 pub use layers::{
     KeyOrigin, Origin, Origins, Resolved, SET_SOURCE, Source, check_ui_locale, declared, dump,

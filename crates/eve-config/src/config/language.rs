@@ -173,6 +173,21 @@ impl Cx<'_> {
                     let Some(items) = self.string_list(&full, v) else {
                         continue;
                     };
+                    // 拡張子に先頭の `.` を書いた (`.rs`): 当たらないので知らせる (値は書いたとおり使う)
+                    if key.starts_with("file_types")
+                        && let Some(dot) = items.iter().find(|t| t.starts_with('.'))
+                    {
+                        let dot = dot.clone();
+                        self.diag(
+                            Severity::Warning,
+                            DiagKind::Language(LanguageProblem::FileTypeDot),
+                            full.clone(),
+                            v.span().start,
+                        );
+                        if let Some(d) = self.out.diagnostics.last_mut() {
+                            d.value = dot;
+                        }
+                    }
                     let value = Some(self.lang_value(items, kat));
                     let list: &mut ListValue = match key.trim_end_matches('+') {
                         "file_types" => &mut def.file_types,

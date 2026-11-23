@@ -23,7 +23,7 @@ pub(crate) enum Pending {
     ThemeRead,
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
     LanguagesRead { startup: bool },
-    /// 組込みの言語定義の正規表現を組むジョブ (結果は使わない)。
+    /// 言語定義の `first_line` の正規表現を組むジョブ (結果の組めない値を警告する、07 §9.6 の段 2 の細目)。
     LanguagesPrecompile,
     Open {
         doc: DocumentId,

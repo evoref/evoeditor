@@ -26,7 +26,7 @@ use crate::ui_model::overlay::Overlay;
 use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};
 
 /// `lang.set` の引数の値のうち、明示の指定を外して判定し直すもの (LANG-8)。
-pub(crate) const LANG_AUTO: &str = "auto";
+pub(crate) const LANG_AUTO: &str = eve_config::AUTO;
 
 impl EditorState {
     /// 言語定義の集まり (組込みにユーザー層を重ねたもの)。

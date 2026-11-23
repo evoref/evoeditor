@@ -8,6 +8,7 @@
 //! する。それより先に判定で要れば、使うときに 1 回だけ組む (組込みの定義の正規表現はプロセスで共有する)。行頭に要る文字列で
 //! 始まらない行には正規表現を当てない (組まずに済む)。
 
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -19,6 +20,12 @@ use crate::{DiagKind, Diagnostic, Severity};
 
 /// 判定の行き先 (どの定義にも当たらない文書の言語。定義できない、LANG-3)。
 pub const PLAIN: &str = "plain";
+
+/// `lang.set` の「自動で判定」の値 (言語の名前に使えない、LANG-3)。
+pub const AUTO: &str = "auto";
+
+/// 1 つの層の定義の数の上限 (LANG-3)。超えた分は使わずに 1 件警告する。
+pub const LANGUAGE_DEFS_MAX: usize = 256;
 
 /// `first_line` を当てる、文書の先頭の大きさ (LANG-6 (c))。
 pub const FIRST_LINE_BYTES: usize = 1_024;
@@ -227,9 +234,15 @@ pub enum LanguageProblem {
     BadComment,
     /// `first_line` の正規表現を組めない。その項目を使わない。
     BadFirstLine {
-        /// 組めない理由 (`regex` の説明の 1 行目)。
+        /// 組めない理由 (`regex` の説明の最後の行)。
         reason: String,
     },
+    /// `file_types` の値が `.` で始まる (`.rs`。拡張子は `.` を書かない)。その値は当たらないので警告する (使うのは変えない)。
+    FileTypeDot,
+    /// 1 つの層の定義が [`LANGUAGE_DEFS_MAX`] を超えた。超えた分を使わない。`Diagnostic.value` は上限の数。
+    TooManyDefinitions,
+    /// `languages/` を読めない (権限など)。`Diagnostic.value` は理由。
+    DirUnreadable,
     /// `file_globs` の glob が資源の上限を超えた (07 §10.3 の EC-4)。その glob を使わない。
     BadGlob,
     /// 同じ層の 2 つの言語がファイルに当たった (LANG-6 (d)。後の定義を使う)。`Diagnostic.value` は文書のファイル名。
@@ -256,6 +269,9 @@ impl LanguageProblem {
             LanguageProblem::BadComment => "bad_comment",
             LanguageProblem::BadFirstLine { .. } => "bad_first_line",
             LanguageProblem::BadGlob => "bad_glob",
+            LanguageProblem::FileTypeDot => "file_type_dot",
+            LanguageProblem::TooManyDefinitions => "too_many_definitions",
+            LanguageProblem::DirUnreadable => "dir_unreadable",
             LanguageProblem::Ambiguous { .. } => "ambiguous",
             LanguageProblem::TooManyFiles => "too_many_files",
             LanguageProblem::FileTooLarge => "file_too_large",
@@ -348,6 +364,9 @@ struct Pattern {
     /// ASCII の小文字にしたもの (照らす、LANG-6 (a))。
     lower: String,
     layer: LanguageLayer,
+    /// 重ねた定義の通し番号 (組込みは 0、ユーザー層は書いた順に 1 から)。同じ層で 2 つの言語が当たったら大きいほうが勝つ
+    /// (07 §9.2 の 2、LANG-6 (d) の「後の定義」)。
+    seq: usize,
     origin: LangOrigin,
 }
 
@@ -382,6 +401,8 @@ struct FirstLine {
     /// 行頭に要る文字列 (`^#!.*` の `#!`)。これで始まらない行には正規表現を当てない (組まずに済む)。
     prefix: String,
     layer: LanguageLayer,
+    /// 重ねた定義の通し番号 ([`Pattern::seq`] と同じ)。
+    seq: usize,
     origin: LangOrigin,
     compiled: Compiled,
     /// 下の層の値 (この正規表現を組めなかったときに使う、LANG-4 / FR-703)。
@@ -391,7 +412,7 @@ struct FirstLine {
 impl FirstLine {
     fn new(
         source: &str,
-        layer: LanguageLayer,
+        (layer, seq): (LanguageLayer, usize),
         origin: LangOrigin,
         compiled: Compiled,
     ) -> FirstLine {
@@ -399,25 +420,27 @@ impl FirstLine {
             source: source.to_owned(),
             prefix: anchored_prefix(source),
             layer,
+            seq,
             origin,
             compiled,
             fallback: None,
         }
     }
 
-    /// `line` に当たれば、当たった値 (この層か、組めなかったときの下の層)。行頭に要る文字列で始まらない行は、正規表現を
-    /// 組まずに外れとする (まだ組んでいない正規表現は、組めるとみなす)。
+    /// `line` に当たれば、当たった値 (この層か、組めなかったときの下の層)。行頭に要る文字列で始まらない行には、この層の
+    /// 正規表現は当たらない。そのときも、組めるかどうかで結果が変わる (組めなければ下の層の値を使う) のは下の層の値が当たる
+    /// ときだけなので、そのときだけ組んで決める (正規表現を組むジョブの前と後で判定を変えない、LANG-7)。
     fn matching(&self, line: &str) -> Option<&FirstLine> {
-        let failed = match &self.compiled {
-            Compiled::User(cell) => cell.get().is_some_and(Result::is_err),
-            Compiled::Builtin(_) => false,
-        };
-        if !failed && !line.starts_with(&self.prefix) {
-            return None;
+        let below = || self.fallback.as_deref().and_then(|f| f.matching(line));
+        if !line.starts_with(&self.prefix) {
+            return match below() {
+                Some(hit) if self.regex().is_none() => Some(hit),
+                _ => None,
+            };
         }
         match self.regex() {
             Some(r) => r.is_match(line).then_some(self),
-            None => self.fallback.as_deref().and_then(|f| f.matching(line)),
+            None => below(),
         }
     }
 
@@ -433,16 +456,16 @@ impl FirstLine {
         }
     }
 
-    /// 正規表現を組み (下の層の値も)、組めなかったユーザー層の値の理由を `out` に足す。
+    /// 正規表現を組み (上の層に隠れた下の層の値も)、組めなかったユーザー層の値の理由をすべて `out` に足す。
     fn precompile(&self, out: &mut Vec<(LangOrigin, String, String)>) {
         let _ = self.regex();
         if let Compiled::User(cell) = &self.compiled
             && let Some(Err(reason)) = cell.get()
         {
             out.push((self.origin.clone(), self.source.clone(), reason.clone()));
-            if let Some(f) = &self.fallback {
-                f.precompile(out);
-            }
+        }
+        if let Some(f) = &self.fallback {
+            f.precompile(out);
         }
     }
 }
@@ -531,6 +554,7 @@ impl Language {
                     text: (*t).to_owned(),
                     lower: t.to_ascii_lowercase(),
                     layer: LanguageLayer::Builtin,
+                    seq: 0,
                     origin: LangOrigin::Builtin,
                 })
                 .collect()
@@ -544,7 +568,7 @@ impl Language {
             first_line: b.first_line.map(|s| {
                 FirstLine::new(
                     s,
-                    LanguageLayer::Builtin,
+                    (LanguageLayer::Builtin, 0),
                     LangOrigin::Builtin,
                     Compiled::Builtin(index),
                 )
@@ -619,9 +643,27 @@ impl LanguageSet {
     #[must_use]
     pub fn build(defs: &[LanguageDef]) -> (LanguageSet, Vec<(String, Vec<Diagnostic>)>) {
         let mut set = LanguageSet::builtin();
+        let mut index: HashMap<String, usize> = set
+            .languages
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.name.clone(), i))
+            .collect();
         let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
-        for def in defs {
-            let diags = set.apply(def);
+        for (n, def) in defs.iter().enumerate() {
+            // 層ごとの定義の数の上限 (LANG-3)。超えた分は使わず、最初の 1 つの所で 1 件警告する
+            if n == LANGUAGE_DEFS_MAX {
+                let d = lang_diag(
+                    LanguageProblem::TooManyDefinitions,
+                    "language",
+                    &LANGUAGE_DEFS_MAX.to_string(),
+                    def.line,
+                    def.column,
+                );
+                crate::merge_reports(&mut reports, [(def.source.clone(), vec![d])]);
+                break;
+            }
+            let diags = set.apply(def, n + 1, &mut index);
             if !diags.is_empty() {
                 crate::merge_reports(&mut reports, [(def.source.clone(), diags)]);
             }
@@ -662,12 +704,19 @@ impl LanguageSet {
         reports
     }
 
-    fn apply(&mut self, def: &LanguageDef) -> Vec<Diagnostic> {
+    /// 定義 `def` (通し番号 `seq`) を重ねる。`index` は言語の名前から添字を引く表。
+    fn apply(
+        &mut self,
+        def: &LanguageDef,
+        seq: usize,
+        index: &mut HashMap<String, usize>,
+    ) -> Vec<Diagnostic> {
         let mut diags = Vec::new();
-        let i = match self.languages.iter().position(|l| l.name == def.name) {
-            Some(i) => i,
+        let i = match index.get(&def.name) {
+            Some(&i) => i,
             None => {
                 self.languages.push(Language::empty(&def.name));
+                index.insert(def.name.clone(), self.languages.len() - 1);
                 self.languages.len() - 1
             }
         };
@@ -687,6 +736,7 @@ impl LanguageSet {
                     text: t.clone(),
                     lower: t.to_ascii_lowercase(),
                     layer: LanguageLayer::User,
+                    seq,
                     origin: at(v.line, v.column),
                 })
                 .collect()
@@ -723,7 +773,7 @@ impl LanguageSet {
             // 正規表現は組まずに置く (組むのは使うときか `precompile`)。組めなければ下の層の値を使う
             let mut f = FirstLine::new(
                 &v.value,
-                LanguageLayer::User,
+                (LanguageLayer::User, seq),
                 at(v.line, v.column),
                 Compiled::User(OnceLock::new()),
             );
@@ -763,13 +813,14 @@ impl LanguageSet {
     #[must_use]
     pub fn detect(&self, input: &DetectInput<'_>) -> Detection<'_> {
         let name = input.file_name.map(str::to_ascii_lowercase);
-        // (長さ, 層, 言語の番号, 当たった名前の由来)
-        let mut stages: [Vec<(usize, LanguageLayer, usize, LangOrigin)>; 4] = Default::default();
+        // (長さ, 層, 重ねた定義の通し番号, 言語の番号, 当たった名前の由来)
+        type Cand = (usize, LanguageLayer, usize, usize, LangOrigin);
+        let mut stages: [Vec<Cand>; 4] = Default::default();
         for (i, l) in self.languages.iter().enumerate() {
             if let Some(n) = &name {
                 for p in &l.file_names {
                     if p.lower == *n {
-                        stages[0].push((0, p.layer, i, p.origin.clone()));
+                        stages[0].push((0, p.layer, p.seq, i, p.origin.clone()));
                     }
                 }
                 for (g, p) in &l.file_globs {
@@ -779,7 +830,7 @@ impl LanguageSet {
                         input.file_name
                     };
                     if subject.is_some_and(|s| g.is_match(s)) {
-                        stages[1].push((0, p.layer, i, p.origin.clone()));
+                        stages[1].push((0, p.layer, p.seq, i, p.origin.clone()));
                     }
                 }
                 for p in &l.file_types {
@@ -788,29 +839,29 @@ impl LanguageSet {
                         && n.ends_with(&p.lower)
                         && n.as_bytes()[n.len() - p.lower.len() - 1] == b'.';
                     if hit && !p.lower.is_empty() {
-                        stages[2].push((p.lower.len(), p.layer, i, p.origin.clone()));
+                        stages[2].push((p.lower.len(), p.layer, p.seq, i, p.origin.clone()));
                     }
                 }
             }
             if let (Some(f), Some(line)) = (&l.first_line, input.first_line)
                 && let Some(hit) = f.matching(line)
             {
-                stages[3].push((0, hit.layer, i, hit.origin.clone()));
+                stages[3].push((0, hit.layer, hit.seq, i, hit.origin.clone()));
             }
         }
         for mut cands in stages {
             if cands.is_empty() {
                 continue;
             }
-            cands.sort_by_key(|(len, layer, i, _)| (*len, *layer, *i));
-            let Some((len, layer, win, origin)) = cands.pop() else {
+            cands.sort_by_key(|(len, layer, seq, i, _)| (*len, *layer, *seq, *i));
+            let Some((len, layer, _, win, origin)) = cands.pop() else {
                 continue;
             };
             let other = cands
                 .iter()
                 .rev()
-                .find(|(l2, y2, j, _)| (*l2, *y2) == (len, layer) && *j != win)
-                .map(|(_, _, j, _)| *j);
+                .find(|(l2, y2, _, j, _)| (*l2, *y2) == (len, layer) && *j != win)
+                .map(|(_, _, _, j, _)| *j);
             return Detection {
                 language: Some(&self.languages[win]),
                 ambiguous: other.map(|j| Ambiguity {
@@ -829,32 +880,28 @@ impl LanguageSet {
     /// `--dump-languages` の出力 (`[[language]]` の TOML。v0.5 で効く項目だけ、LANG-1)。
     #[must_use]
     pub fn dump(&self) -> String {
+        use std::fmt::Write as _;
         let mut out = String::new();
         for l in &self.languages {
             if !out.is_empty() {
                 out.push('\n');
             }
             out.push_str("[[language]]\n");
-            out.push_str(&format!("name = {}\n", quote(&l.name)));
-            out.push_str(&format!("display_name = {}\n", quote(&l.display_name)));
+            let _ = writeln!(out, "name = {}", quote(&l.name));
+            let _ = writeln!(out, "display_name = {}", quote(&l.display_name));
             let list = |ps: &mut dyn Iterator<Item = &Pattern>| -> String {
                 let items: Vec<String> = ps.map(|p| quote(&p.text)).collect();
                 format!("[{}]", items.join(", "))
             };
-            out.push_str(&format!(
-                "file_types = {}\n",
-                list(&mut l.file_types.iter())
-            ));
-            out.push_str(&format!(
-                "file_names = {}\n",
-                list(&mut l.file_names.iter())
-            ));
-            out.push_str(&format!(
-                "file_globs = {}\n",
+            let _ = writeln!(out, "file_types = {}", list(&mut l.file_types.iter()));
+            let _ = writeln!(out, "file_names = {}", list(&mut l.file_names.iter()));
+            let _ = writeln!(
+                out,
+                "file_globs = {}",
                 list(&mut l.file_globs.iter().map(|(_, p)| p))
-            ));
+            );
             if let Some(f) = &l.first_line {
-                out.push_str(&format!("first_line = {}\n", quote(&f.source)));
+                let _ = writeln!(out, "first_line = {}", quote(&f.source));
             }
             let mut indent = Vec::new();
             if let Some((u, _)) = &l.indent_unit {
@@ -867,10 +914,10 @@ impl LanguageSet {
                 indent.push(format!("tab_width = {w}"));
             }
             if !indent.is_empty() {
-                out.push_str(&format!("indent = {{ {} }}\n", indent.join(", ")));
+                let _ = writeln!(out, "indent = {{ {} }}", indent.join(", "));
             }
             if let Some((c, _)) = &l.comment_line {
-                out.push_str(&format!("comment = {{ line = {} }}\n", quote(c)));
+                let _ = writeln!(out, "comment = {{ line = {} }}", quote(c));
             }
         }
         out
@@ -928,7 +975,7 @@ fn lang_diag(
     }
 }
 
-/// 言語の名前として使えるか (LANG-3): `[a-z][a-z0-9_+-]*` で 32 バイトまで。`plain` は使えない。
+/// 言語の名前として使えるか (LANG-3): `[a-z][a-z0-9_+-]*` で 32 バイトまで。`plain` と `auto` は使えない。
 #[must_use]
 pub fn is_language_name(s: &str) -> bool {
     let b = s.as_bytes();
@@ -939,6 +986,7 @@ pub fn is_language_name(s: &str) -> bool {
             c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'_' | b'+' | b'-')
         })
         && s != PLAIN
+        && s != AUTO
 }
 
 /// 文書の本文の先頭から、`first_line` に当てる最初の行 (先頭から 1 KiB までの、最初の改行 (`\n` か `\r`) の前。LANG-6 (c))。

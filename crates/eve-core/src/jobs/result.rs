@@ -166,7 +166,8 @@ pub enum JobResult {
     },
     /// `ReadLanguages` の結果。
     LanguagesRead {
-        /// 組込みにユーザー層の定義を重ねた定義の集まり (正規表現は組んである)。
+        /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現はまだ組んでいない。組むのは
+        /// `PrecompileLanguages`)。
         set: std::sync::Arc<eve_config::LanguageSet>,
         /// ファイルごとの診断 (表示名 `languages/<file>.toml`・`config.toml` など)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,

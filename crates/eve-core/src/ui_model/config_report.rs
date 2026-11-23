@@ -546,7 +546,8 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                     args.push(("second", clean(second)));
                 }
                 L::BadFirstLine { reason } => args.push(("reason", clean(reason))),
-                L::TooManyFiles => args.push(("count", clean(&d.value))),
+                L::TooManyFiles | L::TooManyDefinitions => args.push(("count", clean(&d.value))),
+                L::DirUnreadable => args.push(("reason", clean(&d.value))),
                 _ => {}
             }
             group = "language";

@@ -959,6 +959,18 @@ text = "The regular expression {value} of {item} is invalid ({reason})"
 hint = "Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This glob is not used"
 text = "The glob {value} of {item} is too complex"
 
+[msg.language.dir_unreadable]
+hint = "Check the permissions of the folder. Language files are not read; other settings are used"
+text = "Cannot read languages/ ({reason})"
+
+[msg.language.file_type_dot]
+hint = "Write file_types without the leading . (rs). This value never matches"
+text = "{value} in {item} starts with ."
+
+[msg.language.too_many_definitions]
+hint = "The definitions beyond the limit are not used"
+text = "There are more than {count} language definitions"
+
 [msg.language.file_too_large]
 hint = "Keep it at 256 KiB or less"
 text = "This language definition file is too large and is not read"

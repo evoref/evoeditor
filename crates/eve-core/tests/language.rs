@@ -205,7 +205,34 @@ fn lang_set_で言語を替えると字下げも替わり_auto_で判定し直�
     // 定義の無い言語は替えない
     h.cmd_with("lang.set", Args::new().with_str("language", "nope"));
     assert_eq!(language(&h), "rust");
-    // 読み取り専用の文書でも使える。本文と Undo の履歴は変えない
+    assert!(!h.is_dirty());
+}
+
+#[test]
+fn lang_set_は読み取り専用の文書でも使え_undo_の履歴に残らない() {
+    let mut h = Harness::builder()
+        .defer_start()
+        .file(
+            "/w/a.txt", b"x
+",
+        )
+        .build();
+    h.editor
+        .open_initial_files(&[InitialFile::path("/w/a.txt")], true, None);
+    h.started();
+    h.run_jobs();
+    let before = {
+        let d = h.editor.state().document(h.doc_id()).unwrap();
+        assert!(!d.is_editable(), "読み取り専用");
+        (d.revision(), d.history().undo_len())
+    };
+    assert!(matches!(
+        h.cmd_with("lang.set", Args::new().with_str("language", "go")),
+        eve_core::CommandResult::Done
+    ));
+    assert_eq!(language(&h), "go");
+    let d = h.editor.state().document(h.doc_id()).unwrap();
+    assert_eq!((d.revision(), d.history().undo_len()), before);
     assert!(!h.is_dirty());
 }
 
@@ -437,4 +464,215 @@ fn 言語定義の読込は起動時のパスを開くジョブより前() {
     assert!(h.editor.state().languages().get("foo").is_some());
     h.run_jobs();
     assert_eq!(language(&h), "foo");
+}
+
+// verifies: AC-FR-704-1
+#[test]
+fn 再読込と開き直しは言語を引き継ぎ_明示の指定も保つ() {
+    let mut h = start(&[("/w/a.txt", b"x\n")], &[], &["/w/a.txt"]);
+    h.cmd_with("lang.set", Args::new().with_str("language", "go"));
+    h.cmd("file.reload");
+    h.run_jobs();
+    assert_eq!(language(&h), "go");
+    let d = h.editor.state().document(h.doc_id()).unwrap();
+    assert!(d.language.explicit, "明示の指定を保つ");
+    h.cmd_with(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "utf-8"),
+    );
+    h.run_jobs();
+    assert_eq!(language(&h), "go");
+    assert!(
+        h.editor
+            .state()
+            .document(h.doc_id())
+            .unwrap()
+            .language
+            .explicit
+    );
+}
+
+#[test]
+fn 標準入力の文書は先頭行で判定する() {
+    use eve_core::{InitialTarget, StdinKind};
+    let fake = eve_testkit::FakeStdin::chunks(b"#!/usr/bin/env python3\nprint(1)\n", 64);
+    let mut h = Harness::builder()
+        .defer_start()
+        .stdin(std::sync::Arc::new(fake))
+        .build();
+    h.editor.open_initial_files(
+        &[InitialFile {
+            target: InitialTarget::Stdin(StdinKind::Stream),
+            line: None,
+            col: None,
+        }],
+        false,
+        None,
+    );
+    h.started();
+    h.run_jobs();
+    assert_eq!(language(&h), "python");
+}
+
+// verifies: AC-FR-704-1
+#[test]
+fn ルートが決まったら斜線を含む_glob_で判定し直す() {
+    let mut h = Harness::builder()
+        .defer_start()
+        .dir("/w/proj/.git")
+        .file("/w/proj/sub/a.x", b"")
+        .build();
+    let r = eve_config::resolve(
+        &[eve_config::Source {
+            name: "config.toml".to_owned(),
+            text: Ok(Some(
+                "[[language]]\nname = \"xl\"\nfile_globs = [\"sub/*.x\"]\n".to_owned(),
+            )),
+        }],
+        &[],
+        Conditions::default(),
+    );
+    h.editor.configure(StartupConfig {
+        config_languages: Some(r.languages),
+        ..Default::default()
+    });
+    h.editor
+        .open_initial_files(&[InitialFile::path("/w/proj/sub/a.x")], false, None);
+    h.started();
+    // 言語定義 → 開く (ルートはまだ無いので、`/` を含む glob は当たらない)
+    h.run_one_job();
+    h.run_one_job();
+    assert_eq!(language(&h), "plain");
+    // ルートが決まると判定し直す
+    h.run_jobs();
+    assert!(h.editor.state().workspace().is_some());
+    assert_eq!(language(&h), "xl");
+}
+
+#[test]
+fn 開くジョブの結果が定義より先に届いたら_定義が届いたときに判定し直す() {
+    let mut h = Harness::builder()
+        .defer_start()
+        .file("/w/a.foo", b"")
+        .file(
+            "/evo/config/languages/f.toml",
+            b"[[language]]\nname = \"foo\"\nfile_types = [\"foo\"]\n",
+        )
+        .build();
+    h.editor.configure(StartupConfig {
+        config_sources: Some(ConfigSources {
+            languages: Some(FsPath::new(LANGS)),
+            ..ConfigSources::default()
+        }),
+        ..Default::default()
+    });
+    h.editor
+        .open_initial_files(&[InitialFile::path("/w/a.foo")], false, None);
+    h.started();
+    let languages = h.run_one_job_held();
+    h.run_one_job();
+    assert_eq!(language(&h), "plain", "定義が届く前は組込みで判定");
+    h.deliver(languages);
+    assert_eq!(language(&h), "foo");
+}
+
+#[test]
+fn 言語定義のファイルの数と大きさと拡張子() {
+    let h = Harness::new();
+    // 大文字の .TOML は読まない
+    h.fs.add_file(
+        "/evo/config/languages/A.TOML",
+        b"[[language]]\nname = \"up\"\n",
+    );
+    h.fs.add_file(
+        "/evo/config/languages/big.toml",
+        &vec![b'#'; usize::try_from(eve_core::LANGUAGE_FILE_MAX_BYTES).unwrap() + 1],
+    );
+    for i in 0..=eve_core::LANGUAGE_FILES_MAX {
+        h.fs.add_file(
+            &format!("/evo/config/languages/l{i:03}.toml"),
+            format!("[[language]]\nname = \"l{i}\"\n").as_bytes(),
+        );
+    }
+    let (defs, reports) = eve_core::read_language_dir(&*h.fs, &FsPath::new(LANGS));
+    assert!(defs.iter().all(|d| d.name != "up"), ".TOML は読まない");
+    let kinds: Vec<(String, eve_config::DiagKind)> = reports
+        .iter()
+        .flat_map(|(f, ds)| ds.iter().map(|d| (f.clone(), d.kind.clone())))
+        .collect();
+    assert!(kinds.contains(&(
+        "languages/big.toml".to_owned(),
+        eve_config::DiagKind::Language(eve_config::LanguageProblem::FileTooLarge)
+    )));
+    assert!(kinds.contains(&(
+        "languages/".to_owned(),
+        eve_config::DiagKind::Language(eve_config::LanguageProblem::TooManyFiles)
+    )));
+    // 名前の順に 256 ファイル (big.toml を含む) まで読む
+    assert_eq!(defs.len(), eve_core::LANGUAGE_FILES_MAX - 1);
+    assert_eq!(defs.last().map(|d| d.name.as_str()), Some("l254"));
+}
+
+#[test]
+fn 同じ組の警告は_1_回だけ() {
+    let mut h = start(
+        &[
+            (
+                "/evo/config/languages/a.toml",
+                b"[[language]]\nname = \"a\"\nfile_types = [\"foo\"]\n[[language]]\nname = \"b\"\nfile_types = [\"foo\"]\n",
+            ),
+            ("/w/x.foo", b""),
+            ("/w/y.foo", b""),
+        ],
+        &[],
+        &["/w/x.foo", "/w/y.foo"],
+    );
+    h.open("/w/y.foo");
+    h.run_jobs();
+    assert_eq!(language(&h), "b");
+    h.cmd("config.show_diagnostics");
+    let f = h.frame();
+    let OverlayModel::List { items, .. } = &f.overlays[0] else {
+        panic!("一覧が出ていない")
+    };
+    let n = items
+        .iter()
+        .filter(|i| cell_text(&i.label).contains("両方に当たる"))
+        .count();
+    assert_eq!(n, 1);
+}
+
+#[test]
+fn 言語定義のファイルの由来で_enter_を押すとそのファイルを開く() {
+    let mut h = start(
+        &[
+            (
+                "/evo/config/languages/r.toml",
+                b"[[language]]\nname = \"rust\"\nindent = { width = 2 }\n",
+            ),
+            ("/w/a.rs", b""),
+        ],
+        &[],
+        &["/w/a.rs"],
+    );
+    let (_, rows) = show(&mut h, "indent_width");
+    assert_eq!(
+        rows,
+        [(
+            "editor.indent_width = 2".to_owned(),
+            "言語 rust: languages/r.toml:3".to_owned()
+        )]
+    );
+    h.cmd("config.show");
+    h.text("indent_width");
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(
+        h.doc_path().as_deref(),
+        Some(
+            FsPath::new("/evo/config/languages/r.toml")
+                .display()
+                .as_str()
+        )
+    );
 }

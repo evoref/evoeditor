@@ -3,7 +3,8 @@
 //! 書ける形: `*` (`/` 以外の 0 文字以上)、`**` (`/` を含む 0 文字以上)、`?` (`/` 以外の 1 文字)、`[name]` / `[!name]`
 //! (文字の集合と否定。範囲 `a-z`。`/` には当たらない)、`{s1,s2}` (どれか。入れ子にできる)、`{num1..num2}` (整数の範囲。負を
 //! 含む。当てる所の数字の並び全体を整数として読んで比べる)、`\` (次の 1 文字をそのまま)。閉じていない `[` と `{`、`,` の無い
-//! `{...}` は字そのもの。照らすのは文字 (コードポイント) の単位。
+//! `{...}` は字そのもの。`/**/` (と先頭の `**/`) は 0 個以上のディレクトリ (`d/**/z.c` は `d/z.c` にも当たる)。照らすのは
+//! 文字 (コードポイント) の単位。
 //!
 //! 照合は状態の集合を 1 文字ずつ進める (非決定性の有限オートマトンの模擬)。`*` の後戻りをせず、選択肢を前もって展開しない
 //! ので、手数は「状態の数 × (文字の数 + 1)」(数の範囲は、その所の数字の並びの長さを掛ける) に収まる。
@@ -87,18 +88,20 @@ impl Glob {
     /// `{` の入れ子が深すぎる・選択肢が多すぎる (EC-4 の資源の上限)。
     pub fn new(pattern: &str, case: GlobCase) -> Result<Glob, GlobError> {
         // 先頭の `/` は取る (置き場所からの相対パスに当てる印、EC-4)
-        let chars: Vec<char> = pattern
-            .strip_prefix('/')
-            .unwrap_or(pattern)
-            .chars()
-            .collect();
+        let body = pattern.strip_prefix('/');
+        let chars: Vec<char> = body.unwrap_or(pattern).chars().collect();
+        let (close, comma) = brace_table(&chars);
         let mut p = Parser {
             chars: &chars,
+            close: &close,
+            comma: &comma,
             pos: 0,
             alternatives: 0,
             case,
+            slash: body.is_some(),
         };
-        let nodes = p.seq(0, false)?;
+        let nodes = p.seq(0, false, chars.len())?;
+        let has_slash = p.slash;
         let mut b = Builder { states: Vec::new() };
         let end = b.push(State::Match);
         let start = b.seq(&nodes, end);
@@ -106,7 +109,7 @@ impl Glob {
             states: b.states,
             start,
             case,
-            has_slash: pattern.contains('/'),
+            has_slash,
         })
     }
 
@@ -193,40 +196,85 @@ fn step_matches(step: &Step, c: char, case: GlobCase) -> bool {
     }
 }
 
+/// 数の範囲で読む数字の並びの上限 (桁)。これより長い並びは i64 に収まらないので範囲の外 (照合の手数を並びの長さに比例させない)。
+const NUMBER_MAX_DIGITS: usize = 20;
+
 /// `text` の先頭の数字の並び (先頭の `-` を含む) の長さ。並び全体を整数として読んで `lo..=hi` に入るときだけ。
 fn number_at(text: &[char], lo: i64, hi: i64) -> Option<usize> {
-    let sign = usize::from(text.first() == Some(&'-'));
-    let digits = text[sign..]
-        .iter()
-        .take_while(|c| c.is_ascii_digit())
-        .count();
+    let neg = text.first() == Some(&'-');
+    let sign = usize::from(neg);
+    let mut v: i64 = 0;
+    let mut digits = 0usize;
+    for c in text[sign..].iter().take(NUMBER_MAX_DIGITS + 1) {
+        let Some(d) = c.to_digit(10) else {
+            break;
+        };
+        digits += 1;
+        if digits > NUMBER_MAX_DIGITS {
+            return None;
+        }
+        // 桁が多すぎて i64 に収まらない数は範囲の外
+        v = v.checked_mul(10)?.checked_add(i64::from(d))?;
+    }
     if digits == 0 {
         return None;
     }
-    let s: String = text[..sign + digits].iter().collect();
-    // 桁が多すぎて i64 に収まらない数は範囲の外
-    let v: i64 = s.parse().ok()?;
+    let v = if neg { -v } else { v };
     (lo <= v && v <= hi).then_some(sign + digits)
+}
+
+/// `{` の位置ごとの、対応する `}` の位置と、その中のいちばん外に `,` があるか (`\` の次の文字は数えない)。1 回の走査で
+/// 求め、パースが同じ所を何度も探さないようにする。
+fn brace_table(chars: &[char]) -> (Vec<Option<usize>>, Vec<bool>) {
+    let mut close = vec![None; chars.len()];
+    let mut comma = vec![false; chars.len()];
+    let mut open: Vec<usize> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => i += 1,
+            '{' => open.push(i),
+            '}' => {
+                if let Some(o) = open.pop() {
+                    close[o] = Some(i);
+                }
+            }
+            ',' => {
+                if let Some(&o) = open.last() {
+                    comma[o] = true;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    (close, comma)
 }
 
 struct Parser<'a> {
     chars: &'a [char],
+    /// `brace_table` の結果。
+    close: &'a [Option<usize>],
+    comma: &'a [bool],
     pos: usize,
     alternatives: usize,
     case: GlobCase,
+    /// 逃がしていない `/` を読んだ (先頭の `/` を含む)。
+    slash: bool,
 }
 
 impl Parser<'_> {
-    /// 並びを読む。`in_alt` なら `,` と `}` で止まる (読まない)。
-    fn seq(&mut self, depth: usize, in_alt: bool) -> Result<Vec<Node>, GlobError> {
+    /// `end` までの並びを読む。`in_alt` なら `,` で止まる (読まない)。
+    fn seq(&mut self, depth: usize, in_alt: bool, end: usize) -> Result<Vec<Node>, GlobError> {
         let mut out = Vec::new();
-        while let Some(&c) = self.chars.get(self.pos) {
-            if in_alt && (c == ',' || c == '}') {
+        while self.pos < end {
+            let c = self.chars[self.pos];
+            if in_alt && c == ',' {
                 break;
             }
             self.pos += 1;
             match c {
-                '\\' => match self.chars.get(self.pos) {
+                '\\' => match self.chars.get(self.pos).filter(|_| self.pos < end) {
                     Some(&n) => {
                         self.pos += 1;
                         out.push(Node::Lit(fold(n, self.case)));
@@ -235,61 +283,74 @@ impl Parser<'_> {
                 },
                 '?' => out.push(Node::Any),
                 '*' => {
+                    let at = self.pos - 1;
                     if self.chars.get(self.pos) == Some(&'*') {
-                        while self.chars.get(self.pos) == Some(&'*') {
+                        while self.pos < end && self.chars[self.pos] == '*' {
                             self.pos += 1;
                         }
-                        out.push(Node::Star { cross: true });
+                        // `/**/` (と先頭の `**/`) は 0 個以上のディレクトリ (`d/**/z.c` は `d/z.c` にも当たる。EditorConfig
+                        // と同じ、EC-4)
+                        let after_sep = at == 0 || self.chars[at - 1] == '/';
+                        if after_sep && self.pos < end && self.chars[self.pos] == '/' {
+                            self.pos += 1;
+                            self.slash = true;
+                            out.push(Node::Alt(vec![
+                                vec![Node::Star { cross: true }, Node::Lit('/')],
+                                Vec::new(),
+                            ]));
+                        } else {
+                            out.push(Node::Star { cross: true });
+                        }
                     } else {
                         out.push(Node::Star { cross: false });
                     }
                 }
-                '[' => match self.class() {
+                '[' => match self.class(end) {
                     Some(n) => out.push(n),
                     None => out.push(Node::Lit('[')),
                 },
                 '{' => out.extend(self.brace(depth)?),
-                c => out.push(Node::Lit(fold(c, self.case))),
+                c => {
+                    if c == '/' {
+                        self.slash = true;
+                    }
+                    out.push(Node::Lit(fold(c, self.case)));
+                }
             }
         }
         Ok(out)
     }
 
-    /// `[` の後ろ。閉じていなければ `None` (読んだ位置を戻す)。
-    fn class(&mut self) -> Option<Node> {
+    /// `[` の後ろ (`end` まで)。閉じていなければ `None` (読んだ位置を戻す)。
+    fn class(&mut self, end: usize) -> Option<Node> {
         let save = self.pos;
         let mut neg = false;
-        if matches!(self.chars.get(self.pos), Some('!' | '^')) {
+        if self.pos < end && matches!(self.chars[self.pos], '!' | '^') {
             neg = true;
             self.pos += 1;
         }
         let mut items = Vec::new();
         let mut first = true;
         loop {
-            let Some(&c) = self.chars.get(self.pos) else {
+            if self.pos >= end {
                 self.pos = save;
                 return None;
-            };
+            }
+            let c = self.chars[self.pos];
             self.pos += 1;
             if c == ']' && !first {
                 break;
             }
             first = false;
-            let c = if c == '\\' {
-                match self.chars.get(self.pos) {
-                    Some(&n) => {
-                        self.pos += 1;
-                        n
-                    }
-                    None => '\\',
-                }
+            let c = if c == '\\' && self.pos < end {
+                self.pos += 1;
+                self.chars[self.pos - 1]
             } else {
                 c
             };
-            if self.chars.get(self.pos) == Some(&'-')
-                && let Some(&hi) = self.chars.get(self.pos + 1)
-                && hi != ']'
+            if self.pos + 1 < end && self.chars[self.pos] == '-' && self.chars[self.pos + 1] != ']'
             {
+                let hi = self.chars[self.pos + 1];
                 self.pos += 2;
                 items.push((c.min(hi), c.max(hi)));
             } else {
@@ -299,88 +360,47 @@ impl Parser<'_> {
         Some(Node::Class { neg, items })
     }
 
-    /// `{` の後ろ。選択肢 (`,` がある) か数の範囲なら、その節。どちらでもなければ `{` を字として返し、続きは並びとして読む。
+    /// `{` の後ろ。選択肢 (`,` がある) か数の範囲なら、その節。どちらでもなければ `{` と `}` は字で、中は並びとして読む。
+    /// どの場合も `{` の入れ子は [`GLOB_MAX_NESTING`] 段まで (字の `{` も数える。深い入れ子でスタックを使い切らない)。
     fn brace(&mut self, depth: usize) -> Result<Vec<Node>, GlobError> {
-        let save = self.pos;
-        // 対応する `}` を探す (入れ子と `\` を数える)。無ければ `{` は字
-        let Some(close) = self.matching_close() else {
+        let open = self.pos - 1;
+        let Some(close) = self.close[open] else {
+            // 閉じていない `{` は字
             return Ok(vec![Node::Lit('{')]);
         };
-        let inner: String = self.chars[save..close].iter().collect();
-        if let Some((lo, hi)) = numeric_range(&inner) {
-            self.pos = close + 1;
-            return Ok(vec![Node::Num(lo.min(hi), lo.max(hi))]);
-        }
-        if !self.has_top_comma(save, close) {
-            // `{single}`: 括弧は字。中は並びとして読む (中の `}` で外の選択肢を閉じない)
-            let mut inside = Parser {
-                chars: &self.chars[save..close],
-                pos: 0,
-                alternatives: self.alternatives,
-                case: self.case,
-            };
-            let mut out = vec![Node::Lit('{')];
-            out.extend(inside.seq(depth, false)?);
-            out.push(Node::Lit('}'));
-            self.alternatives = inside.alternatives;
-            self.pos = close + 1;
-            return Ok(out);
-        }
         if depth + 1 > GLOB_MAX_NESTING {
             return Err(GlobError::TooDeep);
         }
+        let start = self.pos;
+        if !self.comma[open] {
+            let inner: String = self.chars[start..close].iter().collect();
+            if let Some((lo, hi)) = numeric_range(&inner) {
+                self.pos = close + 1;
+                return Ok(vec![Node::Num(lo.min(hi), lo.max(hi))]);
+            }
+            // `{single}`: 括弧は字。中は並びとして読む (中の `}` で外の選択肢を閉じない)
+            let mut out = vec![Node::Lit('{')];
+            out.extend(self.seq(depth + 1, false, close)?);
+            out.push(Node::Lit('}'));
+            self.pos = close + 1;
+            return Ok(out);
+        }
         let mut alts = Vec::new();
         loop {
-            let a = self.seq(depth + 1, true)?;
+            let a = self.seq(depth + 1, true, close)?;
             alts.push(a);
             self.alternatives += 1;
             if self.alternatives > GLOB_MAX_ALTERNATIVES {
                 return Err(GlobError::TooManyAlternatives);
             }
-            match self.chars.get(self.pos) {
-                Some(',') => self.pos += 1,
-                _ => {
-                    // `}`
-                    self.pos += 1;
-                    break;
-                }
+            if self.pos < close && self.chars[self.pos] == ',' {
+                self.pos += 1;
+            } else {
+                self.pos = close + 1;
+                break;
             }
         }
         Ok(vec![Node::Alt(alts)])
-    }
-
-    /// `self.pos` (`{` の後ろ) から、対応する `}` の位置。
-    fn matching_close(&self) -> Option<usize> {
-        let mut depth = 0usize;
-        let mut i = self.pos;
-        while let Some(&c) = self.chars.get(i) {
-            match c {
-                '\\' => i += 1,
-                '{' => depth += 1,
-                '}' if depth == 0 => return Some(i),
-                '}' => depth -= 1,
-                _ => {}
-            }
-            i += 1;
-        }
-        None
-    }
-
-    /// `[from, to)` の入れ子の外に `,` があるか。
-    fn has_top_comma(&self, from: usize, to: usize) -> bool {
-        let mut depth = 0usize;
-        let mut i = from;
-        while i < to {
-            match self.chars[i] {
-                '\\' => i += 1,
-                '{' => depth += 1,
-                '}' => depth = depth.saturating_sub(1),
-                ',' if depth == 0 => return true,
-                _ => {}
-            }
-            i += 1;
-        }
-        false
     }
 }
 
@@ -525,5 +545,108 @@ mod tests {
         let g = Glob::new("**a*b*c*d*e", GlobCase::Sensitive).unwrap();
         let s = "x".repeat(10_000);
         assert!(!g.is_match(&s));
+    }
+
+    /// `**` の振る舞い (`EditorConfig` の `star_star` の試験と同じ形の場合を、自分で書いた。07 §10.3 の EC-4)。
+    #[test]
+    fn 二重の星は区切りをまたぎ_斜線で囲めば_0_個のディレクトリにも当たる() {
+        // `a**z.c`: 区切りをまたぐ
+        for s in [
+            "a/z.c", "amnz.c", "am/nz.c", "a/mnz.c", "amn/z.c", "a/mn/z.c",
+        ] {
+            assert!(m("a**z.c", s), "{s}");
+        }
+        // `b/**z.c`: `b/` の後
+        for (s, want) in [
+            ("b/z.c", true),
+            ("b/mnz.c", true),
+            ("b/mn/z.c", true),
+            ("bmnz.c", false),
+            ("bm/nz.c", false),
+            ("bmn/z.c", false),
+        ] {
+            assert_eq!(m("b/**z.c", s), want, "{s}");
+        }
+        // `c**/z.c`: `/z.c` の前
+        for (s, want) in [
+            ("c/z.c", true),
+            ("cmn/z.c", true),
+            ("c/mn/z.c", true),
+            ("cmnz.c", false),
+            ("cm/nz.c", false),
+            ("c/mnz.c", false),
+        ] {
+            assert_eq!(m("c**/z.c", s), want, "{s}");
+        }
+        // `d/**/z.c`: 0 個以上のディレクトリ
+        for (s, want) in [
+            ("d/z.c", true),
+            ("d/mn/z.c", true),
+            ("dmnz.c", false),
+            ("dm/nz.c", false),
+            ("d/mnz.c", false),
+            ("dmn/z.c", false),
+        ] {
+            assert_eq!(m("d/**/z.c", s), want, "{s}");
+        }
+        assert!(m(".github/**/*.yml", ".github/a.yml"));
+        assert!(m("src/**/x", "src/x"));
+        assert!(m("**/x", "x"), "先頭の **/ も 0 個");
+        assert!(m("**/x", "a/b/x"));
+    }
+
+    #[test]
+    fn 斜線を含むかは逃がしていない斜線だけで決める() {
+        let has = |p: &str| Glob::new(p, GlobCase::Sensitive).unwrap().has_slash();
+        assert!(has("a/b"));
+        assert!(has("/a"));
+        assert!(has("**/a"));
+        assert!(!has("[/]a"), "集合の中の / は数えない");
+        assert!(!has("a\\/b"), "逃がした / は数えない");
+        assert!(!has("*.rs"));
+    }
+
+    #[test]
+    fn 字の括弧の入れ子と長い数字にも上限がある() {
+        let deep = "{".repeat(3_000) + &"}".repeat(3_000);
+        assert_eq!(
+            Glob::new(&deep, GlobCase::Sensitive),
+            Err(GlobError::TooDeep),
+            "選択肢でない {{...}} の入れ子もスタックを使い切らない"
+        );
+        let lit = "{".repeat(8) + "x" + &"}".repeat(8);
+        assert!(m(&lit, &lit));
+        let g = Glob::new("f{1..9}", GlobCase::Sensitive).unwrap();
+        assert!(
+            !g.is_match(&format!("f{}", "1".repeat(21))),
+            "21 桁は範囲の外"
+        );
+        assert!(
+            !g.is_match(&format!("f{}", "9".repeat(19))),
+            "i64 に収まっても範囲の外"
+        );
+        let long = format!("f{}", "1".repeat(100_000));
+        assert!(!g.is_match(&long));
+    }
+
+    proptest::proptest! {
+        /// `{a,b}` を含む glob への照合は、選択肢を展開した glob のどれかへの照合と一致する (09 §3.3 の fuzz の性質)。
+        #[test]
+        fn 選択肢の照合は展開したどれかへの照合と一致する(
+            pre in "[ab][ab/*?]{0,3}",
+            alts in proptest::collection::vec("[ab/*?]{0,3}", 2..4),
+            post in "[ab/*]{0,4}",
+            subject in "[ab/]{0,8}",
+        ) {
+            // 先頭の `/` (置き場所の印) と `**` (区切りとの並びで意味が変わる) は、展開の前後で同じ意味にならないので除く
+            let expanded: Vec<String> = alts.iter().map(|a| format!("{pre}{a}{post}")).collect();
+            proptest::prop_assume!(expanded.iter().all(|e| !e.contains("**")));
+            let glob = format!("{pre}{{{}}}{post}", alts.join(","));
+            let whole = Glob::new(&glob, GlobCase::Sensitive).unwrap().is_match(&subject);
+            let any = expanded
+                .iter()
+                .any(|e| Glob::new(e, GlobCase::Sensitive).unwrap().is_match(&subject));
+            proptest::prop_assert_eq!(whole, any, "{} / {}", glob, subject);
+        }
     }
 }
