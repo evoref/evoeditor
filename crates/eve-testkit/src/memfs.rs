@@ -414,7 +414,8 @@ impl MemFs {
 
     /// 偽の所有者 (09 §3.4 の `FakePathsOwner`、07 §12.1): `path` (ディレクトリかファイル) を、`read_checked` の判定で
     /// `verdict` の理由で落とす (`NotOwner`・`OthersCanWrite`・`Unknown`)。`None` で印を外す (通す)。
-    /// `OwnerCheck::Skip` では印を見ない。リンク・ディレクトリ・FIFO の代わりは印に依らず `NotRegular`。
+    /// `read_checked` の `safe_dirs` の下 (リンクを辿った後のパスで比べる) では印を見ない。リンク・ディレクトリ・FIFO の
+    /// 代わりは印に依らず `NotRegular`。
     pub fn set_owner_verdict(&self, path: &str, verdict: Option<OwnerVerdict>) {
         let mut s = self.st();
         let p = FsPath::from(path);
