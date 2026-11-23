@@ -318,9 +318,9 @@ mod backend {
     use super::{FsSink, Kind, Route};
 
     /// 続けて届いた同じ (監視, 名前) の `Changed` を 1 つにまとめる間隔 (05 §12.2 の 2)。core の待ち合わせ
-    /// (`WATCH_SETTLE` = 100 ms、03 §9.5.1 の WATCH-4) より短くする: 捨てた知らせの元の書込は、送った知らせから 50 ms の内に
-    /// 済んでいて、core がその知らせから `WATCH_SETTLE` の後に行う照合が取り込む。1 s の打ち切りで照合した後も、core は
-    /// 最後の知らせから `WATCH_SETTLE` の後にもう 1 回照合する (WATCH-4) ので、打ち切りの後に捨てた書込も取り込む。
+    /// (`WATCH_SETTLE` = 100 ms、03 §9.5.1 の WATCH-4) より短くする。根拠は WATCH-4 の「届けた知らせ e ごとに、e の
+    /// `WATCH_SETTLE` 後以降に照合が必ず 1 回ある」(1 s の打ち切りの照合は待ち合わせの期限を消さず、期限が後ならもう 1 回
+    /// 照合する): 捨てた知らせの元の書込は、届けた知らせから 50 ms の内に済んでいるので、その照合が取り込む。
     /// 同じディレクトリに要求が 2 つ以上あると (失効の後の張り直しの間)、交互に送るのでまとまらない (まれなので構わない)。
     const COALESCE: Duration = Duration::from_millis(50);
 
@@ -391,8 +391,14 @@ mod backend {
         pub(super) fn register(&self, id: WatchId, dir: PathBuf) {
             let done = catch_unwind(AssertUnwindSafe(|| self.register_inner(id, &dir)));
             if done.is_err() {
-                // 表に載ったままにしない (毒になったロックも中身を使う)
-                let _ = catch_unwind(AssertUnwindSafe(|| self.forget(id)));
+                // 表に載ったままにしない (毒になったロックも中身を使う)。`watch` の失敗と同じく、残る要求 (失効した古い
+                // 要求) があれば張り直しが要るままにしてから外す
+                let _ = catch_unwind(AssertUnwindSafe(|| {
+                    if let Some(d) = lock(&self.routing.dirs).by_path.get_mut(&dir) {
+                        d.lost = true;
+                    }
+                    self.forget(id)
+                }));
                 self.send(
                     id,
                     FsEventKind::Failed {
@@ -840,7 +846,7 @@ mod tests {
         for k in [Kind::Create, Kind::Modify, Kind::Access, Kind::CloseWrite] {
             assert_eq!(route_in(k, false, &["/w"]), Vec::<Route>::new(), "{k:?}");
         }
-        // 入れ子: /w の直下の /w/sub は、/w の監視には名前の変化、/w/sub の監視には何も送らない
+        // 入れ子: 監視している /w/sub そのものの変更は、/w にも /w/sub にも何も送らない
         let nested = |d: &Path| d == Path::new("/w") || d == Path::new("/w/sub");
         assert_eq!(
             route(Kind::Modify, false, &[p("/w/sub")], &nested),
