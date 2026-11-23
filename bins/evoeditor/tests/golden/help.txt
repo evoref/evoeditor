@@ -16,6 +16,8 @@ Options:
                                        config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先)
   -N, --no-config                      Do not read config.toml, keymap.toml, theme files, or language files (use the defaults)
                                        config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます)
+  --no-workspace-config                Do not read the workspace settings (.eve/config.toml, .eve/keymap.toml) or .editorconfig
+                                       ワークスペース設定 (.eve/config.toml・.eve/keymap.toml) と .editorconfig を読みません
   -s, --set <key>=<value>              Override one setting (e.g. --set view.wrap=soft)
                                        設定を 1 項目上書きします (例: --set view.wrap=soft)
   -w, --workspace <dir>                Use this folder as the workspace root (a DIR argument also sets it)

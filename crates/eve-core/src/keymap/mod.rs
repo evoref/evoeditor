@@ -3,12 +3,14 @@
 //! spec: 02 §7.2, 07 §7, 07 §11.6 (既定キー), 04 §7.2
 //!
 //! 範囲: 層の優先、コンテキストの参照順、ストロークの列 (チョード) の保留と取消、`when` による有効判定、`mod` の解決。
-//! 層は組込みの既定キーマップとユーザーのキーマップ (`user_keymap`、07 §7.1)。ユーザー設定で生じた曖昧なチョード
+//! 層は組込みの既定キーマップ・ユーザーのキーマップ (`user_keymap`、07 §7.1)・ワークスペースのキーマップ
+//! (`workspace_keymap`、07 §7.4。追加だけ)。ユーザー設定で生じた曖昧なチョード
 //! (完全一致とプレフィックスを兼ねる列) はチョードが勝つ (K3、07 §7.6)。`chord_timeout_ms` による曖昧な割当の受理
 //! (K3) と `captures_text` の層 (dialog、K1) は、それを使う層ができるまで使わない。
 
 pub(crate) mod default_keymap;
 mod user_keymap;
+mod workspace_keymap;
 
 pub use user_keymap::{CONTEXTS as KEYMAP_CONTEXTS, resolve_keymap};
 
@@ -283,6 +285,18 @@ pub fn reachable(b: &Binding, caps: &eve_view::Capabilities) -> bool {
         && b.sequence
             .iter()
             .all(|k| !caps.intercepted_keys.contains(k))
+}
+
+/// ワークスペース層の名前 (07 §7.4)。ヘルプのキー一覧が割当の由来として示す (WKEY-3)。
+pub(crate) const WORKSPACE_LAYER: &str = "workspace";
+
+/// 層の優先の順位 (小さいほど優先。02 §7.2 K5)。名前で決める: ワークスペース > ユーザー > そのほか (既定)。
+fn layer_rank(name: &str) -> u8 {
+    match name {
+        WORKSPACE_LAYER => 0,
+        "user" => 1,
+        _ => 2,
+    }
 }
 
 /// 層 (既定・ユーザー・ワークスペース・モード・overlay 固有)。
@@ -754,10 +768,35 @@ impl Keymap {
             .collect()
     }
 
-    /// ユーザー層を置き換える (最優先に置く)。同じ名前 (`user`) の層があれば取り除く。プレフィックスの衝突を求め直す。
+    /// ユーザー層を置き換える (ワークスペース層の下、既定層の上に置く。02 §7.2 K5)。同じ名前 (`user`) の層があれば
+    /// 取り除く。プレフィックスの衝突を求め直す。
     pub fn set_user_layer(&mut self, layer: Layer) {
+        self.place_layer(layer);
+    }
+
+    /// ワークスペース層 (`workspace`、07 §7.4) を置き換える (最優先に置く)。プレフィックスの衝突を求め直す。
+    pub(crate) fn set_workspace_layer(&mut self, layer: Layer) {
+        debug_assert_eq!(layer.name, WORKSPACE_LAYER, "ワークスペース層の名前");
+        self.place_layer(layer);
+    }
+
+    /// 名前が `name` の層を外す (無ければ何もしない)。プレフィックスの衝突を求め直す。
+    pub(crate) fn remove_layer(&mut self, name: &str) {
+        self.layers.retain(|l| l.name != name);
+        self.pending.clear();
+        self.conflicts = find_conflicts(&self.layers);
+    }
+
+    /// 同じ名前の層を取り除いてから、層の優先 (02 §7.2 K5: ワークスペース > ユーザー > 既定) の位置に `layer` を入れる。
+    fn place_layer(&mut self, layer: Layer) {
         self.layers.retain(|l| l.name != layer.name);
-        self.layers.insert(0, layer);
+        let rank = layer_rank(layer.name);
+        let at = self
+            .layers
+            .iter()
+            .position(|l| layer_rank(l.name) >= rank)
+            .unwrap_or(self.layers.len());
+        self.layers.insert(at, layer);
         self.pending.clear();
         self.conflicts = find_conflicts(&self.layers);
     }
@@ -1143,6 +1182,18 @@ mod tests {
         let x = |n: &str| (n == "x").then_some(CtxValue::Bool(true));
         assert_eq!(id(&m.resolve(&["editor"], ks("tab"), &x)), "a");
         assert_eq!(id(&m.resolve(&["editor"], ks("tab"), &no_ctx)), "b");
+    }
+
+    #[test]
+    fn 層はワークスペース_ユーザー_既定の順に置く() {
+        let mut m = with_user(Layer::new("user"));
+        m.set_workspace_layer(Layer::new(WORKSPACE_LAYER));
+        m.set_user_layer(Layer::new("user"));
+        let names: Vec<&str> = m.layers().iter().map(|l| l.name).collect();
+        assert_eq!(names, [WORKSPACE_LAYER, "user", "default"]);
+        m.remove_layer(WORKSPACE_LAYER);
+        let names: Vec<&str> = m.layers().iter().map(|l| l.name).collect();
+        assert_eq!(names, ["user", "default"]);
     }
 
     #[test]

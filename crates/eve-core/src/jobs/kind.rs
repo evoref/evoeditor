@@ -71,20 +71,43 @@ pub enum JobKind {
     },
     /// 言語定義を読んで重ねる (07 §9.6 の LANG-2、02 §9.3 の `ReadLanguages`)。起動時は、起動時のパスを開くジョブより前に
     /// 積む (`io` は直列なので、起動時の文書は定義が届いた後に開き終わる)。`config.reload` でも積む。`dir` の
-    /// `*.toml` を名前の順に読み、`config` (設定ファイルの `[[language]]`) の後に重ね、ユーザー層の `first_line` の正規表現を
-    /// 組まない (組むのは `PrecompileLanguages`。正規表現を組む時間で起動時の文書を開くのを待たせない)。結果は
-    /// `JobResult::LanguagesRead`。
+    /// `*.toml` を名前の順に読み、`config` (設定ファイルの `[[language]]`) の後に重ねる。`first_line` の正規表現は、起動時の
+    /// 1 回は組まず (組むのは `PrecompileLanguages`。組む時間で起動時の文書を開くのを待たせない)、ほか (`config.reload`・
+    /// ワークスペース層が届いた契機) はジョブの中で組む (`precompile`)。結果は `JobResult::LanguagesRead`。
     ReadLanguages {
         /// `<config_dir>/languages`。`None` は読まない (`--no-config`)。
         dir: Option<FsPath>,
         /// 設定ファイルの `[[language]]` の定義 (重ねる順)。
         config: Vec<eve_config::LanguageDef>,
+        /// ワークスペース層の `[[language]]` の定義 (`.eve/config.toml`、07 §9.6 の LANG-2)。空でなければ、ユーザー層の後に
+        /// 重ねた集まり (ルートの下の文書の判定に使う) も作る。
+        workspace: Vec<eve_config::LanguageDef>,
+        /// ジョブの中で `first_line` の正規表現まで組む (起動時の 1 回のほか。差し替えた集まりで主スレッドが判定するときに
+        /// 組まない)。
+        precompile: bool,
+        /// ワークスペース層のファイルの表示名 (ワークスペース層の集まりの診断は、このファイルの分だけ返す)。
+        workspace_files: Vec<String>,
+    },
+    /// ワークスペース層 (`<root>/.eve/config.toml`・`.eve/keymap.toml`) を所有者の検査つきで読み、解析・分類する (07 §12.5 の
+    /// WSC-1 / WSC-2、02 §9.3 の `ReadWorkspaceConfig`)。起動時はルートが決まったとき、`config.reload` はユーザー層を
+    /// 読み直した後に積む。結果は `JobResult::WorkspaceConfigRead`。
+    ReadWorkspaceConfig {
+        /// ワークスペースのルート。
+        root: FsPath,
+        /// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。
+        conditions: eve_config::Conditions,
+        /// `workspace.safe_directories` (07 §12.1 の OWN-5)。
+        safe_dirs: Vec<FsPath>,
     },
     /// 言語定義の `first_line` の正規表現を組む (07 §9.6 の段 2 の細目)。`ReadLanguages` の結果が届いたときに積む (起動時は
     /// 起動時のパスを開くジョブの後ろになる)。結果は `JobResult::LanguagesPrecompiled`。
     PrecompileLanguages {
         /// 組む定義の集まり (主スレッドと共有する。組んだ正規表現はそのまま判定に使う)。
         set: std::sync::Arc<eve_config::LanguageSet>,
+        /// ワークスペース層の定義も重ねた集まり (あれば。ルートの下の文書の判定に使う。主スレッドで組まない)。
+        workspace: Option<std::sync::Arc<eve_config::LanguageSet>>,
+        /// ワークスペース層のファイルの表示名 (`workspace` の診断はこのファイルの分だけ返す。ユーザー層の分は `set` と同じ)。
+        workspace_files: Vec<String>,
     },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata {

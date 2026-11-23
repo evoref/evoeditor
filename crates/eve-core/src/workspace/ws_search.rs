@@ -29,7 +29,7 @@ use super::{Candidate, EntryFacts, ExcludeConfig, WALK_STEP_TIME, WalkStep, Work
 
 /// 結果の行の上限 (`WS_MAX_RESULT_LINES`。`search.max_matches` の既定と同じ桁)。達したら走査もやめて打ち切りの印を立てる。
 pub const WS_MAX_RESULT_LINES: usize = 10_000;
-/// 探すファイルの大きさの上限の既定 (`search.workspace.max_file_size` の既定、07 §5.5。設定のキーは予約のまま)。
+/// 探すファイルの大きさの上限の既定 (`search.workspace.max_file_size` の既定、07 §5.5。v0.5 の M33 の段 5 で公開)。
 pub const WS_MAX_FILE_SIZE: u64 = 2 * 1024 * 1024;
 /// 1 つのファイルの読込の上限 (`max_file_size` に依らない。復号で膨らんだ 1 ファイルで `bg` が数 GB を持たない)。
 pub const WS_MAX_DECODE_BYTES: u64 = 64 * 1024 * 1024;

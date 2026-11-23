@@ -551,7 +551,8 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         Pending::ConfigReload
         | Pending::ThemeRead
         | Pending::LanguagesRead { .. }
-        | Pending::LanguagesPrecompile
+        | Pending::WorkspaceConfig { .. }
+        | Pending::LanguagesPrecompile { .. }
         | Pending::RecoveryScan
         | Pending::LastVersion
         | Pending::WorkspaceRoot

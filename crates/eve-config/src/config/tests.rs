@@ -514,6 +514,12 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "search.regex_default",
         "search.max_matches",
         "search.count_limit",
+        "search.workspace.respect_gitignore",
+        "search.workspace.follow_symlinks",
+        "search.workspace.max_file_size",
+        "workspace.root_markers",
+        "workspace.exclude",
+        "workspace.safe_directories",
     ]
     .into_iter()
     .collect();
@@ -563,6 +569,18 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("search.regex_default", "false"),
         ("search.max_matches", "10000"),
         ("search.count_limit", "1000000"),
+        ("search.workspace.respect_gitignore", "true"),
+        ("search.workspace.follow_symlinks", "false"),
+        ("search.workspace.max_file_size", "2097152"),
+        (
+            "workspace.root_markers",
+            "[\".eve\", \".git\", \".hg\", \".svn\"]",
+        ),
+        (
+            "workspace.exclude",
+            "[\"**/.git\", \"**/node_modules\", \"**/target\"]",
+        ),
+        ("workspace.safe_directories", "[]"),
     ];
     assert_eq!(want.len(), KEYS.len());
     for (key, display) in want {
@@ -664,7 +682,8 @@ fn 配布する設定例は全公開キーを既定値で書く() {
 }
 
 /// 公開キーを型ごとに分ける (読み方の宣言の表との突合も兼ねる)。
-const INT_KEYS: [&str; 14] = [
+const INT_KEYS: [&str; 15] = [
+    "search.workspace.max_file_size",
     "editor.tab_width",
     "editor.indent_width",
     "view.ambiguous_width",
@@ -680,7 +699,9 @@ const INT_KEYS: [&str; 14] = [
     "search.max_matches",
     "search.count_limit",
 ];
-const BOOL_KEYS: [&str; 8] = [
+const BOOL_KEYS: [&str; 10] = [
+    "search.workspace.respect_gitignore",
+    "search.workspace.follow_symlinks",
     "file.swap.enabled",
     "file.swap.exclude_secret_files",
     "view.wrap_kinsoku",
@@ -704,10 +725,10 @@ fn 全公開キーで型の取り違えは警告して既定値に戻す() {
     let string_keys: Vec<&str> = KEYS
         .iter()
         .copied()
-        .filter(|k| !INT_KEYS.contains(k) && !BOOL_KEYS.contains(k))
+        .filter(|k| !INT_KEYS.contains(k) && !BOOL_KEYS.contains(k) && !LIST_KEYS.contains(k))
         .collect();
     assert_eq!(
-        INT_KEYS.len() + BOOL_KEYS.len() + string_keys.len(),
+        INT_KEYS.len() + BOOL_KEYS.len() + LIST_KEYS.len() + string_keys.len(),
         KEYS.len()
     );
     // (キー, 期待する型, 取り違えた値の TOML, found, 記録される値)
@@ -723,6 +744,11 @@ fn 全公開キーで型の取り違えは警告して既定値に戻す() {
         cases.push((k, "boolean", "1", "integer", "1"));
         cases.push((k, "boolean", "\"true\"", "string", "true"));
         cases.push((k, "boolean", "0x10", "integer", "0x10"));
+    }
+    for k in LIST_KEYS {
+        cases.push((k, "array", "1", "integer", "1"));
+        cases.push((k, "array", "\"a\"", "string", "a"));
+        cases.push((k, "array", "{ a = 1 }", "table", "table"));
     }
     for k in &string_keys {
         cases.push((k, "string", "1", "integer", "1"));

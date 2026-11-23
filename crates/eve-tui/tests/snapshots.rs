@@ -156,6 +156,8 @@ fn 設定の値と由来の一覧の画面() {
                     wsl: false,
                 },
             },
+            no_workspace_config: false,
+            home: None,
         }),
         ..Default::default()
     });

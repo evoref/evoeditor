@@ -33,10 +33,6 @@ use crate::ui_model::keys;
 use crate::ui_model::overlay::{Overlay, field_selection};
 use crate::ui_model::palette::WINDOW;
 
-/// `workspace.exclude` の既定 (07 §5.9)。設定のキーはまだ公開していない (予約のまま、03 §12.7.1 の段 1 の細目 (1))。公開する
-/// までは、この値で除外する。
-pub(crate) const DEFAULT_WORKSPACE_EXCLUDE: [&str; 3] = ["**/.git", "**/node_modules", "**/target"];
-
 /// 塊の列 (一覧・走査の途中の塊・照合に渡した写し)。
 pub(crate) type Chunks = Vec<Arc<[Candidate]>>;
 
@@ -192,6 +188,36 @@ pub(crate) fn register(r: &mut CommandRegistry) {
 }
 
 impl EditorState {
+    /// 走査・横断検索の除外の設定 (`workspace.exclude`・`search.workspace.respect_gitignore`・
+    /// `search.workspace.follow_symlinks`、07 §5.5 / §5.9。v0.5 の M33 の段 5 で公開)。始める時点の値 (次の走査から効く)。
+    pub(crate) fn exclude_config(&self) -> ExcludeConfig {
+        let c = &self.settings.config;
+        ExcludeConfig {
+            exclude: c.exclude.clone(),
+            respect_gitignore: c.ws_respect_gitignore,
+            follow_symlinks: c.ws_follow_symlinks,
+        }
+    }
+
+    /// 除外の設定 (`workspace.exclude` など) が `before` から変わったら、ファインダの一覧を手放して走査をやり直す (ワークスペース
+    /// 層が起動の後に届いたときと `config.reload`。07 §12.5 の WSC-5)。ファインダを開いていれば、その場で走査を始める。
+    pub(crate) fn finder_on_exclude_changed(&mut self, before: &ExcludeConfig) {
+        if self.exclude_config() == *before {
+            return;
+        }
+        let open = matches!(self.ui.overlay, Some(Overlay::Finder(_)));
+        let held = !self.workspace.finder.chunks.is_empty() || self.workspace.finder.scan.is_some();
+        if !held {
+            return;
+        }
+        self.finder_release_list();
+        if open && self.workspace().is_some() {
+            self.finder_start_scan();
+            self.finder_rematch();
+            self.mark_dirty_render();
+        }
+    }
+
     /// `workspace.open_file`: ファインダを開く (03 §12.7.4)。`query` があれば入力欄に入れる。ルートが決まっていれば走査を
     /// 始め (走っていればそのまま使う)、今の一覧で照合する。決まる前なら「調べています」を出し、決まった時点で始める。
     pub(crate) fn open_finder(&mut self, query: Option<String>) -> CommandResult {
@@ -240,10 +266,7 @@ impl EditorState {
         // 一覧が空 (最初・手放した後・前の走査が候補を出さずに失敗した) なら、届いた束をそのまま足す (03 §12.7.4 の段 6 の
         // 細目 (6))
         let fresh = list.chunks.is_empty();
-        let exclude = Arc::new(ExcludeConfig {
-            exclude: DEFAULT_WORKSPACE_EXCLUDE.map(str::to_owned).to_vec(),
-            ..ExcludeConfig::new()
-        });
+        let exclude = Arc::new(self.exclude_config());
         let job = self.jobs.spawn(
             None,
             eve_view::Revision::INITIAL,

@@ -59,6 +59,8 @@ impl EditorState {
     /// `report_config` と同じだが、一覧のそのファイルの診断を置き換えずに足す (テーマが無い診断を、`theme.name` を
     /// 書いた設定ファイルの名前で出すとき。07 §8.7)。
     pub(crate) fn report_config_more(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        // ワークスペース層のファイルは、足した後の合計で 1 つのファイルの上限を掛ける (07 §4.3)
+        let workspace = self.settings.workspace_files.iter().any(|w| w == file);
         if !diagnostics.is_empty() {
             match self
                 .ui
@@ -66,14 +68,29 @@ impl EditorState {
                 .iter_mut()
                 .find(|(f, _)| f == file)
             {
-                Some((_, ds)) => ds.extend(diagnostics.iter().cloned()),
-                None => self
-                    .ui
-                    .config_diagnostics
-                    .push((file.to_owned(), diagnostics.to_vec())),
+                Some((_, ds)) => {
+                    ds.extend(diagnostics.iter().cloned());
+                    if workspace {
+                        eve_config::cap_diagnostics(ds);
+                    }
+                }
+                None => {
+                    let mut ds = diagnostics.to_vec();
+                    if workspace {
+                        eve_config::cap_diagnostics(&mut ds);
+                    }
+                    self.ui.config_diagnostics.push((file.to_owned(), ds));
+                }
             }
         }
-        self.show_config_problems(file, diagnostics);
+        // 要約も上限を掛けた後の列で作る
+        if workspace {
+            let mut shown = diagnostics.to_vec();
+            eve_config::cap_diagnostics(&mut shown);
+            self.show_config_problems(file, &shown);
+        } else {
+            self.show_config_problems(file, diagnostics);
+        }
     }
 
     /// 一覧から、テーマが無い診断 (`DiagKind::ThemeNotFound`) を消す (テーマを読み直す前)。
@@ -243,6 +260,10 @@ impl EditorState {
                 .locales
                 .filter(|_| eve_config::Locale::from_file_name(name).is_some())
                 .map(|dir| dir.join(name));
+        }
+        // ワークスペース層のファイル (`.eve/config.toml`・`.eve/keymap.toml`。表示名が絶対パス、07 §12.5)
+        if self.settings.workspace_files.iter().any(|w| w == file) {
+            return Some(crate::FsPath::from(file));
         }
         // 言語定義のファイル (`languages/<file>.toml`、07 §9.6)。ファイルの多すぎる診断 (`languages/`) は開かない
         if let Some(name) = file.strip_prefix(crate::io::languages::LANGUAGES_PREFIX) {
@@ -553,6 +574,56 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             group = "language";
             p.message_name()
         }
+        // 1 つのファイルの診断の上限を超えた分 (07 §4.3)
+        DiagKind::More { count } => {
+            args.push(("count", count.to_string()));
+            "more"
+        }
+        // 配列の要素の誤り (07 §5.9)。広すぎる安全な場所は使うので、別の文言 (07 §12.1 の OWN-5)
+        DiagKind::ListItem(p) => {
+            if *p == eve_config::ListItemProblem::TooBroad {
+                "broad_safe_directory"
+            } else {
+                args.push((
+                    "reason",
+                    word(&format!("ui.config.item_reason.{}", p.reason_name()), &[]),
+                ));
+                "invalid_item"
+            }
+        }
+        // ワークスペース層の診断 (`msg.workspace.*`、07 §12.5 の WSC-4・§7.4 の WKEY-2・§12.1 の OWN-7)。パスは切らずに
+        // 制御文字などだけを直す (場所を示すため)
+        DiagKind::Workspace(p) => {
+            use eve_config::WorkspaceProblem as W;
+            let path = eve_config::escape_untrusted(&d.value);
+            match p {
+                W::Pending => args.push(("class", word("ui.workspace.class.semi_safe", &[]))),
+                W::KeyRejected(r) => {
+                    args.push(("key", clean(&d.key)));
+                    args.push((
+                        "reason",
+                        word(&format!("ui.workspace.key_reason.{}", r.reason_name()), &[]),
+                    ));
+                }
+                W::TooManyKeys => args.push(("count", clean(&d.value))),
+                W::NotOwned { owner } => {
+                    args.push(("path", path));
+                    args.push(("owner", clean(owner)));
+                }
+                W::OthersCanWrite { who } => {
+                    args.push(("path", path));
+                    args.push(("who", clean(who)));
+                }
+                W::OwnerUnknown { fs } => {
+                    args.push(("path", path));
+                    args.push(("fs", clean(fs)));
+                }
+                W::OpenedElsewhere | W::NotRegular | W::TooLarge => args.push(("path", path)),
+                W::PendingUnsafe | W::Ignored | W::NoEffect => {}
+            }
+            group = "workspace";
+            p.message_name()
+        }
     };
     let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let key = |part: &str| format!("msg.{group}.{kind}.{part}");
@@ -676,6 +747,10 @@ pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
         DiagKind::Locale(p) => p.message_name(),
         DiagKind::Condition(p) => p.message_name(),
         DiagKind::Language(p) => p.message_name(),
+        DiagKind::ListItem(eve_config::ListItemProblem::TooBroad) => "broad_safe_directory",
+        DiagKind::ListItem(_) => "invalid_item",
+        DiagKind::Workspace(p) => p.message_name(),
+        DiagKind::More { .. } => "more",
     }
 }
 
@@ -684,7 +759,8 @@ pub fn problem_count(diags: &[&Diagnostic]) -> usize {
     diags
         .iter()
         .map(|d| match &d.kind {
-            DiagKind::Locale(eve_config::LocaleProblem::More { count }) => *count,
+            DiagKind::Locale(eve_config::LocaleProblem::More { count })
+            | DiagKind::More { count } => *count,
             _ => 1,
         })
         .sum()

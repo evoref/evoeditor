@@ -130,6 +130,25 @@ pub(crate) struct Settings {
     pub(crate) ambiguous_noted: BTreeSet<(String, String)>,
     /// 起動時の言語定義の読込を積んだ。
     pub(crate) languages_requested: bool,
+    /// ユーザー層 (設定ファイルだけを重ねたもの。07 §3.1 の L0 + L2)。ワークスペース層を重ね直す土台と、「方向のみ」の比較の
+    /// 下の層 (07 §12.3)。Host が渡さなければ `None` (ワークスペース層を読まない試験の起動)。
+    pub(crate) user_layer: Option<eve_config::UserLayer>,
+    /// 使っているワークスペース層 (`.eve/config.toml` を読んで分類したもの、07 §12.5)。読んでいなければ `None`。
+    pub(crate) workspace_layer: Option<std::sync::Arc<eve_config::WorkspaceLayer>>,
+    /// ワークスペース層の `[[language]]` の定義 (`source` は `.eve/config.toml` の絶対パス)。`ReadLanguages` に渡す。
+    pub(crate) workspace_languages: Vec<eve_config::LanguageDef>,
+    /// ワークスペース層の言語定義を重ねた集まり (ルートの下の文書の判定に使う、07 §3.6 の LAYER-1)。ワークスペース層に
+    /// 言語定義が無ければ `None` (`languages` を使う)。
+    pub(crate) workspace_language_set: Option<std::sync::Arc<eve_config::LanguageSet>>,
+    /// ワークスペース層のファイルの表示名 (`.eve/config.toml`・`.eve/keymap.toml` の絶対パス。診断の一覧の `Enter` で開き、
+    /// `config.reload` でユーザー層の診断と一緒に消さない)。読んでいなければ空。
+    pub(crate) workspace_files: Vec<String>,
+    /// `.eve/config.toml` の名前で出す、層の外の診断 (読まなかった理由・構文エラー・未対応の置き場所。分類の診断は重ねるたびに
+    /// 足す)。
+    pub(crate) workspace_notes: Vec<eve_config::Diagnostic>,
+    /// 前回ワークスペース層を読んだときの `workspace.safe_directories` (`config.reload` で変わったら、一時の失敗でも前の層を
+    /// 保たない、07 §12.5 の WSC-1)。
+    pub(crate) workspace_safe_dirs: Option<Vec<String>>,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -266,13 +285,17 @@ pub(crate) struct KeyLabels {
     pub(crate) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
     /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
     pub(crate) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
+    /// ワークスペース層のキーマップ (`.eve/keymap.toml`、07 §7.4 の WKEY-1)。ユーザー層を替えたときに検証し直すために持つ。
+    pub(crate) workspace_keymap_file: Option<eve_config::KeymapFile>,
+    /// ワークスペース層の読込の途中: 届いたキーマップ (Editor が受け取って層を差し替える。`Some(None)` は層を外す) と、
+    /// 診断を出すファイルの表示名 (`.eve/keymap.toml` の絶対パス)。
+    pub(crate) workspace_keymap_pending: Option<(Option<eve_config::KeymapFile>, String)>,
     /// `{key:<command_id>}` の解決用のキー表記 (コマンド → 第一割当)。
     pub(crate) key_labels: BTreeMap<String, String>,
     /// コマンド → 第一割当のストローク列 (ヒントバーの逆引き)。
     pub(crate) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
     /// すべての割当をコマンドごとに集めたもの (ヘルプのキー一覧、04 §8.6)。
-    pub(crate) key_all:
-        BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, crate::ui_model::help::KeyState)>>,
+    pub(crate) key_all: BTreeMap<String, Vec<crate::ui_model::help::KeyEntry>>,
 }
 
 /// 出力: frontend への Effect・Host への EditorEvent・描き直しの要求・退避の更新の印 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -335,6 +358,8 @@ impl EditorState {
                 key_all: BTreeMap::new(),
                 reloaded: None,
                 user_keymap_entries: None,
+                workspace_keymap_file: None,
+                workspace_keymap_pending: None,
             },
             ui: UiState {
                 overlay: None,
@@ -402,6 +427,13 @@ impl EditorState {
                 config_languages: Vec::new(),
                 ambiguous_noted: BTreeSet::new(),
                 languages_requested: false,
+                user_layer: None,
+                workspace_layer: None,
+                workspace_languages: Vec::new(),
+                workspace_language_set: None,
+                workspace_files: Vec::new(),
+                workspace_notes: Vec::new(),
+                workspace_safe_dirs: None,
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
                     eve_view::ColorDepth::TrueColor,
@@ -506,16 +538,10 @@ impl EditorState {
         self.io.system_encoding = encoding;
     }
 
-    /// `file.default_line_ending` の実際の改行 (`native` は OS に従う)。
+    /// `file.default_line_ending` の実際の改行 (`native` は OS に従う)。既存のファイルの改行の判定に使うので、ワークスペース層を
+    /// 除いた値 (07 §3.6 の LAYER-4 の (1)(2)(8))。
     pub(crate) fn config_eol(&self) -> eve_text::LineEnding {
-        use eve_config::DefaultLineEnding;
-        match self.settings.config.default_line_ending {
-            DefaultLineEnding::Lf => eve_text::LineEnding::Lf,
-            DefaultLineEnding::Crlf => eve_text::LineEnding::Crlf,
-            DefaultLineEnding::Cr => eve_text::LineEnding::Cr,
-            DefaultLineEnding::Native if cfg!(windows) => eve_text::LineEnding::Crlf,
-            DefaultLineEnding::Native => eve_text::LineEnding::Lf,
-        }
+        line_ending_of(self.user_doc_values().default_line_ending.value)
     }
 
     /// `file.long_line_threshold` (長大行の閾値、バイト)。
@@ -523,11 +549,25 @@ impl EditorState {
         usize::try_from(self.settings.config.long_line_threshold).unwrap_or(usize::MAX)
     }
 
-    /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。
+    /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。パスの無い文書として
+    /// 決め (07 §3.6 の LAYER-4。無題は (1)(2)(6)(8))、存在しないパスの文書は、パスを付けた後に [`Self::set_new_file_format`]
+    /// で決め直す。
     pub(crate) fn blank_document(&self) -> Document {
-        use eve_config::DefaultEncoding;
         let mut doc = Document::new_untitled();
-        let (encoding, has_bom) = match self.settings.config.default_encoding {
+        self.set_new_file_format(&mut doc);
+        doc.display = self.display_settings();
+        doc.indent = crate::document::IndentSettings {
+            unit: self.settings.config.indent_unit,
+            width: self.settings.config.indent_width,
+        };
+        doc
+    }
+
+    /// 新しいファイルの文書の文字コードと改行を、文書ごとの値 (07 §3.6 の LAYER-4) で決める。
+    pub(crate) fn set_new_file_format(&self, doc: &mut Document) {
+        use eve_config::DefaultEncoding;
+        let v = self.doc_values_of(doc);
+        let (encoding, has_bom) = match v.default_encoding.value {
             DefaultEncoding::Utf8 => (crate::Encoding::Utf8, false),
             // `system` は OS ロケール由来のヒント (05 §6)。ヒントが無ければ UTF-8
             DefaultEncoding::System => (
@@ -543,13 +583,33 @@ impl EditorState {
         };
         doc.format.encoding = encoding;
         doc.format.has_bom = has_bom;
-        doc.format.default_eol = self.config_eol();
-        doc.display = self.display_settings();
-        doc.indent = crate::document::IndentSettings {
-            unit: self.settings.config.indent_unit,
-            width: self.settings.config.indent_width,
-        };
-        doc
+        doc.format.default_eol = line_ending_of(v.default_line_ending.value);
+    }
+
+    /// まだ編集も保存もしていない新しいファイルの文書 (ディスクに無いパスの文書と、標準入力でない無題の文書) の文字コードと
+    /// 改行を決め直す (ワークスペース層が届いた後と、`config.reload` の後。07 §3.6 の LAYER-4。編集した後は決め直さない)。
+    pub(crate) fn refresh_new_file_formats(&mut self) {
+        let ids: Vec<eve_view::DocumentId> = self
+            .docs
+            .documents
+            .iter()
+            .filter(|(_, d)| {
+                d.disk_stamp.is_none()
+                    && !d.format_chosen
+                    && d.stdin.is_none()
+                    && d.load_state == crate::document::LoadState::Ready
+                    && !d.is_dirty()
+                    && !d.history().can_undo()
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            let Some(mut d) = self.docs.documents.remove(&id) else {
+                continue;
+            };
+            self.set_new_file_format(&mut d);
+            self.docs.documents.insert(id, d);
+        }
     }
 
     /// 無題の文書の表示名 (`status.untitled` に文書の通し番号を入れたもの、03 §9.8 の「無題の採番」)。
@@ -711,6 +771,8 @@ impl EditorState {
     pub fn set_default_eol(&mut self, doc: DocumentId, eol: eve_text::LineEnding) {
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.format.default_eol = eol;
+            // 明示の選択: 新しいファイルの形を設定から決め直さない (07 §3.6 の LAYER-4)
+            d.format_chosen = true;
             self.out.needs_render = true;
         }
     }
@@ -1328,5 +1390,17 @@ impl EditorState {
             })),
             _ => None,
         }
+    }
+}
+
+/// `file.default_line_ending` の値の実際の改行 (`native` は OS に従う)。
+fn line_ending_of(v: eve_config::DefaultLineEnding) -> eve_text::LineEnding {
+    use eve_config::DefaultLineEnding;
+    match v {
+        DefaultLineEnding::Lf => eve_text::LineEnding::Lf,
+        DefaultLineEnding::Crlf => eve_text::LineEnding::Crlf,
+        DefaultLineEnding::Cr => eve_text::LineEnding::Cr,
+        DefaultLineEnding::Native if cfg!(windows) => eve_text::LineEnding::Crlf,
+        DefaultLineEnding::Native => eve_text::LineEnding::Lf,
     }
 }

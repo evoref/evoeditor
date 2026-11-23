@@ -381,7 +381,7 @@ pub fn ignored_args(args: &[String]) -> Bi {
 
 /// `--help` の本文 (`cli.help.*`)。オプション名の後ろに英語の説明、次の行に日本語の説明を揃えて出す。
 pub fn help() -> String {
-    const OPTIONS: [(&str, &str, &str); 17] = [
+    const OPTIONS: [(&str, &str, &str); 18] = [
         (
             "-R, --readonly",
             "Open the file read-only",
@@ -406,6 +406,12 @@ pub fn help() -> String {
             "-N, --no-config",
             "Do not read config.toml, keymap.toml, theme files, or language files (use the defaults)",
             "config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます)",
+        ),
+        // 07 §18.3。v0.5 の M33 の段 5 (ワークスペース設定、07 §12.5 の WSC-7)
+        (
+            "--no-workspace-config",
+            "Do not read the workspace settings (.eve/config.toml, .eve/keymap.toml) or .editorconfig",
+            "ワークスペース設定 (.eve/config.toml・.eve/keymap.toml) と .editorconfig を読みません",
         ),
         (
             "-s, --set <key>=<value>",
@@ -607,6 +613,7 @@ mod tests {
             "--wait",
             "--config",
             "--no-config",
+            "--no-workspace-config",
             "--set",
             "--check-config",
             "--dump-config",

@@ -50,7 +50,7 @@ use crate::command::ids;
 use crate::document::Document;
 use crate::jobs::Ports;
 use crate::time::Tick;
-use crate::ui_model::help::KeyState;
+use crate::ui_model::help::{KeyOrigin, KeyState};
 
 /// eve-core の公開ファサード (02 §4.1)。Host は入力・ジョブの結果・時刻をこれに渡し、Frame・Effect・EditorEvent を受け取る。
 /// メインスレッドで使い、I/O はしない (ADR-0020。I/O はジョブとして `Ports.jobs` に投入する)。
@@ -134,11 +134,12 @@ impl Editor {
                 KeyState::Unreachable
             }
         };
-        let listed = self.keymap.all_bindings().into_iter().map(|b| {
+        let listed = self.keymap.listed_bindings().into_iter().map(|(layer, b)| {
             (
                 b.command.as_str().to_owned(),
                 b.sequence.clone(),
                 state_of(b),
+                KeyOrigin::of_layer(layer),
             )
         });
         let disabled = self.keymap.disabled_bindings().into_iter().map(|d| {
@@ -146,6 +147,7 @@ impl Editor {
                 d.binding.command.as_str().to_owned(),
                 d.binding.sequence.clone(),
                 KeyState::Disabled,
+                KeyOrigin::of_layer(d.layer),
             )
         });
         self.state
@@ -273,6 +275,8 @@ impl Editor {
         self.state.on_job_result(r);
         // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
         self.finish_reload_keymap();
+        // ワークスペース層の読込の結果: キーマップのワークスペース層を差し替える (07 §7.4 の WKEY-1。ユーザー層の後)
+        self.finish_workspace_keymap();
         self.state.flush_open_switches();
         self.state.sync_tab_line();
     }

@@ -166,16 +166,23 @@ pub enum JobResult {
     },
     /// `ReadLanguages` の結果。
     LanguagesRead {
-        /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現はまだ組んでいない。組むのは
+        /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現は、起動時の 1 回のほか (`config.reload`・
+        /// ワークスペース層が届いた契機) は組んである。起動時の 1 回は組んでいない。組むのは
         /// `PrecompileLanguages`)。
         set: std::sync::Arc<eve_config::LanguageSet>,
+        /// ワークスペース層の定義も重ねた集まり (ワークスペース層に定義が無ければ `None`)。
+        workspace_set: Option<std::sync::Arc<eve_config::LanguageSet>>,
         /// ファイルごとの診断 (表示名 `languages/<file>.toml`・`config.toml` など)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
     },
+    /// `ReadWorkspaceConfig` の結果。
+    WorkspaceConfigRead(crate::io::workspace_config::WorkspaceRead),
     /// `PrecompileLanguages` の結果。
     LanguagesPrecompiled {
         /// 組んだ定義の集まり (古い結果を見分ける)。
         set: std::sync::Arc<eve_config::LanguageSet>,
+        /// 組んだワークスペース層の集まり (古い結果を見分ける)。
+        workspace: Option<std::sync::Arc<eve_config::LanguageSet>>,
         /// 組めなかった `first_line` の診断 (表示名ごと)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
     },
