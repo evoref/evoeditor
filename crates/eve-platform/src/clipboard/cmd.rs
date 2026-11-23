@@ -66,7 +66,8 @@ pub fn detect(
     trusted: &dyn Fn(&str) -> bool,
     exists: &dyn Fn(&str) -> bool,
 ) -> Detection {
-    if set(env, "SSH_TTY") || set(env, "SSH_CONNECTION") {
+    let session = crate::session_env::session_env_from(env);
+    if session.ssh {
         return Detection::Ssh;
     }
     let find = |name: &str| {
@@ -112,7 +113,7 @@ pub fn detect(
             });
         }
     }
-    let wsl = set(env, "WSL_DISTRO_NAME") || set(env, "WSL_INTEROP");
+    let wsl = session.wsl;
     if wsl && exists(WSL_POWERSHELL) {
         let ps = |script| {
             argv(&[

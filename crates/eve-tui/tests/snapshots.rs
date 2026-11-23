@@ -131,6 +131,45 @@ fn コマンドパレットの画面() {
     check("palette", &mut h);
 }
 
+// verifies: AC-NFR-405-1
+#[test]
+fn 設定の値と由来の一覧の画面() {
+    // 条件の値は Linux・SSH の中に固定する (実行する OS に依らない画面にする、07 §3.4 の COND-2)
+    let mut h = with_file();
+    h.editor.configure(eve_core::StartupConfig {
+        config_sources: Some(eve_core::ConfigSources {
+            files: vec![(
+                "config.toml".to_owned(),
+                eve_core::FsPath::new("/evo/config/config.toml"),
+            )],
+            keymap: None,
+            sets: vec!["editor.backspace_unit=codepoint".to_owned()],
+            themes: None,
+            locales: None,
+            conditions: eve_config::Conditions {
+                os: Some(eve_config::Os::Linux),
+                frontend: eve_config::Frontend::Tui,
+                env: eve_config::EnvConditions {
+                    ssh: true,
+                    tmux: false,
+                    wsl: false,
+                },
+            },
+        }),
+        ..Default::default()
+    });
+    h.fs.add_file(
+        "/evo/config/config.toml",
+        b"[editor]\ntab_width = 8\n[os.linux.editor]\nindent_width = 2\n[os.windows.editor]\nindent_width = 3\n[env.ssh.editor]\nindent_unit = \"tab\"\n",
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.cmd("config.show");
+    // 公開キーで絞り込むと、枠と見出し (文書の名前と言語) と 4 種類の由来が 1 画面に入る
+    h.text("editor.");
+    check("config-show", &mut h);
+}
+
 // verifies: AC-NFR-603-6
 #[test]
 fn 入力プロンプトの画面() {

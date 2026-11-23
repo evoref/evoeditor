@@ -30,6 +30,10 @@ title = "切り取り"
 description = "設定ファイル (config.toml と keymap.toml) を読み直して、再起動せずに反映します。"
 title = "設定を読み直す"
 
+[cmd.config.show]
+description = "今効いている設定の値と、どこで決まったかを一覧で示します。Enter で値を書いたファイルのその行を開きます。"
+title = "設定の値と由来を表示"
+
 [cmd.config.show_diagnostics]
 description = "設定ファイル・キーマップ・テーマ・言語ファイルの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
 title = "設定の診断を表示"
@@ -616,6 +620,26 @@ text = "{path} はフォルダなので開けません。ワークスペース�
 [msg.clipboard.fallback]
 hint = "他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください"
 text = "システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason}"
+
+[msg.config.condition_unknown]
+hint = "〔{suggestion} ではありませんか? 〕使える名前は os.windows・os.macos・os.linux・os.unix・frontend.tui・env.ssh・env.tmux・env.wsl です。このセクションは使いません"
+text = "{item} は条件付きセクションの名前ではありません"
+
+[msg.config.condition_nested]
+hint = "条件ごとに別のセクションに書いてください。このセクションは使いません"
+text = "条件付きセクションは入れ子にできません ({item})"
+
+[msg.config.condition_bare_key]
+hint = "[os.windows.editor] のようにセクションをはさんでください。このキーは使いません"
+text = "条件付きセクションの直下にはキーを書けません ({item})"
+
+[msg.config.condition_unsupported_table]
+hint = "言語定義は条件の外に、キーの割当は keymap.toml の when に書いてください。このセクションは使いません"
+text = "条件付きセクションの中に {item} は書けません"
+
+[msg.config.condition_in_keymap]
+hint = 'OS ごとの割当は when = "os == \"windows\"" のように書いてください。このセクションは使いません'
+text = "keymap.toml では条件付きセクション ({item}) を使えません"
 
 [msg.config.invalid_value]
 hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
@@ -1472,6 +1496,18 @@ placeholder = "診断の文で絞り込み"
 no_match = "一致する診断はありません"
 item = "{level}: {text} / {hint}"
 item_no_hint = "{level}: {text}"
+
+[ui.config_show]
+title = "設定 ({name}・{language})"
+placeholder = "キー・値・由来で絞り込み"
+no_match = "一致する設定はありません"
+item = "{key} = {value}"
+
+[ui.config_origin]
+default = "既定"
+user = "ユーザー: {file}:{line}"
+cli = "--set"
+condition = "{origin} [{condition}]"
 
 [ui.finder]
 title = "ファイルを開く ({root})"

@@ -121,6 +121,8 @@ pub(crate) struct PaletteState {
     pub buffers: bool,
     /// 設定の診断の一覧 (`config.show_diagnostics`、07 §4.3)。パレットと同じリスト部品で、候補が診断になる。
     pub diagnostics: bool,
+    /// 設定の値と由来の一覧 (`config.show`、07 §3.5)。パレットと同じリスト部品で、候補が公開キーになる。
+    pub settings: bool,
 }
 
 struct Hit {
@@ -423,6 +425,7 @@ impl EditorState {
         match p.stage {
             _ if p.buffers => self.buffer_hits(&p.text).len(),
             _ if p.diagnostics => self.config_diagnostic_hits(&p.text).len(),
+            _ if p.settings => self.config_show_hits(&p.text).len(),
             Some(def) => self.arg_hits(def, &p.text).len(),
             None => self.palette_hits(&p.text).len(),
         }
@@ -484,6 +487,9 @@ impl EditorState {
         }
         if p.diagnostics {
             return self.config_diagnostics_confirm();
+        }
+        if p.settings {
+            return self.config_show_confirm();
         }
         if let Some(def) = p.stage {
             // 引数の値を選んだ: パレットを閉じて、その値でコマンドを実行する
@@ -593,6 +599,9 @@ impl EditorState {
         }
         if p.diagnostics {
             return self.config_diagnostics_model(p);
+        }
+        if p.settings {
+            return self.config_show_model(p);
         }
         if let Some(def) = p.stage {
             return self.arg_model(p, def);

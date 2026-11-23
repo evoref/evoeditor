@@ -110,6 +110,7 @@ impl EditorState {
             Some(Overlay::Prompt(_)) => "prompt",
             Some(Overlay::Palette(p)) if p.buffers => "buffer_list",
             Some(Overlay::Palette(p)) if p.diagnostics => "config_diagnostics",
+            Some(Overlay::Palette(p)) if p.settings => "config_show",
             Some(Overlay::Palette(_)) => "palette",
             Some(Overlay::Help(_)) => "help",
             Some(Overlay::Finder(_)) => "finder",

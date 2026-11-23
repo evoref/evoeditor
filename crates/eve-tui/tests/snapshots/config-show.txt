@@ -1,0 +1,18 @@
+ 1│こんにちは、世界
+ 2┌─ 設定 (memo.txt・plain) ─────────────────────────────────────────────────┐
+ 3│ editor.                                                                  │
+ 4│ ▶ editor.tab_width = 8                           ユーザー: config.toml:2 │
+~ │   editor.indent_unit = "tab"           ユーザー: config.toml:8 [env.ssh] │
+~ │   editor.indent_width = 2             ユーザー: config.toml:4 [os.linux] │
+~ │   editor.undo.total_max_bytes = 268435456                           既定 │
+~ │   editor.backspace_unit = "codepoint"                              --set │
+~ └─────────────────────────────────────────────────────────────────── 5/37 ─┘
+~
+~
+~
+~
+~
+memo.txt                                                     行 1, 桁 1 UTF-8 LF
+
+Esc 取消  Enter 決定
+cursor: Some(CellPos { col: 11, row: 2 })

@@ -69,6 +69,7 @@ pub(crate) fn structure_diagnostic(text: &str) -> Option<crate::Diagnostic> {
         // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
         line: u32::try_from(line).unwrap_or(u32::MAX),
         column: u32::try_from(column).unwrap_or(u32::MAX),
+        condition: None,
     })
 }
 

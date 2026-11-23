@@ -13,6 +13,7 @@ pub const BUFFER_PREV: &str = "buffer.prev";
 pub const CLIPBOARD_COPY: &str = "clipboard.copy";
 pub const CLIPBOARD_CUT: &str = "clipboard.cut";
 pub const CONFIG_RELOAD: &str = "config.reload";
+pub const CONFIG_SHOW: &str = "config.show";
 pub const CONFIG_SHOW_DIAGNOSTICS: &str = "config.show_diagnostics";
 pub const CURSOR_DOC_END: &str = "cursor.doc_end";
 pub const CURSOR_DOC_START: &str = "cursor.doc_start";
@@ -114,7 +115,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 109] = [
+pub const ALL: [&str; 110] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -126,6 +127,7 @@ pub const ALL: [&str; 109] = [
     CLIPBOARD_COPY,
     CLIPBOARD_CUT,
     CONFIG_RELOAD,
+    CONFIG_SHOW,
     CONFIG_SHOW_DIAGNOSTICS,
     CURSOR_DOC_END,
     CURSOR_DOC_START,

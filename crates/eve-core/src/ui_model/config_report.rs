@@ -227,7 +227,7 @@ impl EditorState {
     }
 
     /// 診断の表示名から、開くファイルのパス。`--set` (コマンドラインの値) はファイルが無いので `None`。
-    fn config_diagnostic_path(&self, file: &str) -> Option<crate::FsPath> {
+    pub(crate) fn config_diagnostic_path(&self, file: &str) -> Option<crate::FsPath> {
         let src = self.config_sources();
         if let Some((_, p)) = src.files.iter().find(|(name, _)| name == file) {
             return Some(p.clone());
@@ -275,7 +275,12 @@ impl EditorState {
     }
 
     /// `path` を開いて (開いていれば切り替えて) 行・桁 (1 始まり) へ移る。読込中なら読み終わってから移る。
-    fn open_at(&mut self, path: &crate::FsPath, line: usize, col: usize) -> CommandResult {
+    pub(crate) fn open_at(
+        &mut self,
+        path: &crate::FsPath,
+        line: usize,
+        col: usize,
+    ) -> CommandResult {
         let find_doc = |st: &EditorState| {
             st.docs
                 .documents
@@ -411,10 +416,8 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
         // 「このバージョンでは未対応」は情報の 1 文だけ (`info.config.unsupported`、07 §4.3。対処は無い)
         DiagKind::Unsupported => {
             let item = clean(&d.key);
-            return (
-                word(keys::INFO_CONFIG_UNSUPPORTED, &[("item", &item)]),
-                String::new(),
-            );
+            let text = word(keys::INFO_CONFIG_UNSUPPORTED, &[("item", &item)]);
+            return (with_condition(cat, text, d), String::new());
         }
         // 公開しない、常に有効の機能のキー (`editor.multi_cursor`、07 §5.1)。本文と対処の 2 文
         DiagKind::MultiCursorAlways => "multi_cursor_always",
@@ -509,13 +512,36 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                 "invalid_value"
             }
         }
+        // 条件付きセクションの誤り (07 §3.4 の COND-5 / COND-6)。未知の名前は、近い名前があれば対処に出す
+        DiagKind::Condition(p) => {
+            if let eve_config::ConditionProblem::Unknown {
+                suggestion: Some(s),
+            } = p
+            {
+                args.push(("suggestion", (*s).to_owned()));
+            }
+            p.message_name()
+        }
     };
     let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let key = |part: &str| format!("msg.config.{kind}.{part}");
+    let text = cat.render(&key("text"), &refs, &|_| None);
     (
-        cat.render(&key("text"), &refs, &|_| None),
+        with_condition(cat, text, d),
         cat.render(&key("hint"), &refs, &|_| None),
     )
+}
+
+/// 条件付きセクションの中の診断の本文に、そのセクションの条件を添える (`{本文} [os.linux]`。07 §3.4 の COND-4)。
+fn with_condition(cat: &eve_config::Catalog, text: String, d: &Diagnostic) -> String {
+    match d.condition {
+        Some(c) => cat.render(
+            keys::UI_CONFIG_ORIGIN_CONDITION,
+            &[("origin", &text), ("condition", c.name())],
+            &|_| None,
+        ),
+        None => text,
+    }
 }
 
 /// 言語ファイルの診断 (`msg.config.locale_*`) の引数。理由の語は `cat` で解決する。
@@ -617,6 +643,7 @@ pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
         DiagKind::Keymap(_) => "keymap",
         DiagKind::ThemeNotFound { .. } => "theme_not_found",
         DiagKind::Locale(p) => p.message_name(),
+        DiagKind::Condition(p) => p.message_name(),
     }
 }
 
@@ -681,6 +708,7 @@ mod tests {
                 value: String::new(),
                 line: 1,
                 column: 5,
+                condition: None,
             };
             assert_eq!(super::diagnostic_kind(&d), "syntax");
             let (text, hint) = diagnostic_texts(Catalog::builtin_ja(), &d);
@@ -704,6 +732,7 @@ mod tests {
             value: String::new(),
             line: 1,
             column: 2,
+            condition: None,
         };
         for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
             let (text, hint) = diagnostic_texts(cat, &d);
@@ -722,6 +751,7 @@ mod tests {
             value: "high-contrast".to_owned(),
             line: 3,
             column: 1,
+            condition: None,
         };
         let with = d(vec!["high-contrast-dark", "high-contrast-light"]);
         let (text, hint) = diagnostic_texts(Catalog::builtin_ja(), &with);
@@ -758,6 +788,7 @@ mod tests {
             value: "nope".to_owned(),
             line: 1,
             column: 1,
+            condition: None,
         };
         let cases = [
             d(
@@ -805,6 +836,7 @@ mod tests {
             value: format!("\u{202e}{}", "v".repeat(100)),
             line: 1,
             column: 1,
+            condition: None,
         };
         for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
             let (text, hint) = diagnostic_texts(cat, &d);
@@ -828,6 +860,7 @@ mod tests {
             value: String::new(),
             line: 0,
             column: 0,
+            condition: None,
         };
         let (text, _) = diagnostic_texts(Catalog::builtin_ja(), &s);
         assert!(text.ends_with("bad<U+000A>line<U+009B>"), "{text}");
@@ -839,6 +872,7 @@ mod tests {
             value: String::new(),
             line: 1,
             column: 1,
+            condition: None,
         };
         let (text, _) = diagnostic_texts(Catalog::builtin_en(), &u);
         assert!(text.starts_with("ai<U+0007> "), "{text}");
@@ -934,6 +968,7 @@ mod tests {
                 value: "zz".to_owned(),
                 line: 2,
                 column: 1,
+                condition: None,
             };
             for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
                 let (text, hint) = diagnostic_texts(cat, &d);
@@ -969,6 +1004,7 @@ mod tests {
                 value: String::new(),
                 line: 0,
                 column: 0,
+                condition: None,
             };
             diagnostic_texts(Catalog::builtin_ja(), &d).0
         };
@@ -1011,6 +1047,7 @@ mod tests {
             value: String::new(),
             line: 1,
             column: 1,
+            condition: None,
         };
         let (text, hint) = diagnostic_texts(Catalog::builtin_ja(), &d);
         assert!(
@@ -1111,6 +1148,7 @@ mod tests {
                     value: "zz".to_owned(),
                     line: 123,
                     column: 1,
+                    condition: None,
                 };
                 let (_, hint) = diagnostic_texts(cat, &d);
                 assert!(
@@ -1140,6 +1178,7 @@ mod tests {
             value: "fr".to_owned(),
             line: 0,
             column: 0,
+            condition: None,
         };
         let (_, short) = diagnostic_texts(Catalog::builtin_ja(), &d);
         assert!(!short.contains("/home/u"), "{short}");
