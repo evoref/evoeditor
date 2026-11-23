@@ -69,6 +69,9 @@ pub enum HostMsg {
         /// システムのクリップボードへの書込の失敗。成功した (または試みなかった) ときは `None`。
         system_failure: Option<eve_platform::clipboard::ClipboardFailure>,
     },
+    /// ファイル監視の知らせ (v0.5 の M33。02 §4.4 の `FileWatcher`)。登録の結果は `io` の作業から、変化は監視のスレッドから
+    /// 届く (05 §12.2 の 6 / 9)。
+    Fs(eve_core::FsEvent),
     /// `run()` の待機が期限で終わった (メッセージなし)。
     Tick,
 }

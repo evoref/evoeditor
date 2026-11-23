@@ -159,6 +159,27 @@ pub(crate) fn fs_class(path: &Path) -> FsClass {
     }
 }
 
+/// `path` のある FS の `statfs` の `f_type` (下位 32 bit。シンボリックリンクは辿った先の FS)。ファイル監視の FS の判定
+/// (05 §12.2 の 4) に使う。
+///
+/// # Errors
+///
+/// `statfs` の失敗 (無い・権限が無いなど) と、パスが NUL を含むとき。
+#[cfg(target_os = "linux")]
+pub(crate) fn statfs_type(path: &Path) -> io::Result<u32> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+    // SAFETY: ゼロ初期化した `statfs` (全フィールドが整数) に書かせる。
+    let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: NUL 終端のパスと有効な書込先。
+    if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
+    u32::try_from(st.f_type & 0xFFFF_FFFF).map_err(|_| io::Error::other("f_type"))
+}
+
 /// Linux 以外の Unix: 判定しない (`Unknown`。識別は信頼しない)。macOS へ移すときは `statfs` の `f_fstypename` で見分ける。
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn fs_class(_path: &Path) -> FsClass {

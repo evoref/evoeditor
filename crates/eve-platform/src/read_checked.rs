@@ -188,6 +188,10 @@ fn read_limited(f: File, max_len: u64, path: &FsPath) -> Result<CheckedRead, FsE
 
 // ---------- Windows ----------
 
+/// ネットワークの経路の判定 (ファイル監視の FS の判定 (05 §12.2 の 4) も使う)。
+#[cfg(windows)]
+pub(crate) use imp::is_mup;
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::{OsStr, OsString};
@@ -306,7 +310,7 @@ mod imp {
 
     /// NT の形の最終のパスが、ネットワークの経路 (Multiple UNC Provider、`\Device\Mup\`) の下か (ASCII の大文字小文字を
     /// 区別しない)。
-    pub(super) fn is_mup(nt_path: &[u16]) -> bool {
+    pub(crate) fn is_mup(nt_path: &[u16]) -> bool {
         const MUP: &str = r"\Device\Mup\";
         let s = String::from_utf16_lossy(nt_path);
         s.get(..MUP.len())

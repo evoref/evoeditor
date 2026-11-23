@@ -225,8 +225,8 @@ pub(crate) fn volume_info(f: &File) -> Option<(String, u32)> {
 }
 
 /// ハンドルのボリュームの FS が NTFS か `ReFS` で、識別で開ける FS か (`GetVolumeInformationByHandleW` の FS の名前と旗)。問い合わせの失敗は
-/// `false` (識別を信頼しない側)。
-fn trusted_id_fs(f: &File) -> bool {
+/// `false` (識別を信頼しない側)。ファイル監視の FS の判定 (05 §12.2 の 4) も同じ関数で、ユーザーモードの FS を見分ける。
+pub(crate) fn trusted_id_fs(f: &File) -> bool {
     /// FS の旗 `FILE_SUPPORTS_OPEN_BY_FILE_ID` (winnt.h。windows-sys では `Win32_System_SystemServices` の feature にあり、
     /// この 1 つのために feature を足さない)。
     const FILE_SUPPORTS_OPEN_BY_FILE_ID: u32 = 0x0100_0000;

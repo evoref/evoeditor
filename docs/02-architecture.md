@@ -385,7 +385,7 @@ trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform 
 | `HostTasks::spawn_host_task` (クリップボードの文字列化を bg のキューで行う。§4.3 R11 の「作業スレッドは固定 2 本」) | 無い。Host がクリップボードの文字列化と書込を使い捨てのスレッド `eve-clip-write` で行う (取得の `eve-clip-read` は §9.1 の表のとおり) | R11 との食い違い。v0.3 の M16 (Host の整理、STR-C3) で、bg に寄せるか R11 の例外として書くかを決める |
 | `JobSpawner` が種別で `io` / `bg` を選ぶ (`kind.lane()`) | `JobKind` に lane を持たない。eve-host の `ThreadJobSpawner::is_bg` が `Search` だけを bg に載せ、ほかはすべて io (v0.4 の M24 で `FindNext` と `ReplaceAll` も bg に載せる。03 §12.3.1 の「最悪の入力の上限」) | 割当の差は §9.1 の「v0.2.0 の実装との差」 |
 | `ThreadGuard` / `assert_not_main_thread_fs()` (メインスレッドでの I/O の自動検査) | 無い | 未実装。v0.3 の M13 (安全網) で入れるかを決める |
-| `HostTasks::spawn_io_task` (v0.5 の M33) | 無い (`HostTasks` そのものが無い。上の行) | M33 の段 7 (07 §12.6.2) で、監視の登録のために `HostTasks` を io の口と一緒に入れる (bg の口のクリップボードの文字列化は、上の行の扱いのまま) |
+| `HostTasks::spawn_io_task` (v0.5 の M33) | M33 の段 7 で入れた。eve-host の `HostTasks` は `spawn_io_task` だけを持ち、`ThreadJobSpawner` が実装する (`io` のキューにジョブと同じ順で積む。作業のパニックはその作業だけを捨ててレーンを続ける。キューが閉じていれば作業を走らせずに手放す) | `spawn_host_task` (bg の口のクリップボードの文字列化) は上の行の扱いのまま持たない。`ManualJobSpawner` は `HostTasks` を模擬しない (core の試験の監視は `FakeWatcher` で、io の作業を使わない。要るようになったら足す) |
 | `ManualJobSpawner::run_jobs_stale()` | 無い。`new`・`pending`・`run_jobs`・`cancel_all`・`take_results` を持つ。`spawn_host_task` の模擬も無い | Revision の不一致は、テストが `run_jobs()` の前に編集を入れて作る。`run_jobs_stale` は要るときに足す |
 
 **長寿命プロセスの API (`ProcessRunner::spawn_long_lived`、v1.L。trait の正本は本節)**: LSP サーバ (v1.L-a)、ローカル LLM サーバの管理モード (v1.L-b、06 §3.3.3)、外部エージェント (v1.X) が使う。短命の `spawn` の形は、それを使う FR-709 / 710 を入れる版 (v0.6 以降。v0.5 から送った、08 §7) の着手時に本節で確定する (05 §2.6 の案)。各 OS での実装 (Job Object / プロセスグループ、優先度、プロセス木の終了、ログの上限) は 05 §2.6 / §13.4 / §13.7 が定め、本節の型を再定義しない。フィールドの細部は v1.L 着手時に本節で確定する (規則 6)。
@@ -423,7 +423,7 @@ struct FsEvent { watch: WatchId, kind: FsEventKind }
     Failed { err: WatchError },     // 登録できなかった (この WatchId は監視していない)
     Changed { name: OsString },     // dir の直下の name のファイルに何か起きた (作成・変更・削除・改名の元と先。種類は区別しない。読むだけの開閉は含めない)
     Rescan,                         // 取りこぼしの恐れ (イベントのあふれ・監視の誤り)。dir の全文書を照合する
-    Lost,                           // 監視が失効した (監視中のディレクトリそのものの削除・改名。05 §12.2 の 10)。dir の全文書を照合し、次の確かめで張り直す
+    Lost,                           // 監視が失効した (監視中のディレクトリそのものの削除・改名・監視の読取の失敗。05 §12.2 の 10)。dir の全文書を照合し、次の確かめで張り直す
 }
 #[non_exhaustive] enum WatchError {
     Unsupported { fs: String },     // 監視しない FS (05 §12.2 の 4。fs は FS の名前: "network"・"9p" など。診断と知らせに使う)
@@ -436,6 +436,9 @@ struct FsEvent { watch: WatchId, kind: FsEventKind }
 //   知らせの口 `Arc<dyn Fn(FsEvent) + Send + Sync>` (受信口へ HostMsg::Fs を送る。notify のコールバックと io の作業から呼ぶ)
 // Ports に `watcher: Option<Box<dyn FileWatcher>>` を足す (規則 6。None なら監視しない: 監視を使わない試験とヘッドレス)
 ```
+
+- **実装の状態 (M33 の段 7、07 §12.6.2)**: trait と型 (`eve_core::{FileWatcher, WatchId, FsEvent, FsEventKind, WatchError}`。`WatchError` は `Display` と `Error` を持つ)、本番の `eve_platform::watch::NotifyWatcher` (`NotifyWatcher::new(io, sink)`。上の 2 つの口の型は `IoSpawn` / `FsSink`)、組み立ての `eve_host::file_watcher(tasks: Rc<dyn HostTasks>, tx)`、`HostMsg::Fs(FsEvent)` (Host の `step` は段 8 まで捨てる)、偽物の `eve_testkit::FakeWatcher` を入れた。`Started` より先に同じ識別の `Changed` などが届き得る (登録の直後の変更。05 §12.2 の 9 の (a)) ので、core は結果を待っている識別の知らせも受ける。
+- **段 8 で足すもの**: `Ports.watcher` と `Editor::on_fs_event` は、最初の利用者 (core の監視の張り外し、03 §9.5.1) と同じ段 8 で足す (規則 6)。`Ports` は `#[derive(Clone)]` なので、`Box<dyn FileWatcher>` (`Clone` でない) の持たせ方 (`Rc<RefCell<dyn FileWatcher>>` で包む、`Editor` が `Ports` から取り出して持つ、など) は段 8 の PR で決める。
 
 **サービス Port** (長寿命の非同期サービス。v0.6 以降)
 
@@ -2430,7 +2433,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 | 用途 | 採用案 | 採用理由 / リスク |
 |---|---|---|
-| ファイル監視 (v0.5) | notify。ライセンス CC0-1.0。**debouncer の crate (`notify-debouncer-mini` / `-full`) は使わない** (定期の起床がある (未確認)。待ち合わせは core の期限で自前に行い、Host の待機がそれを待つ、05 §12.2。v0.5-plan §1.2)。**版の決め方** (M33 の仕様の PR、2026-11-22。S-24): 段 7 の PR (07 §12.6.2) の時点で 9.0.0 の安定版があればそれを使う。無ければ 9.0.0-rc を `=` で固定して入れ (8.2.2 は Windows の監視のスレッドが 100 ms ごとに起き、01 FR-117 AC-10 に反する。9.0.0-rc.9 は起きない)、安定版が出たら上げる。v0.5.0 の凍結までに rc の不具合が見つかったら 8.2.x に戻し、Windows の起床を既知の制約にする (FR-117 AC-10 を Windows では CPU 使用率だけで判定するよう、AC を先に直す)。ただし 8.2.x の Windows の backend は、イベントのあふれ (0 バイトの完了) を読み違え、`ERROR_NOTIFY_ENUM_DIR` で監視を黙って外す (Rescan を送らない。docs.rs の 8.2.0 のソースで確かめた) ので、戻すときは「1 つのディレクトリで多数の変更があると取りこぼし、監視が止まり得る」も既知の制約にし、FR-117 AC-9 の縮退の知らせが出ないことを AC に書く。段 7 の試験に、1 つのディレクトリで数千のファイルを書き換えて `Rescan` が届くことを足す (Windows と、Linux の `IN_Q_OVERFLOW`)。`default-features = false`。依存の数は S-24 で +12 (73 → 85。NFR-207 の目安 90 の内)、`links` を持つ crate は 0 | OS ネイティブ監視。ネットワーク FS・inotify 上限・エディタ自身の保存イベント除外に注意 → 監視失敗時と、監視しない FS (`FsKind::Network`・WSL の DrvFs) は **イベント駆動 (保存前・フォーカス復帰時の metadata 比較) で代替** する。ポーリングはユーザーが明示設定した場合のみ (最小間隔 2 s、OQ-78。確定、実装は v0.6 以降)。NFR-204 の例外として 01 に明記。C を含む依存 (`links`) を持たないことを v0.5 の M29 のスパイクで確かめる (08 §3 末尾) |
+| ファイル監視 (v0.5) | notify。ライセンス CC0-1.0。**debouncer の crate (`notify-debouncer-mini` / `-full`) は使わない** (定期の起床がある (未確認)。待ち合わせは core の期限で自前に行い、Host の待機がそれを待つ、05 §12.2。v0.5-plan §1.2)。**版の決め方** (M33 の仕様の PR、2026-11-22。S-24): 段 7 の PR (07 §12.6.2) の時点で 9.0.0 の安定版があればそれを使う。無ければ 9.0.0-rc を `=` で固定して入れ (8.2.2 は Windows の監視のスレッドが 100 ms ごとに起き、01 FR-117 AC-10 に反する。9.0.0-rc.9 は起きない)、安定版が出たら上げる。v0.5.0 の凍結までに rc の不具合が見つかったら 8.2.x に戻し、Windows の起床を既知の制約にする (FR-117 AC-10 を Windows では CPU 使用率だけで判定するよう、AC を先に直す)。ただし 8.2.x の Windows の backend は、イベントのあふれ (0 バイトの完了) を読み違え、`ERROR_NOTIFY_ENUM_DIR` で監視を黙って外す (Rescan を送らない。docs.rs の 8.2.0 のソースで確かめた) ので、戻すときは「1 つのディレクトリで多数の変更があると取りこぼし、監視が止まり得る」も既知の制約にし、FR-117 AC-9 の縮退の知らせが出ないことを AC に書く。段 7 の試験に、1 つのディレクトリで数千のファイルを書き換えて `Rescan` が届くことを足す (Windows と、Linux の `IN_Q_OVERFLOW`)。`default-features = false`。依存の数は S-24 で +12 (73 → 85。NFR-207 の目安 90 の内)、`links` を持つ crate は 0。**段 7 の PR (2026-11-23) の記録**: 9.0.0 の安定版 (2026-11 の時点の crates.io の最新) があったので `9.0.0` を入れた (`=` で固定しない。rust-version 1.91 で、MSRV (1.99) の内)。`cargo xtask check-deps` の推移的依存は 73 → 85 (+12、S-24 の見込みどおり。全 target の和。Windows の target では notify・notify-types・walkdir・same-file・winapi-util ほか、Linux では inotify・inotify-sys・mio ほか)、C を含む依存 0 (`inotify-sys` の `build.rs` は NetBSD / OpenBSD だけで libinotify をリンクし、Windows / Linux では何もしない)、`cargo deny check` は通り、重複する版は増えない。ライセンスは notify が CC0-1.0、inotify / inotify-sys が ISC、ほかは MIT か MIT との選択 (05 §17.1 の許可リストの内。`THIRD-PARTY-NOTICES.md` を作り直した) | OS ネイティブ監視。ネットワーク FS・inotify 上限・エディタ自身の保存イベント除外に注意 → 監視失敗時と、監視しない FS (`FsKind::Network`・WSL の DrvFs) は **イベント駆動 (保存前・フォーカス復帰時の metadata 比較) で代替** する。ポーリングはユーザーが明示設定した場合のみ (最小間隔 2 s、OQ-78。確定、実装は v0.6 以降)。NFR-204 の例外として 01 に明記。C を含む依存 (`links`) を持たないことを v0.5 の M29 のスパイクで確かめる (08 §3 末尾) |
 | シンタックス (v0.6) | tree-sitter ([ADR-0015](10-decisions.md#adr-0015-シンタックスハイライト方式)) | インクリメンタル・構文選択/インデントにも使える。リスク: C コンパイラが必要、文法ごとのサイズ、ABI 版、クエリの保守/ライセンス ([OQ-22](10-decisions.md#oq-22-tree-sitter-文法の同梱方式)) |
 | 設定 | serde + toml (書き戻し時は toml_edit) | Rust 界隈で標準、コメント可、人間が書きやすい |
 | エラー | thiserror (lib) / anyhow (bin) | 標準的・軽量 |
