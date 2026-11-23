@@ -1096,6 +1096,8 @@ pub enum ValueOrigin {
         /// 値を書いた所。
         at: LangOrigin,
     },
+    /// `.editorconfig` で決まった (07 §3.6 の LAYER-1 の (5)、§10.3 の EC-5)。
+    EditorConfig(crate::EcOrigin),
 }
 
 /// 文書ごとに決まる値 1 つと由来。
@@ -1137,11 +1139,14 @@ pub struct DocLayers<'a> {
     pub language: Option<&'a Language>,
     /// ワークスペース層 ((6)(7)) を効かせるか (ルートの下の文書。無題の文書は (6) だけで、言語は `plain`)。
     pub workspace: bool,
+    /// 文書に当たった `.editorconfig` の値 ((5)。届く前・無題・標準入力・読まない起動は `None`)。
+    pub editorconfig: Option<&'a crate::EditorConfigValues>,
 }
 
-/// 文書ごとの値を決める (07 §3.6 の LAYER-1。`.editorconfig` の (5) は段 6)。各キーで、強い段から順に、値を持つ最初の段を
-/// 採る: (8) `--set` → (7) ワークスペース層の言語定義 → (6) ワークスペース層の一般の値 → (3)(4) 言語定義 → (1)(2) 層の値。
-/// (6)(7) は `layers.workspace` のときだけ見る。
+/// 文書ごとの値を決める (07 §3.6 の LAYER-1)。各キーで、強い段から順に、値を持つ最初の段を採る: (8) `--set` →
+/// (7) ワークスペース層の言語定義 → (6) ワークスペース層の一般の値 → (5) `.editorconfig` → (3)(4) 言語定義 → (1)(2) 層の値。
+/// (6)(7) は `layers.workspace` のときだけ見る。`.editorconfig` の `indent_size = tab` は、`.editorconfig` の `tab_width`
+/// (無ければ (1)〜(4) の段の `editor.tab_width`) を幅にする (§10.1)。
 #[must_use]
 pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
     type Pick<T> = fn(&Language) -> &Option<(T, LangOrigin)>;
@@ -1150,6 +1155,7 @@ pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
         key: &str,
         get: fn(&Config) -> T,
         lang: Option<(Pick<T>, Pick<T>)>,
+        editorconfig: Option<(T, crate::EcOrigin)>,
     ) -> DocValue<T> {
         let origin = layers.origins.of(key);
         let from_language = |l: &Language, v: &Option<(T, LangOrigin)>| {
@@ -1177,6 +1183,12 @@ pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
                 return layered();
             }
         }
+        if let Some((value, at)) = editorconfig {
+            return DocValue {
+                value,
+                origin: ValueOrigin::EditorConfig(at),
+            };
+        }
         if let Some(v) = language.and_then(|(l, (user, _))| from_language(l, user(l))) {
             return v;
         }
@@ -1189,38 +1201,64 @@ pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
             _ => layered(),
         }
     }
+    let ec = layers.editorconfig;
+    let ec_tab = ec.and_then(|e| e.tab_width.clone());
+    let ec_width = ec.and_then(|e| e.indent_width.clone()).map(|(w, at)| {
+        let width = match w {
+            crate::EcWidth::Width(n) => n,
+            crate::EcWidth::Tab => ec_tab
+                .as_ref()
+                .map_or_else(|| lower_tab_width(layers), |(n, _)| *n),
+        };
+        (width, at)
+    });
     DocValues {
         tab_width: pick(
             layers,
             "editor.tab_width",
             |c| c.tab_width,
             Some((|l| &l.tab_width, |l| &l.ws_tab_width)),
+            ec_tab,
         ),
         indent_unit: pick(
             layers,
             "editor.indent_unit",
             |c| c.indent_unit,
             Some((|l| &l.indent_unit, |l| &l.ws_indent_unit)),
+            ec.and_then(|e| e.indent_unit.clone()),
         ),
         indent_width: pick(
             layers,
             "editor.indent_width",
             |c| c.indent_width,
             Some((|l| &l.indent_width, |l| &l.ws_indent_width)),
+            ec_width,
         ),
         default_line_ending: pick(
             layers,
             "file.default_line_ending",
             |c| c.default_line_ending,
             None,
+            ec.and_then(|e| e.line_ending.clone()),
         ),
         default_encoding: pick(
             layers,
             "file.default_encoding",
             |c| c.default_encoding,
             None,
+            ec.and_then(|e| e.encoding.clone()),
         ),
     }
+}
+
+/// `.editorconfig` より下の段 ((1)〜(4)) の `editor.tab_width` (`indent_size = tab` の幅、§10.1)。
+fn lower_tab_width(layers: &DocLayers<'_>) -> u8 {
+    if let Some((n, _)) = layers.language.and_then(|l| l.tab_width.as_ref()) {
+        return *n;
+    }
+    layers
+        .user
+        .map_or(layers.config.tab_width, |u| u.config.tab_width)
 }
 
 #[cfg(test)]

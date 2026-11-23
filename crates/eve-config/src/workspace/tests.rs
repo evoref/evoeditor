@@ -425,6 +425,8 @@ struct Stages {
     ws_general: Option<u8>,
     ws_lang: Option<u8>,
     set: Option<u8>,
+    /// `.editorconfig` の `indent_size` ((5) の段、07 §10.1)。
+    editorconfig: Option<u8>,
 }
 
 fn stage() -> impl Strategy<Value = Option<u8>> {
@@ -433,12 +435,13 @@ fn stage() -> impl Strategy<Value = Option<u8>> {
 
 proptest! {
     // verifies: AC-FR-705-1
+    // verifies: AC-FR-705-4
     /// §3.6 の LAYER-1: 任意の段の有無の組で、決まる値が「強い段から順に、値を持つ最初の段」と一致する。ワークスペース層の
-    /// 段 ((6)(7)) はルートの下の文書だけに効く。
+    /// 段 ((6)(7)) はルートの下の文書だけに効く。`.editorconfig` の段 (5) はルートに依らず効く (07 §10.3 の EC-7)。
     #[test]
     fn 文書ごとの値はワークスペース層の段を含めて参照モデルと一致する(
-        s in (stage(), stage(), stage(), stage(), stage()).prop_map(|(general, user_lang, ws_general, ws_lang, set)| {
-            Stages { general, user_lang, ws_general, ws_lang, set }
+        s in (stage(), stage(), stage(), stage(), stage(), stage()).prop_map(|(general, user_lang, ws_general, ws_lang, set, editorconfig)| {
+            Stages { general, user_lang, ws_general, ws_lang, set, editorconfig }
         }),
         under_root in any::<bool>(),
     ) {
@@ -472,15 +475,27 @@ proptest! {
             d.source = "ws".to_owned();
         }
         let (set, _) = LanguageSet::build_layers(&r.languages, &wdefs);
+        let ec_file = crate::parse_editorconfig(
+            &s.editorconfig.map(|v| format!("[*]\nindent_size = {v}\n")).unwrap_or_default(),
+        );
+        let ec = crate::resolve_editorconfig(&[("/r/.editorconfig", &ec_file, "a.rs")]);
         let v = doc_values(&DocLayers {
             config: &c.config,
             origins: &c.origins,
             user: Some(&r.user),
             language: set.get("rust"),
             workspace: under_root,
+            editorconfig: Some(&ec),
         });
         let (ws_lang, ws_general) = if under_root { (s.ws_lang, s.ws_general) } else { (None, None) };
-        let want = s.set.or(ws_lang).or(ws_general).or(s.user_lang).or(s.general).unwrap_or(4);
+        let want = s
+            .set
+            .or(ws_lang)
+            .or(ws_general)
+            .or(s.editorconfig)
+            .or(s.user_lang)
+            .or(s.general)
+            .unwrap_or(4);
         prop_assert_eq!(v.indent_width.value, want);
         let from_ws = s.set.is_none() && (ws_lang.is_some() || ws_general.is_some());
         let is_ws_origin = matches!(
@@ -489,6 +504,8 @@ proptest! {
                 | ValueOrigin::Language { at: crate::LangOrigin::Workspace { .. }, .. }
         );
         prop_assert_eq!(is_ws_origin, from_ws);
+        let from_ec = s.set.is_none() && !from_ws && s.editorconfig.is_some();
+        prop_assert_eq!(matches!(v.indent_width.origin, ValueOrigin::EditorConfig(_)), from_ec);
         // 字下げの単位は組込みの `rust` が持たないので層の値のまま
         prop_assert_eq!(v.indent_unit.value, IndentUnit::Space);
     }

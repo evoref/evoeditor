@@ -117,7 +117,7 @@ fn components(p: &FsPath) -> Vec<String> {
 }
 
 /// 読まなかった理由の診断 (07 §12.1 の OWN-7)。`value` は判定に落ちた物 (置き場所のディレクトリかファイル) のパス。
-fn rejected(
+pub(crate) fn rejected(
     what: CheckedObject,
     verdict: OwnerVerdict,
     dir: &FsPath,

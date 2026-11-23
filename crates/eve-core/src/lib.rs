@@ -46,6 +46,10 @@ pub use editor::{
     config_diagnostic_texts_long, config_problem_count, format_stroke, normalize_eol,
     parse_sequence, parse_stroke, resolve_theme, scan_locales,
 };
+/// `fuzz_editorconfig` の本体 (docs/09 §3.3。eve-config の `.editorconfig` の読込と glob の照合)。cargo-fuzz のターゲット
+/// (eve-core を通して使う) と、CI の proptest (eve-config の試験) が同じ関数を使う。
+#[doc(hidden)]
+pub use eve_config::editorconfig_fuzzing;
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;
 /// `fuzz_gitignore` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。

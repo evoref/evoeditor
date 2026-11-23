@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1047 件)。
+/// `locales/en.toml` の文言 (1059 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -470,6 +470,14 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.edit.read_only_stateful.text"), B("An ISO-2022-JP file with invalid bytes cannot be edited")),
     (B("msg.edit.replacing.hint"), B("Please wait until loading finishes. Press {key:ui.cancel} to cancel the load")),
     (B("msg.edit.replacing.text"), B("Another file is loading, so the current document cannot be edited")),
+    (B("msg.editorconfig.bad_glob.hint"), B("Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This section is not used")),
+    (B("msg.editorconfig.bad_glob.text"), B("The section [{item}] in .editorconfig is too complex")),
+    (B("msg.editorconfig.charset_unmapped.hint"), B("New files use the current default encoding")),
+    (B("msg.editorconfig.charset_unmapped.text"), B("charset = {value} in .editorconfig is not supported")),
+    (B("msg.editorconfig.invalid_value.hint"), B("Allowed: {allowed}. This value is not used")),
+    (B("msg.editorconfig.invalid_value.text"), B("{item} = {value} in .editorconfig is invalid")),
+    (B("msg.editorconfig.too_large.hint"), B("The settings in this .editorconfig are not used")),
+    (B("msg.editorconfig.too_large.text"), B("Did not read {path} ({reason})")),
     (B("msg.eol.convert_stale.hint"), B("Stop typing and run it again")),
     (B("msg.eol.convert_stale.text"), B("Line-ending conversion was cancelled because editing continued")),
     (B("msg.external.check_failed.hint"), B("The file is also checked for changes when you save")),
@@ -752,6 +760,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.config_origin.cli"), B("--set")),
     (B("ui.config_origin.condition"), B("{origin} [{condition}]")),
     (B("ui.config_origin.default"), B("default")),
+    (B("ui.config_origin.editorconfig"), B(".editorconfig:{line} [{section}]")),
     (B("ui.config_origin.language_builtin"), B("language {language} (built-in)")),
     (B("ui.config_origin.language_file"), B("language {language}: {file}:{line}")),
     (B("ui.config_origin.language_workspace"), B("language {language}: .eve/config.toml:{line}")),
@@ -921,6 +930,9 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.confirm.unsaved_reopen.message"), B("{path} has unsaved changes")),
     (B("ui.confirm.unsaved_reopen.save"), B("[S] Save, then reopen")),
     (B("ui.confirm.unsaved_reopen.title"), B("Unsaved changes")),
+    (B("ui.editorconfig.reason.not_utf8"), B("not UTF-8")),
+    (B("ui.editorconfig.reason.too_large"), B("larger than 256 KiB")),
+    (B("ui.editorconfig.reason.total_limit"), B("over the total limit for one document")),
     (B("ui.finder.footer_incomplete"), B("{matched}/{total} (list incomplete)")),
     (B("ui.finder.footer_no_root"), B("Could not determine the workspace")),
     (B("ui.finder.footer_scanning"), B("{matched}/{total} scanning…")),
@@ -1060,7 +1072,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1047 件)。
+/// `locales/ja.toml` の文言 (1059 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1522,6 +1534,14 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.edit.read_only_stateful.text"), B("不正なバイトを含む ISO-2022-JP のファイルは編集できません")),
     (B("msg.edit.replacing.hint"), B("読込が終わるまでお待ちください。やめるときは {key:ui.cancel} で読込を取り消せます")),
     (B("msg.edit.replacing.text"), B("別のファイルを読み込み中のため、今の文書は編集できません")),
+    (B("msg.editorconfig.bad_glob.hint"), B("{{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。このセクションは使いません")),
+    (B("msg.editorconfig.bad_glob.text"), B(".editorconfig のセクション [{item}] は複雑すぎます")),
+    (B("msg.editorconfig.charset_unmapped.hint"), B("新しいファイルは今の既定の文字コードで作ります")),
+    (B("msg.editorconfig.charset_unmapped.text"), B(".editorconfig の charset = {value} には対応していません")),
+    (B("msg.editorconfig.invalid_value.hint"), B("許される値: {allowed}。この値は使いません")),
+    (B("msg.editorconfig.invalid_value.text"), B(".editorconfig の {item} = {value} は使えません")),
+    (B("msg.editorconfig.too_large.hint"), B("この .editorconfig の設定は使いません")),
+    (B("msg.editorconfig.too_large.text"), B("{path} を読みませんでした ({reason})")),
     (B("msg.eol.convert_stale.hint"), B("入力を止めてから、もう一度実行してください")),
     (B("msg.eol.convert_stale.text"), B("編集が続いたため、改行コードの変換を中止しました")),
     (B("msg.external.check_failed.hint"), B("保存するときにも、ファイルが変わっていないかを照合します")),
@@ -1804,6 +1824,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.config_origin.cli"), B("--set")),
     (B("ui.config_origin.condition"), B("{origin} [{condition}]")),
     (B("ui.config_origin.default"), B("既定")),
+    (B("ui.config_origin.editorconfig"), B(".editorconfig:{line} [{section}]")),
     (B("ui.config_origin.language_builtin"), B("言語 {language} (組込み)")),
     (B("ui.config_origin.language_file"), B("言語 {language}: {file}:{line}")),
     (B("ui.config_origin.language_workspace"), B("言語 {language}: .eve/config.toml:{line}")),
@@ -1973,6 +1994,9 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.confirm.unsaved_reopen.message"), B("{path} には保存されていない変更があります")),
     (B("ui.confirm.unsaved_reopen.save"), B("[S] 保存してから開き直す")),
     (B("ui.confirm.unsaved_reopen.title"), B("未保存の変更")),
+    (B("ui.editorconfig.reason.not_utf8"), B("UTF-8 ではありません")),
+    (B("ui.editorconfig.reason.too_large"), B("256 KiB を超えています")),
+    (B("ui.editorconfig.reason.total_limit"), B("1 つの文書で読む量の上限を超えました")),
     (B("ui.finder.footer_incomplete"), B("{matched}/{total} (一覧が途中までです)")),
     (B("ui.finder.footer_no_root"), B("ワークスペースを決められませんでした")),
     (B("ui.finder.footer_scanning"), B("{matched}/{total} 走査中…")),

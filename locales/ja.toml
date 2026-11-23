@@ -961,6 +961,22 @@ text = "「退避先に保存」で書いた内容が残っています: {dir} (
 hint = "新しい版の evoeditor で開いてください"
 text = "{dir} の退避は新しい版の形式なので読みません (移動も削除もしていません)"
 
+[msg.editorconfig.invalid_value]
+hint = "許される値: {allowed}。この値は使いません"
+text = ".editorconfig の {item} = {value} は使えません"
+
+[msg.editorconfig.charset_unmapped]
+hint = "新しいファイルは今の既定の文字コードで作ります"
+text = ".editorconfig の charset = {value} には対応していません"
+
+[msg.editorconfig.too_large]
+hint = "この .editorconfig の設定は使いません"
+text = "{path} を読みませんでした ({reason})"
+
+[msg.editorconfig.bad_glob]
+hint = "{{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。このセクションは使いません"
+text = ".editorconfig のセクション [{item}] は複雑すぎます"
+
 [msg.language.ambiguous]
 hint = "どちらかの定義の file_types などを直してください"
 text = "{file} は言語 {first} と {second} の両方に当たるため、{second} を使います"
@@ -1659,11 +1675,17 @@ language_builtin = "言語 {language} (組込み)"
 language_file = "言語 {language}: {file}:{line}"
 workspace = "ワークスペース: .eve/config.toml:{line}"
 language_workspace = "言語 {language}: .eve/config.toml:{line}"
+editorconfig = ".editorconfig:{line} [{section}]"
 
 [ui.lang_set]
 title = "言語を選ぶ (今: {language})"
 auto = "自動で判定"
 current = "{language} (今の言語)"
+
+[ui.editorconfig.reason]
+too_large = "256 KiB を超えています"
+not_utf8 = "UTF-8 ではありません"
+total_limit = "1 つの文書で読む量の上限を超えました"
 
 [ui.finder]
 title = "ファイルを開く ({root})"

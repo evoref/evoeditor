@@ -329,14 +329,22 @@ impl EditorState {
         // 一覧 (`config.show_diagnostics`) の設定ファイル (と `--set`) の診断は、読み直した結果に置き換える。
         // キーマップの診断は `finish_reload_keymap` で置き換え、テーマの診断はテーマを読み直すときに置き換える。
         // 言語ファイル・言語の選択の診断は起動時のものを残す (読み直さない、07 §17.4)
-        // ワークスペース層のファイルの診断は、読み直したときに置き換えている
+        // ワークスペース層のファイルの診断は、読み直したときに置き換えている。`.editorconfig` の診断は、読み直した結果が届いた
+        // とき (中身が変わっていれば) 置き換える (07 §10.3 の EC-6)
         let locale_reports = self.ui.locale_reports.clone();
         let workspace_files = self.settings.workspace_files.clone();
+        let editorconfig_files: Vec<String> = self
+            .settings
+            .editorconfig_reported
+            .keys()
+            .cloned()
+            .collect();
         self.forget_config_diagnostics(|f| {
             f != KEYMAP_FILE
                 && !EditorState::is_theme_diagnostic_file(f)
                 && !locale_reports.contains(f)
                 && !workspace_files.iter().any(|w| w == f)
+                && !editorconfig_files.iter().any(|e| e == f)
         });
         for (name, diags) in &resolved.reports {
             self.report_config(name, diags);
@@ -384,6 +392,9 @@ impl EditorState {
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
             self.start_theme_read();
+            // 開いている文書の `.editorconfig` も、読み直したユーザー層の `workspace.safe_directories` で読み直す (07 §10.3 の
+            // EC-1。届くまでは前の値。ユーザー層の誤りで前の設定を保つときは、ワークスペース層と同じく読み直さない)
+            self.reread_editorconfig_all();
         }
         // 言語定義のファイル (`languages/*.toml`) も読み直す (07 §6。設定ファイルにエラーがあれば、その言語定義は前のまま)。
         // 開いている文書の言語は判定し直さない (LANG-7)

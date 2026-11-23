@@ -218,6 +218,7 @@ pub(crate) const UI_CONFIG_DIAGNOSTICS_TITLE: &str = "ui.config_diagnostics.titl
 pub(crate) const UI_CONFIG_ORIGIN_CLI: &str = "ui.config_origin.cli";
 pub(crate) const UI_CONFIG_ORIGIN_CONDITION: &str = "ui.config_origin.condition";
 pub(crate) const UI_CONFIG_ORIGIN_DEFAULT: &str = "ui.config_origin.default";
+pub(crate) const UI_CONFIG_ORIGIN_EDITORCONFIG: &str = "ui.config_origin.editorconfig";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN: &str = "ui.config_origin.language_builtin";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_FILE: &str = "ui.config_origin.language_file";
 pub(crate) const UI_CONFIG_ORIGIN_USER: &str = "ui.config_origin.user";
@@ -356,7 +357,8 @@ pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 332] = [
+const ALL: [&str; 333] = [
+    UI_CONFIG_ORIGIN_EDITORCONFIG,
     UI_CONFIG_ORIGIN_WORKSPACE,
     UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
     HINT_UI_CANCEL,

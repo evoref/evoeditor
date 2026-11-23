@@ -4,7 +4,8 @@
 //! `Catalog::overlay`)、ファイル由来の文字列の無害化 (`sanitize_untrusted`)、ユーザー層の設定ファイルの読込 (`load_str`。公開キーは `config.rs` の
 //! 宣言の表、07 §4.1。条件付きセクションの解決は `load_str_for` と `Conditions`、07 §3.4)、層の合成と値の由来 (`resolve`・
 //! `Origins`、§3.5)、キーマップ (`keymap.toml`) とテーマファイルの読込、言語定義 (`[[language]]`・`languages/*.toml` の
-//! 読込・組込みの表・併合・判定・文書ごとの値。`LanguageSet`、07 §9.6 / §3.6)。
+//! 読込・組込みの表・併合・判定・文書ごとの値。`LanguageSet`、07 §9.6 / §3.6)、`.editorconfig` の読み方と重ね方
+//! (`parse_editorconfig`・`resolve_editorconfig`、07 §10)。
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -13,6 +14,10 @@ mod catalog;
 mod chars;
 mod condition;
 mod config;
+mod editorconfig;
+/// `fuzz_editorconfig` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。
+#[doc(hidden)]
+pub mod editorconfig_fuzzing;
 pub mod glob;
 mod keymap;
 mod language;
@@ -37,6 +42,13 @@ pub use config::{
     Osc52Policy, SearchCase, Severity, ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent,
     WrapMode, Written, changed_keys, default_display, is_theme_name, load_language_str, load_str,
     load_str_for, load_str_onto, workspace_policy,
+};
+pub use editorconfig::{
+    EDITORCONFIG_FILE, EDITORCONFIG_FILE_MAX_BYTES, EDITORCONFIG_MAX_DEPTH,
+    EDITORCONFIG_TOTAL_MAX_BYTES, EDITORCONFIG_TOTAL_MAX_SECTIONS, EcOrigin, EcWidth,
+    EditorConfigFile, EditorConfigProblem, EditorConfigSource, EditorConfigValues, NotReadReason,
+    editorconfig_work_on_this_thread, not_read_diagnostic, parse_editorconfig,
+    resolve_editorconfig, resolve_editorconfig_counted,
 };
 pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use language::{

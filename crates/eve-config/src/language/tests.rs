@@ -443,6 +443,7 @@ proptest! {
             user: None,
             language: set.get(lang),
             workspace: false,
+            editorconfig: None,
         });
         // 参照モデル
         let width = |s: &Stages, default: u8| s.set.or(s.user_lang).or(s.general).unwrap_or(default);

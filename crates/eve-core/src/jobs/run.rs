@@ -428,6 +428,9 @@ pub fn run_job(
             *conditions,
             safe_dirs,
         )),
+        JobKind::ReadEditorConfig { path, safe_dirs } => JobResult::EditorConfigRead(
+            crate::io::editorconfig::read_editorconfig(&*ports.fs, path, safe_dirs),
+        ),
         JobKind::Metadata {
             path,
             purpose,

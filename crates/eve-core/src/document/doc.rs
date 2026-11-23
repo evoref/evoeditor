@@ -173,6 +173,9 @@ pub struct Document {
     /// 利用者が改行・文字コードを明示的に選んだ (`file.set_line_ending` など)。新しいファイルの形を設定から決め直さない
     /// (07 §3.6 の LAYER-4)。
     pub(crate) format_chosen: bool,
+    /// 文書に当たった `.editorconfig` の値 (07 §3.6 の LAYER-1 の (5)、§10.3 の EC-1)。届く前・無題・標準入力・読まない起動は
+    /// `None`。
+    pub(crate) editorconfig: Option<crate::io::editorconfig::EditorConfigApplied>,
     /// canonical のパス (同じファイルの判定に使う。03 §12.7.6 の 0、境界の型ではない)。開くジョブの `Identity` と、名前を
     /// 付けて保存の成功で直す。canonicalize できなかったときは正規化したパス。無題・`Identity` が届く前は `None`。
     pub(crate) canonical: Option<FsPath>,
@@ -301,6 +304,7 @@ impl Document {
             preserved_anomalies: 0,
             stdin: None,
             format_chosen: false,
+            editorconfig: None,
             canonical: None,
             file_id_unique: false,
             loading_file_id: None,

@@ -93,6 +93,22 @@ impl EditorState {
         }
     }
 
+    /// 一覧 (`config.show_diagnostics`) のファイル `file` の診断を置き換えるだけで、要約は出さない (`.editorconfig` の同じ中身の
+    /// 診断を、開くたびに要約しない。07 §10.3 の EC-6)。
+    pub(crate) fn record_config_diagnostics(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        self.ui.config_diagnostics.retain(|(f, _)| f != file);
+        if !diagnostics.is_empty() {
+            self.ui
+                .config_diagnostics
+                .push((file.to_owned(), diagnostics.to_vec()));
+        }
+    }
+
+    /// 診断の要約 (1 件か「N 件の問題」) をメッセージ行に出す (一覧は触らない)。
+    pub(crate) fn summarize_config_diagnostics(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        self.show_config_problems(file, diagnostics);
+    }
+
     /// 一覧から、テーマが無い診断 (`DiagKind::ThemeNotFound`) を消す (テーマを読み直す前)。
     pub(crate) fn forget_theme_not_found(&mut self) {
         for (_, ds) in &mut self.ui.config_diagnostics {
@@ -261,8 +277,11 @@ impl EditorState {
                 .filter(|_| eve_config::Locale::from_file_name(name).is_some())
                 .map(|dir| dir.join(name));
         }
-        // ワークスペース層のファイル (`.eve/config.toml`・`.eve/keymap.toml`。表示名が絶対パス、07 §12.5)
-        if self.settings.workspace_files.iter().any(|w| w == file) {
+        // ワークスペース層のファイル (`.eve/config.toml`・`.eve/keymap.toml`。表示名が絶対パス、07 §12.5) と `.editorconfig`
+        // (表示名が絶対パス、07 §10.3 の EC-6)
+        if self.settings.workspace_files.iter().any(|w| w == file)
+            || self.settings.editorconfig_reported.contains_key(file)
+        {
             return Some(crate::FsPath::from(file));
         }
         // 言語定義のファイル (`languages/<file>.toml`、07 §9.6)。ファイルの多すぎる診断 (`languages/`) は開かない
@@ -624,6 +643,28 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             group = "workspace";
             p.message_name()
         }
+        // `.editorconfig` の診断 (`msg.editorconfig.*`、07 §10.1 / §10.3 の EC-6)。パスは切らずに制御文字などだけを直す
+        DiagKind::EditorConfig(p) => {
+            use eve_config::EditorConfigProblem as E;
+            match p {
+                E::InvalidValue { allowed } => {
+                    args.push(("allowed", clean(&allowed.join(", "))));
+                }
+                E::NotRead(reason) => {
+                    args.push(("path", eve_config::escape_untrusted(&d.value)));
+                    args.push((
+                        "reason",
+                        word(
+                            &format!("ui.editorconfig.reason.{}", reason.reason_name()),
+                            &[],
+                        ),
+                    ));
+                }
+                E::CharsetUnmapped | E::BadGlob(_) => {}
+            }
+            group = "editorconfig";
+            p.message_name()
+        }
     };
     let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let key = |part: &str| format!("msg.{group}.{kind}.{part}");
@@ -750,6 +791,7 @@ pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
         DiagKind::ListItem(eve_config::ListItemProblem::TooBroad) => "broad_safe_directory",
         DiagKind::ListItem(_) => "invalid_item",
         DiagKind::Workspace(p) => p.message_name(),
+        DiagKind::EditorConfig(p) => p.message_name(),
         DiagKind::More { .. } => "more",
     }
 }

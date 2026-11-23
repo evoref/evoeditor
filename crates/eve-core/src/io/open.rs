@@ -315,6 +315,8 @@ impl EditorState {
                 if let Some(is) = &interrupted_save {
                     self.show_interrupted(&path, is);
                 }
+                // `.editorconfig` はジョブで読む。届くまでは (5) を除いた値で表示・編集する (07 §10.3 の EC-1、§3.6 の LAYER-3)
+                self.start_editorconfig_read(doc_id, false);
                 self.complete_open(doc_id, view, replace);
             }
             JobResult::NewFile {
@@ -349,6 +351,8 @@ impl EditorState {
                 if let Some(is) = &interrupted_save {
                     self.show_interrupted(&path, is);
                 }
+                // 新しいファイルの改行と文字コードは、`.editorconfig` が届いたら決め直す (まだ編集していなければ、LAYER-4)
+                self.start_editorconfig_read(doc_id, false);
                 self.complete_open(doc_id, view, replace);
             }
             // 確認が要る: 読込中の文書は残したまま確認を出し、回答で先頭から読み直す (03 §9.2)。先行表示の後なら先頭を

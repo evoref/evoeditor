@@ -2,10 +2,10 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3)・`fuzz_regex_search` (v0.4)・`fuzz_gitignore` (v0.5) を、それぞれ `--fuzz-seconds` (既定 800 秒。6 つの合計 80 分。09 §6.3)。
-//!   ターゲットを絞らないときは、6 つの合計が `FUZZ_TOTAL_SECONDS` (80 分) を超えないように 1 つの時間を抑える (既定のブランチの
+//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3)・`fuzz_regex_search` (v0.4)・`fuzz_gitignore`・`fuzz_editorconfig` (v0.5) を、それぞれ `--fuzz-seconds` (既定 685 秒。7 つの合計 80 分以内。09 §6.3)。
+//!   ターゲットを絞らないときは、7 つの合計が `FUZZ_TOTAL_SECONDS` (80 分) を超えないように 1 つの時間を抑える (既定のブランチの
 //!   nightly.yml が古い既定の 1200 秒・960 秒を渡しても、夜間の段がジョブの上限 240 分に収まるように)。
-//!   `--only fuzz:fuzz_decode+fuzz_editor` のように回すターゲットを絞れる (リリース前の各 1 時間、09 §8.2。6 つ × 1 時間はジョブの上限 240 分に収まらない)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//!   `--only fuzz:fuzz_decode+fuzz_editor` のように回すターゲットを絞れる (リリース前の各 1 時間、09 §8.2。7 つ × 1 時間はジョブの上限 240 分に収まらない)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。時間の予算 (`proptest_budget::BUDGET_SECONDS`、
 //!   45 分。ビルドを含む) を使い切ったら nextest を止め、止める前に失敗した試験が無ければ失敗にせず「時間切れで打ち切った」と
@@ -242,8 +242,9 @@ fn commit() -> String {
 /// libFuzzer が書く、失敗した入力のファイル名の接頭辞。
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
-/// 1 つのターゲットを回す時間の既定 (秒)。6 つで合計 80 分。
-const FUZZ_SECONDS_DEFAULT: u64 = 800;
+/// 1 つのターゲットを回す時間の既定 (秒)。7 つで合計 80 分以内 (`FUZZ_TOTAL_SECONDS` を 7 で割った値。v0.5 の M33 で
+/// `fuzz_editorconfig` を足したとき、800 秒から下げた)。
+const FUZZ_SECONDS_DEFAULT: u64 = FUZZ_TOTAL_SECONDS / FUZZ_TARGETS.len() as u64;
 
 /// ターゲットを絞らない夜間の fuzz の合計の上限 (秒)。夜間の段 (fuzz・proptest・audit・coverage・crash・soak) がジョブの上限
 /// 240 分に収まるように (09 §8.2。v0.4 の M24 で 5 つ目を足したとき、20 分 × 5 では段の合計が 240 分に迫った)。
@@ -259,13 +260,14 @@ fn fuzz_seconds_for(seconds: u64, narrowed: bool) -> u64 {
 }
 
 /// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
-const FUZZ_TARGETS: [&str; 6] = [
+const FUZZ_TARGETS: [&str; 7] = [
     "fuzz_decode",
     "fuzz_editor",
     "fuzz_encode",
     "fuzz_vt_input",
     "fuzz_regex_search",
     "fuzz_gitignore",
+    "fuzz_editorconfig",
 ];
 
 fn fuzz(
@@ -729,15 +731,13 @@ mod tests {
         let (steps, t) = parse_only("fuzz:fuzz_decode+fuzz_editor,audit").unwrap();
         assert_eq!(steps, ["fuzz", "audit"]);
         assert_eq!(t, Some(vec!["fuzz_decode", "fuzz_editor"]));
-        // 絞らない夜間は合計 80 分 (1 つ 800 秒) に抑え、絞ったリリース前の 1 時間は抑えない
-        assert_eq!(fuzz_seconds_for(1200, false), 800);
-        assert_eq!(fuzz_seconds_for(960, false), 800);
+        // 絞らない夜間は合計 80 分 (7 つで 1 つ 685 秒) に抑え、絞ったリリース前の 1 時間は抑えない
+        assert_eq!(fuzz_seconds_for(1200, false), 685);
+        assert_eq!(fuzz_seconds_for(800, false), 685);
         assert_eq!(fuzz_seconds_for(600, false), 600);
         assert_eq!(fuzz_seconds_for(3600, true), 3600);
-        assert_eq!(
-            FUZZ_SECONDS_DEFAULT * FUZZ_TARGETS.len() as u64,
-            FUZZ_TOTAL_SECONDS
-        );
+        assert_eq!(FUZZ_SECONDS_DEFAULT, 685);
+        assert!(FUZZ_SECONDS_DEFAULT * FUZZ_TARGETS.len() as u64 <= FUZZ_TOTAL_SECONDS);
         let (steps, t) = parse_only("fuzz,crash").unwrap();
         assert_eq!(steps, ["fuzz", "crash"]);
         assert_eq!(t, None);

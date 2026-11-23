@@ -66,7 +66,7 @@ impl EditorState {
         doc.language.id.as_deref().unwrap_or("")
     }
 
-    /// 文書ごとの値 (07 §3.6 の LAYER-1。段 5 では (1)〜(4)・(6)〜(8))。
+    /// 文書ごとの値 (07 §3.6 の LAYER-1 の (1)〜(8))。
     pub(crate) fn doc_values_of(&self, doc: &Document) -> eve_config::DocValues {
         eve_config::doc_values(&eve_config::DocLayers {
             config: &self.settings.config,
@@ -74,6 +74,7 @@ impl EditorState {
             user: self.settings.user_layer.as_ref(),
             language: self.language_of(doc),
             workspace: self.doc_in_workspace(doc),
+            editorconfig: doc.editorconfig.as_ref().map(|e| &*e.values),
         })
     }
 
@@ -86,6 +87,7 @@ impl EditorState {
             user: self.settings.user_layer.as_ref(),
             language: None,
             workspace: false,
+            editorconfig: None,
         })
     }
 

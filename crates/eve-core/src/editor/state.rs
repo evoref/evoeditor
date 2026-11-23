@@ -149,6 +149,14 @@ pub(crate) struct Settings {
     /// 前回ワークスペース層を読んだときの `workspace.safe_directories` (`config.reload` で変わったら、一時の失敗でも前の層を
     /// 保たない、07 §12.5 の WSC-1)。
     pub(crate) workspace_safe_dirs: Option<Vec<String>>,
+    /// `.editorconfig` の読込の通し番号 (07 §10.3 の EC-1)。
+    pub(crate) editorconfig_seq: u64,
+    /// 文書ごとの、最後に積んだ `.editorconfig` の読込の番号 (それより前の結果は捨てる)。
+    pub(crate) editorconfig_latest: BTreeMap<DocumentId, u64>,
+    /// `.editorconfig` の絶対パス → 一覧に置いた診断の中身の要約 (07 §10.3 の EC-6。`config.reload` で消さない)。
+    pub(crate) editorconfig_reported: BTreeMap<String, u64>,
+    /// 要約をメッセージ行に出した (`.editorconfig` の絶対パス, 中身の要約)。同じファイルの同じ中身はセッションで 1 回 (EC-6)。
+    pub(crate) editorconfig_summarized: BTreeSet<(String, u64)>,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -434,6 +442,10 @@ impl EditorState {
                 workspace_files: Vec::new(),
                 workspace_notes: Vec::new(),
                 workspace_safe_dirs: None,
+                editorconfig_seq: 0,
+                editorconfig_latest: BTreeMap::new(),
+                editorconfig_reported: BTreeMap::new(),
+                editorconfig_summarized: BTreeSet::new(),
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
                     eve_view::ColorDepth::TrueColor,
@@ -589,27 +601,32 @@ impl EditorState {
     /// まだ編集も保存もしていない新しいファイルの文書 (ディスクに無いパスの文書と、標準入力でない無題の文書) の文字コードと
     /// 改行を決め直す (ワークスペース層が届いた後と、`config.reload` の後。07 §3.6 の LAYER-4。編集した後は決め直さない)。
     pub(crate) fn refresh_new_file_formats(&mut self) {
-        let ids: Vec<eve_view::DocumentId> = self
-            .docs
-            .documents
-            .iter()
-            .filter(|(_, d)| {
-                d.disk_stamp.is_none()
-                    && !d.format_chosen
-                    && d.stdin.is_none()
-                    && d.load_state == crate::document::LoadState::Ready
-                    && !d.is_dirty()
-                    && !d.history().can_undo()
-            })
-            .map(|(id, _)| *id)
-            .collect();
+        let ids: Vec<eve_view::DocumentId> = self.docs.documents.keys().copied().collect();
         for id in ids {
-            let Some(mut d) = self.docs.documents.remove(&id) else {
-                continue;
-            };
-            self.set_new_file_format(&mut d);
-            self.docs.documents.insert(id, d);
+            self.refresh_new_file_format(id);
         }
+    }
+
+    /// 文書 `id` が、まだ編集も保存もしていない新しいファイルの文書 (利用者が改行・文字コードを選んでいない) なら、文字コードと
+    /// 改行を決め直す (07 §3.6 の LAYER-4。`.editorconfig` の値が届いたとき、EC-1)。
+    pub(crate) fn refresh_new_file_format(&mut self, id: DocumentId) {
+        let fresh = self.docs.documents.get(&id).is_some_and(|d| {
+            d.disk_stamp.is_none()
+                && !d.format_chosen
+                && d.stdin.is_none()
+                && d.load_state == crate::document::LoadState::Ready
+                && !d.is_dirty()
+                && !d.history().can_undo()
+        });
+        if !fresh {
+            return;
+        }
+        let Some(mut d) = self.docs.documents.remove(&id) else {
+            return;
+        };
+        self.set_new_file_format(&mut d);
+        self.docs.documents.insert(id, d);
+        self.out.needs_render = true;
     }
 
     /// 無題の文書の表示名 (`status.untitled` に文書の通し番号を入れたもの、03 §9.8 の「無題の採番」)。
@@ -635,6 +652,8 @@ impl EditorState {
             doc.inherit_identity(old);
             // 言語は引き継ぐ (再読込・開き直しで判定し直さない、07 §9.6 の LANG-7)。読込中の仮の文書はまだ決めていない
             doc.language.clone_from(&old.language);
+            // `.editorconfig` の値も引き継ぐ (同じパスの再読込・開き直しで読み直さない、07 §10.3 の EC-1)
+            doc.editorconfig.clone_from(&old.editorconfig);
         }
         self.docs.documents.insert(id, doc);
         self.clamp_views_of(id);

@@ -81,6 +81,14 @@ impl EditorState {
                     ),
                 }
             }
+            // `.editorconfig:<行> [<セクション>]` (07 §3.5)。開くのは `file` の絶対パス。セクションの glob はファイル由来
+            ValueOrigin::EditorConfig(at) => render(
+                keys::UI_CONFIG_ORIGIN_EDITORCONFIG,
+                &[
+                    ("line", &at.line.to_string()),
+                    ("section", &sanitize_untrusted(&at.section)),
+                ],
+            ),
         }
     }
 
@@ -104,6 +112,15 @@ impl EditorState {
                     "editor.indent_unit" => Some((
                         format!("\"{}\"", v.indent_unit.value.name()),
                         &v.indent_unit.origin,
+                    )),
+                    // 新しいファイルの改行と文字コード (`.editorconfig`・ワークスペース層で文書ごとに決まる、07 §3.6 の LAYER-4)
+                    "file.default_line_ending" => Some((
+                        format!("\"{}\"", v.default_line_ending.value.name()),
+                        &v.default_line_ending.origin,
+                    )),
+                    "file.default_encoding" => Some((
+                        format!("\"{}\"", v.default_encoding.value.name()),
+                        &v.default_encoding.origin,
                     )),
                     _ => None,
                 });
@@ -164,7 +181,7 @@ impl EditorState {
             return CommandResult::Done;
         };
         let rows = self.config_show_rows();
-        // ワークスペース層の由来は、表示名が `.eve/config.toml` の絶対パス (ファイルを直接開く)
+        // ワークスペース層と `.editorconfig` の由来は、表示名が絶対パス (ファイルを直接開く)
         let workspace = match &rows[i].origin {
             ValueOrigin::Config(Origin::Workspace {
                 source,
@@ -181,6 +198,10 @@ impl EditorState {
                     },
                 ..
             } => Some((crate::FsPath::from(source.as_str()), *line, *column)),
+            // `.editorconfig` の由来も絶対パス (07 §3.5)
+            ValueOrigin::EditorConfig(at) => {
+                Some((crate::FsPath::from(at.file.as_str()), at.line, at.column))
+            }
             _ => None,
         };
         let at = |n: u32| usize::try_from(n).unwrap_or(usize::MAX).max(1);
