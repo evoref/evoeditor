@@ -51,6 +51,8 @@ pub(crate) enum Pending {
         doc: DocumentId,
         round: Option<u64>,
         switch: bool,
+        /// 照合を積んだ時刻 (その後に知らせが届いたかを見る)。
+        at: crate::time::Tick,
     },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
@@ -140,6 +142,35 @@ pub(crate) enum Pending {
         /// `info.save.escape_merged` にする。
         merged: Option<u64>,
     },
+}
+
+impl Pending {
+    /// このジョブが、文書の内容かディスクの状態に関わる文書 (読込・保存・照合と、結果を文書に当てる非同期の編集)。
+    /// この間は外部変更の照合 (フォーカス復帰・`file.check_external_changes`・監視の照合) をせず、終わってから確かめる
+    /// (03 §9.5 の M9d、§9.5.1 の WATCH-5)。閉じるときに取り消すジョブ (`take_pending_for`) とは別の基準。
+    pub(crate) fn busy_doc(&self) -> Option<DocumentId> {
+        match self {
+            Pending::Open { doc, .. }
+            | Pending::OpenStdin { doc, .. }
+            | Pending::Save { doc, .. }
+            | Pending::CheckUnchanged { doc }
+            | Pending::ExternalCheck { doc, .. }
+            | Pending::WatchCheck { doc, .. }
+            | Pending::ReplaceAll { doc, .. }
+            | Pending::ReplaceOne { doc, .. } => Some(*doc),
+            Pending::ConvertEol(c) => Some(c.doc),
+            Pending::SelectAllMatches(ask) => Some(ask.doc()),
+            Pending::ReplaceUnmappable { ask, .. } => Some(ask.doc),
+            _ => None,
+        }
+    }
+}
+
+impl EditorState {
+    /// 文書 `doc` に `Pending::busy_doc` のジョブがある。
+    pub(crate) fn doc_has_job(&self, doc: DocumentId) -> bool {
+        self.io.pending.values().any(|p| p.busy_doc() == Some(doc))
+    }
 }
 
 /// 保存ジョブの文脈 (`Pending::Save` のうち、結果の処理に渡すもの)。
@@ -313,8 +344,13 @@ impl EditorState {
             Pending::ExternalCheck { doc, explicit } => {
                 self.finish_external_check(doc, explicit, r);
             }
-            Pending::WatchCheck { doc, round, switch } => {
-                self.finish_watch_check(doc, round, switch, r);
+            Pending::WatchCheck {
+                doc,
+                round,
+                switch,
+                at,
+            } => {
+                self.finish_watch_check(doc, round, switch, at, r);
             }
             Pending::Search => {}
             Pending::FindNext {

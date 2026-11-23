@@ -374,6 +374,10 @@ impl Editor {
         {
             self.state.watch_cancel_reload_on_input();
         }
+        // 待っている貼り付けの応答も同じ (貼り付けの内容を読込で捨てない)
+        if let InputEvent::ClipboardContent { token, .. } = &ev {
+            self.state.watch_cancel_reload_on_paste(*token);
+        }
         match ev {
             InputEvent::Key(k) => {
                 if k.kind != KeyKind::Release {

@@ -1269,12 +1269,12 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `msg.editorconfig.too_large` | 大きすぎる・UTF-8 でない・合計の上限 (EC-2。警告) | {path} を読みませんでした ({reason}) | Did not read {path} ({reason}) |
 | `ui.editorconfig.reason.too_large` / `.not_utf8` / `.total_limit` | 上の `{reason}` | 256 KiB を超えています / UTF-8 ではありません / 1 つの文書で読む量の上限を超えました | larger than 256 KiB / not UTF-8 / over the total limit for one document |
 | `info.watch.unavailable` | 監視できない (03 §9.5.1 の WATCH-2。理由ごとにプロセスで 1 回) | {path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます | Cannot watch the folder of {path} ({reason}). External changes are checked when you return to the editor and when you save |
-| `ui.watch.reason.network` / `.unsupported_fs` / `.limit` / `.denied` / `.not_found` / `.failed` | 上の `{reason}` (`WatchError::Unsupported` は `fs` が `network` なら `.network`、ほかは `.unsupported_fs`。`Limit` / `Denied` / `NotFound` / `Other` はそれぞれの語) | ネットワークの共有 / この FS ({fs}) では監視しません / 監視の数が OS の上限に達しました / 権限がありません / フォルダがありません / 監視を始められません | network share / this file system ({fs}) is not watched / the OS limit on watches was reached / permission denied / the folder does not exist / watching could not be started |
+| `ui.watch.reason.network` / `.unsupported_fs` / `.limit` / `.denied` / `.not_found` / `.failed` | 上の `{reason}` (`WatchError::Unsupported` は `fs` が `network` なら `.network`、ほかは `.unsupported_fs`。`Limit` / `Denied` / `NotFound` / `Other` はそれぞれの語) | ネットワークや仮想の FS (WSL の /mnt/c など) / この FS ({fs}) では監視しません / 監視の数が OS の上限に達しました / 権限がありません / フォルダがありません / 監視を始められません | a network or virtual file system (such as WSL's /mnt/c) / this file system ({fs}) is not watched / the OS limit on watches was reached / permission denied / the folder does not exist / watching could not be started |
 | `info.external.changed` / `.deleted` | 監視で外部の変更・削除が分かった (WATCH-6) | {name} が外部で変更されました / {name} が外部で削除されました | {name} was changed outside the editor / {name} was deleted outside the editor |
-| `info.external.changed_many` | 2 つ以上の文書 (WATCH-6) | {count} 個のファイルが外部で変更されました (バッファ一覧に印があります) | {count} files were changed outside the editor (marked in the buffer list) |
+| `info.external.changed_many` | 2 つ以上の文書 (WATCH-6) | {count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります) | {count} files were changed or deleted outside the editor (marked in the buffer list) |
 | `info.external.reloaded` | 表示中の未編集の文書を読み直した (WATCH-6) | {name} を外部の変更に合わせて読み直しました (元に戻すこともできます) | Reloaded {name} to match the external change (you can undo this) |
 | `status.external_deleted.long` / `.short` | ステータスバー (§8.7 の左 7) | [外部で削除] / 外部削除 | [Deleted on disk] / Deleted (v0.3 からの `status.external_change` の英語 `[Changed on disk]` / `Changed` に揃えた。M33 の段 8) |
-| `ui.buffer_list.external_changed` / `.external_deleted` | バッファ一覧の印 (§8.5) | 外部で変更 / 外部で削除 | changed outside / deleted outside |
+| `ui.buffer_list.external_changed` / `.external_deleted` | バッファ一覧の印 (§8.5) | 外部で変更 / 外部で削除 | changed on disk / deleted on disk |
 
 ---
 
@@ -1962,10 +1962,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.comment.no_lines` (v0.5) | `edit.toggle_comment` で、対象の行が空行と空白だけの行だけ (CMT-1。文書は変えない) | コメントにする行がありません |
 | `info.external.changed` (v0.5) | ファイル監視で、文書のファイルが外部で変更されたと分かった (03 §9.5.1 の WATCH-6。`{name}` はファイル名。同じ回の照合で 2 つ以上の文書に印が付いたら下の `changed_many`) | {name} が外部で変更されました |
 | `info.external.deleted` (v0.5) | ファイル監視で、文書のファイルが外部で削除されたと分かった (WATCH-6) | {name} が外部で削除されました |
-| `info.external.changed_many` (v0.5) | 同じ回の照合で 2 つ以上の文書に外部の変更・削除の印が付いた (WATCH-6。`{count}` は印の付いた文書の数) | {count} 個のファイルが外部で変更されました (バッファ一覧に印があります) |
+| `info.external.changed_many` (v0.5) | 同じ回の照合で 2 つ以上の文書に外部の変更・削除の印が付いた (WATCH-6。`{count}` は印の付いた文書の数) | {count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります) |
 | `info.external.reloaded` (v0.5) | 表示中の未編集の文書を、ファイル監視で確認なしに読み直した (WATCH-6。読み直した後に読み取り専用の文書は `info.reload.done_read_only`) | {name} を外部の変更に合わせて読み直しました (元に戻すこともできます) |
 | `info.watch.unavailable` (v0.5) | 文書のフォルダを監視できない (WATCH-2。理由の種類ごとにプロセスで 1 回。`{path}` はそのフォルダの最初の文書のパス、`{reason}` は下の `ui.watch.reason.*`) | {path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます |
-| `ui.watch.reason.network` (v0.5) | 上の `{reason}` (`WatchError::Unsupported` の `fs` が `network`。開くジョブで `FsKind::Network` と分かった文書も) | ネットワークの共有 |
+| `ui.watch.reason.network` (v0.5) | 上の `{reason}` (`WatchError::Unsupported` の `fs` が `network`。開くジョブで `FsKind::Network` と分かった文書も。WSL2 の DrvFs (`/mnt/c`) は 9p で `Network` と判定する) | ネットワークや仮想の FS (WSL の /mnt/c など) |
 | `ui.watch.reason.unsupported_fs` (v0.5) | 上の `{reason}` (ほかの `WatchError::Unsupported`。`{fs}` は FS の名前) | この FS ({fs}) では監視しません |
 | `ui.watch.reason.limit` (v0.5) | 上の `{reason}` (`WatchError::Limit`) | 監視の数が OS の上限に達しました |
 | `ui.watch.reason.denied` (v0.5) | 上の `{reason}` (`WatchError::Denied`) | 権限がありません |

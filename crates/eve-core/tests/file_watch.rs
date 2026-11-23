@@ -643,7 +643,11 @@ fn ネットワークの_fs_の文書は監視を頼まずに縮退を知らせ�
         "FileWatcher に頼まない (io を止めない)"
     );
     assert_eq!(watch_messages(&h), vec!["info.watch.unavailable"]);
-    assert!(h.frame_contains("ネットワークの共有"), "{}", h.frame_text());
+    assert!(
+        h.frame_contains("ネットワークや仮想の FS"),
+        "{}",
+        h.frame_text()
+    );
 }
 
 // verifies: AC-FR-117-9
@@ -878,5 +882,313 @@ fn windows_では名前の大文字小文字を区別せず_短い名前はデ�
     match pending_of(&h, a) {
         Some(ExternalPending::Modified(s)) => assert_eq!(s.len, 3),
         other => panic!("{other:?}"),
+    }
+}
+
+// ---------- PR #631 のレビューの直し ----------
+
+fn request_token(h: &Harness) -> Option<eve_view::ClipboardToken> {
+    h.effects().iter().rev().find_map(|e| match e {
+        eve_view::Effect::RequestClipboard { token, .. } => Some(*token),
+        _ => None,
+    })
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 監視で読み直している間に届いた貼り付けの応答は捨てずに貼り付ける() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n")]);
+    let a = open(&mut h, "/w/a.txt");
+    h.keys("ctrl+v");
+    let token = request_token(&h).expect("RequestClipboard");
+    write_outside(&mut h, &fake, "/w/a.txt", b"new\n");
+    h.advance_ms(WATCH_SETTLE.0);
+    // 照合だけを走らせる (監視の読み直しのジョブが積まれたまま)
+    assert!(h.run_one_job());
+    assert_eq!(h.pending_jobs(), 1, "監視の読み直しのジョブ");
+    h.clipboard_content(token, Some("P"));
+    h.run_jobs();
+    assert_eq!(text_of(&h, a), "Pa\n", "貼り付けを読込で捨てない");
+    assert!(pending_of(&h, a).is_some(), "読み直しを取り消して印にする");
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 数_ms_ずれて届いた知らせの印は_1_件のメッセージにまとめる() {
+    let (mut h, fake) = watched(&[
+        ("/w/a.txt", b"a\n"),
+        ("/w/b.txt", b"b\n"),
+        ("/w/c.txt", b"c\n"),
+    ]);
+    let a = open(&mut h, "/w/a.txt");
+    let b = open(&mut h, "/w/b.txt");
+    open(&mut h, "/w/c.txt");
+    h.clear_log();
+    write_outside(&mut h, &fake, "/w/a.txt", b"A\n");
+    h.advance_ms(3);
+    write_outside(&mut h, &fake, "/w/b.txt", b"B\n");
+    // a の待ち合わせの期限 (100 ms): a の照合の回が終わっても、b の期限が近いので知らせを保留する
+    h.advance_ms(WATCH_SETTLE.0 - 3);
+    h.run_jobs();
+    assert!(pending_of(&h, a).is_some());
+    assert_eq!(watch_messages(&h), Vec::<String>::new(), "保留する");
+    // b の期限 (103 ms): 2 つの回の印を 1 件にまとめる
+    h.advance_ms(3);
+    h.run_jobs();
+    assert!(pending_of(&h, b).is_some());
+    assert_eq!(watch_messages(&h), vec!["info.external.changed_many"]);
+    assert_eq!(h.editor.next_deadline(), None);
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 保留した印は次の回が来なくても_100_ms_で知らせる() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n"), ("/w/b.txt", b"b\n")]);
+    let a = open(&mut h, "/w/a.txt");
+    let b = open(&mut h, "/w/b.txt");
+    h.clear_log();
+    write_outside(&mut h, &fake, "/w/a.txt", b"A\n");
+    h.advance_ms(3);
+    // b の知らせ (期限は 103 ms) の後に b を閉じる: 回は来ない
+    fake.changed(id_of(&fake, "/w"), "b.txt");
+    h.pump_fs();
+    h.advance_ms(WATCH_SETTLE.0 - 3);
+    h.run_jobs();
+    assert_eq!(watch_messages(&h), Vec::<String>::new());
+    assert_eq!(h.doc_id(), b);
+    h.cmd("buffer.close");
+    h.run_jobs();
+    h.advance_ms(WATCH_SETTLE.0);
+    assert!(pending_of(&h, a).is_some());
+    assert_eq!(watch_messages(&h), vec!["info.external.changed"]);
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 書き続けるファイルは印の付いたときに_1_回だけ知らせ_印の_stamp_を新しくする() {
+    let (mut h, fake) = watched(&[("/w/log.txt", b"0\n"), ("/w/b.txt", b"b\n")]);
+    let log = open(&mut h, "/w/log.txt");
+    open(&mut h, "/w/b.txt");
+    h.clear_log();
+    for i in 0..10u32 {
+        let body = format!("{}\n", "x".repeat(i as usize + 1));
+        write_outside(&mut h, &fake, "/w/log.txt", body.as_bytes());
+        h.advance_ms(300);
+        h.run_jobs();
+    }
+    assert_eq!(watch_messages(&h), vec!["info.external.changed"]);
+    match pending_of(&h, log) {
+        Some(ExternalPending::Modified(s)) => assert_eq!(s.len, 11, "最後の書込の stamp"),
+        other => panic!("{other:?}"),
+    }
+    // 削除に替わったら知らせる
+    h.fs.remove(&"/w/log.txt".into());
+    fake.changed(id_of(&fake, "/w"), "log.txt");
+    h.pump_fs();
+    settle(&mut h);
+    assert_eq!(
+        watch_messages(&h),
+        vec!["info.external.changed", "info.external.deleted"]
+    );
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 表示中の読み直しの最短の間隔の内の変更も知らせは_1_回() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n")]);
+    let a = open(&mut h, "/w/a.txt");
+    write_outside(&mut h, &fake, "/w/a.txt", b"1\n");
+    settle(&mut h);
+    assert_eq!(text_of(&h, a), "1\n");
+    h.clear_log();
+    for body in [&b"22\n"[..], b"333\n", b"4444\n"] {
+        h.advance_ms(500);
+        write_outside(&mut h, &fake, "/w/a.txt", body);
+        settle(&mut h);
+    }
+    assert_eq!(watch_messages(&h), vec!["info.external.changed"]);
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 監視の知らせは表示中の警告を置き換えずに履歴に積む() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n"), ("/w/b.txt", b"b\n")]);
+    let a = open(&mut h, "/w/a.txt");
+    open(&mut h, "/w/b.txt");
+    h.editor
+        .state_mut()
+        .show_message(eve_view::MessageLevel::Warn, "msg.edit.read_only", &[]);
+    h.clear_log();
+    write_outside(&mut h, &fake, "/w/a.txt", b"A\n");
+    settle(&mut h);
+    assert!(pending_of(&h, a).is_some());
+    assert_eq!(
+        watch_messages(&h),
+        Vec::<String>::new(),
+        "警告を置き換えない"
+    );
+    let current = h
+        .frame()
+        .messages
+        .current
+        .map(|m| m.level)
+        .expect("表示中のメッセージ");
+    assert_eq!(current, eve_view::MessageLevel::Warn);
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 実行中に監視を止めると印を外し_照合の途中の結果も使わない() {
+    for policy in [
+        (false, ExternalChangePolicy::AutoIfUnmodified),
+        (true, ExternalChangePolicy::Never),
+    ] {
+        let (mut h, fake) = watched(&[("/w/a.txt", b"a\n"), ("/w/b.txt", b"b\n")]);
+        let a = open(&mut h, "/w/a.txt");
+        let b = open(&mut h, "/w/b.txt");
+        write_outside(&mut h, &fake, "/w/a.txt", b"A\n");
+        settle(&mut h);
+        assert!(pending_of(&h, a).is_some());
+        // b の照合の途中で止める
+        write_outside(&mut h, &fake, "/w/b.txt", b"B\n");
+        h.advance_ms(WATCH_SETTLE.0);
+        assert_eq!(h.pending_jobs(), 1);
+        h.clear_log();
+        set_policy(&mut h, policy.0, policy.1);
+        assert_eq!(pending_of(&h, a), None, "{policy:?}");
+        assert!(!h.frame_contains("[外部で変更]"));
+        h.run_jobs();
+        assert_eq!(pending_of(&h, b), None, "{policy:?}");
+        assert_eq!(text_of(&h, b), "b\n", "{policy:?}");
+        assert_eq!(watch_messages(&h), Vec::<String>::new(), "{policy:?}");
+        // 切り替えても照合しない
+        h.cmd("buffer.prev");
+        h.advance_ms(1);
+        assert_eq!(h.pending_jobs(), 0, "{policy:?}");
+        assert_eq!(h.editor.next_deadline(), None, "{policy:?}");
+    }
+}
+
+// verifies: AC-FR-117-8
+#[test]
+fn ジョブの結果なしに_ready_に戻った文書の延ばした照合も再開する() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n")]);
+    h.editor.state_mut().set_config(Config {
+        huge_file_warn_bytes: 1_048_576,
+        ..Config::default()
+    });
+    let a = open(&mut h, "/w/a.txt");
+    // 利用者の再読込で、開く前の確認 (巨大ファイル) が出る: 文書は読込中のまま、ジョブは無い
+    h.fs.add_file("/w/a.txt", &vec![b'x'; 1_200_000]);
+    h.cmd("file.reload");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog");
+    fake.changed(id_of(&fake, "/w"), "a.txt");
+    h.pump_fs();
+    h.advance_ms(WATCH_SETTLE.0);
+    assert_eq!(h.pending_jobs(), 0, "読込中は延ばす");
+    // 確認を Esc で閉じる (ジョブの結果は届かない): 次の tick で延ばした照合を積む
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+    h.advance_ms(1);
+    assert_eq!(h.pending_jobs(), 1);
+    h.run_jobs();
+    assert!(pending_of(&h, a).is_some());
+    assert_eq!(h.overlay(), "");
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 確認で無視を選んでも_確認の後の新しい変更の印は残す() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n")]);
+    let a = open(&mut h, "/w/a.txt");
+    h.text("x");
+    write_outside(&mut h, &fake, "/w/a.txt", b"v1\n");
+    settle(&mut h);
+    h.focus(false);
+    h.focus(true);
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog");
+    // 確認を出している間に、もう一度外部で変わる
+    write_outside(&mut h, &fake, "/w/a.txt", b"v22\n");
+    settle(&mut h);
+    h.keys("enter");
+    assert_eq!(h.overlay(), "");
+    match pending_of(&h, a) {
+        Some(ExternalPending::Modified(s)) => assert_eq!(s.len, 4, "新しい変更の印"),
+        other => panic!("{other:?}"),
+    }
+}
+
+// verifies: AC-FR-117-8
+#[test]
+fn 非同期の編集のジョブの間は照合を延ばし_利用者の操作を捨てない() {
+    let big = "line of text\r\n".repeat(80_000);
+    let (mut h, fake) = watched(&[("/w/big.txt", big.as_bytes())]);
+    let d = open(&mut h, "/w/big.txt");
+    h.cmd_with(
+        "file.set_line_ending",
+        eve_core::Args::new().with_str("eol", "lf"),
+    );
+    assert_eq!(h.pending_jobs(), 1, "改行の変換のジョブ");
+    let mut changed = big.clone();
+    changed.push_str("tail\r\n");
+    write_outside(&mut h, &fake, "/w/big.txt", changed.as_bytes());
+    h.advance_ms(WATCH_SETTLE.0);
+    assert_eq!(h.pending_jobs(), 1, "変換の間は照合を延ばす");
+    h.run_jobs();
+    assert!(!text_of(&h, d).contains("\r\n"), "変換を捨てない");
+    assert!(pending_of(&h, d).is_some(), "変換の後に照合して印を付ける");
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 監視の照合の間のフォーカス復帰は照合の後に確かめ直す() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n")]);
+    h.editor.state_mut().set_config(Config {
+        reload_on_external_change: ExternalChangePolicy::Ask,
+        ..Config::default()
+    });
+    open(&mut h, "/w/a.txt");
+    write_outside(&mut h, &fake, "/w/a.txt", b"new\n");
+    h.advance_ms(WATCH_SETTLE.0);
+    assert_eq!(h.pending_jobs(), 1, "監視の照合");
+    h.focus(false);
+    h.focus(true);
+    assert_eq!(h.pending_jobs(), 1, "照合の間は延ばす");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog", "照合の後にフォーカス復帰の確認");
+}
+
+#[test]
+fn フォルダの無い新規ファイルは監視を入れ直しても頼まない() {
+    let (mut h, fake) = watched(&[]);
+    h.clear_log();
+    h.open("/nodir/new.txt");
+    h.run_jobs();
+    h.pump_fs();
+    assert_eq!(fake.requests(), Vec::<WatchRequest>::new());
+    set_policy(&mut h, false, ExternalChangePolicy::AutoIfUnmodified);
+    set_policy(&mut h, true, ExternalChangePolicy::AutoIfUnmodified);
+    h.pump_fs();
+    assert_eq!(fake.requests(), Vec::<WatchRequest>::new());
+    assert!(
+        !h.messages().contains(&"info.watch.unavailable".to_owned()),
+        "{:?}",
+        h.messages()
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_でも_8_3_の形でない_チルダの名前ではディレクトリを照合しない() {
+    let (mut h, fake) = watched(&[("/w/a.txt", b"a\n"), ("/w/b.txt", b"b\n")]);
+    open(&mut h, "/w/a.txt");
+    open(&mut h, "/w/b.txt");
+    let id = id_of(&fake, "/w");
+    for name in ["~$report.docx", "a.txt~", "~WRL0001.tmp"] {
+        fake.changed(id, name);
+        h.pump_fs();
+        assert_eq!(h.editor.next_deadline(), None, "{name}");
     }
 }

@@ -333,7 +333,9 @@ impl EditorState {
                 d.path = Some(path.clone());
                 self.put_document(doc_id, d);
                 // フォルダがあれば監視する (無いフォルダは、保存で作られた後に張る。03 §9.5.1 の WATCH-1)
-                if parent_missing.is_none() {
+                if parent_missing.is_some() {
+                    self.watch_note_no_parent(doc_id);
+                } else {
                     self.watch_sync_doc(doc_id);
                 }
                 let key = if parent_missing.is_some() {

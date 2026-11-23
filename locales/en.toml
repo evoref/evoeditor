@@ -571,7 +571,7 @@ old = "{count} backups are older than 30 days: {dir}"
 unchanged = "{path} has not changed"
 changed = "{name} was changed outside the editor"
 deleted = "{name} was deleted outside the editor"
-changed_many = "{count} files were changed outside the editor (marked in the buffer list)"
+changed_many = "{count} files were changed or deleted outside the editor (marked in the buffer list)"
 reloaded = "Reloaded {name} to match the external change (you can undo this)"
 
 [info.watch]
@@ -1472,7 +1472,7 @@ reopen = "[E] Reopen with encoding"
 loading = "Loading"
 
 [ui.watch.reason]
-network = "network share"
+network = "a network or virtual file system (such as WSL's /mnt/c)"
 unsupported_fs = "this file system ({fs}) is not watched"
 limit = "the OS limit on watches was reached"
 denied = "permission denied"
@@ -1639,8 +1639,8 @@ no_match = "No matches"
 title = "Buffers"
 placeholder = "Filter by name"
 no_match = "No matching documents"
-external_changed = "changed outside"
-external_deleted = "deleted outside"
+external_changed = "changed on disk"
+external_deleted = "deleted on disk"
 
 [ui.help]
 title = "Help"

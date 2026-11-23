@@ -166,6 +166,30 @@ impl EditorState {
         self.push_message(level, key, text, hint);
     }
 
+    /// ファイル監視の知らせ (情報、03 §9.5.1 の WATCH-6 / WATCH-7)。表示中のメッセージが警告・エラーなら、それを置き換えずに
+    /// 履歴にだけ積む (読まれていない警告・エラーを、利用者の操作に依らない監視の知らせで消さない)。
+    pub(crate) fn show_watch_message(&mut self, key: &str, args: &[(&str, &str)]) {
+        let alert = self
+            .ui
+            .message
+            .as_ref()
+            .is_some_and(|m| m.level != MessageLevel::Info);
+        if !alert {
+            self.show_message(MessageLevel::Info, key, args);
+            return;
+        }
+        let (text, hint) = self.resolve_message(self.catalog(), key, args);
+        if self.ui.message_log.len() >= HISTORY_MAX {
+            self.ui.message_log.pop_front();
+        }
+        self.ui.message_log.push_back(LoggedMessage {
+            level: MessageLevel::Info,
+            text,
+            hint,
+            at: self.now,
+        });
+    }
+
     /// `show_message` の、補う言語の **同梱の** カタログで解決するもの (言語ファイルの診断の要約。重ねた表が壊れていても
     /// 読めるように、07 §17.4)。
     pub(crate) fn show_builtin_message(

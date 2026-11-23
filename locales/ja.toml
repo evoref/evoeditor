@@ -569,7 +569,7 @@ old = "30 日より古い退避が {count} 件あります: {dir}"
 unchanged = "{path} は変更されていません"
 changed = "{name} が外部で変更されました"
 deleted = "{name} が外部で削除されました"
-changed_many = "{count} 個のファイルが外部で変更されました (バッファ一覧に印があります)"
+changed_many = "{count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります)"
 reloaded = "{name} を外部の変更に合わせて読み直しました (元に戻すこともできます)"
 
 [info.watch]
@@ -1470,7 +1470,7 @@ reopen = "[E] 文字コードを指定して開き直す"
 loading = "読込中"
 
 [ui.watch.reason]
-network = "ネットワークの共有"
+network = "ネットワークや仮想の FS (WSL の /mnt/c など)"
 unsupported_fs = "この FS ({fs}) では監視しません"
 limit = "監視の数が OS の上限に達しました"
 denied = "権限がありません"
