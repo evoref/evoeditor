@@ -249,6 +249,13 @@ pub(crate) fn default_keymap() -> Keymap {
     ] {
         bind("editor", keys, cmd);
     }
+    // 行コメント (v0.5 の M33、FR-209。07 §11.6 の「設定と言語」。規則は 03 §15.6)
+    for (keys, cmd) in [
+        ("mod+/", "edit.toggle_comment"),
+        ("ctrl+k /", "edit.toggle_comment"),
+    ] {
+        bind("editor", keys, cmd);
+    }
     // チョードの代替キー ((alt))
     for (keys, cmd) in [
         ("ctrl+k left", "cursor.home"),

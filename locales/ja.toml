@@ -150,6 +150,10 @@ title = "貼り付け"
 description = "元に戻した編集をやり直します。"
 title = "やり直し"
 
+[cmd.edit.toggle_comment]
+description = "対象の行に行コメントを付ける・外す"
+title = "行コメントの切替"
+
 [cmd.edit.undo]
 description = "直前の編集を取り消します。"
 title = "元に戻す"
@@ -489,6 +493,10 @@ unsupported = "{option} はこのバージョンでは使えないため無視�
 no_match = "対応する括弧がありません"
 none = "カーソルの前後に括弧がありません"
 too_far = "対応する括弧は {limit} の範囲に見つかりませんでした"
+
+[info.comment]
+no_lines = "コメントにする行がありません"
+unsupported = "{language} には行コメントの記号がありません"
 
 [info.config]
 diagnostic_no_file = "{file} の診断は、ファイルに書かれたものではないため開けません"

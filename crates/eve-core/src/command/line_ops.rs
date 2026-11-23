@@ -32,7 +32,7 @@ fn bl(t: &impl TextRead, b: ByteOff) -> usize {
 type Block = (usize, usize);
 
 /// 操作の対象 (Window の View とその文書)。
-fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
+pub(super) fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
     let w = ctx.state.focused_window()?;
     let v = ctx.state.window_view(w)?;
     Some((v, ctx.state.view(v)?.doc))
@@ -91,7 +91,7 @@ fn block_of_ranges(t: &impl TextRead, sel: &Selection, blocks: &[Block]) -> Vec<
 }
 
 /// 編集を 1 つの Transaction として適用する。`after` は適用後の Selection を (`ChangeSet` を見て) 作る。
-fn commit(
+pub(super) fn commit(
     ctx: &mut CommandCtx<'_>,
     name: &str,
     edits: Vec<Edit>,

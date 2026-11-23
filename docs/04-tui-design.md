@@ -1955,6 +1955,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.bracket.none` (v0.5) | `cursor.goto_bracket` で、主のカーソルの直後と直前の書記素がどちらも対象の括弧でない (03 §5.7 の BRK-2 / BRK-6) | カーソルの前後に括弧がありません |
 | `info.bracket.no_match` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が文書の端まで無い (BRK-3) | 対応する括弧がありません |
 | `info.bracket.too_far` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が探す範囲 (`{limit}` = `1 MiB`) の中に無い (BRK-4) | 対応する括弧は {limit} の範囲に見つかりませんでした |
+| `info.comment.unsupported` (v0.5) | `edit.toggle_comment` で、文書の言語に行コメントの記号 (`comment.line`) が無い (`plain` を含む。03 §15.6 の CMT-6。`{language}` は言語の `display_name`、言語が決まっていなければ `plain`。文書は変えない) | {language} には行コメントの記号がありません |
+| `info.comment.no_lines` (v0.5) | `edit.toggle_comment` で、対象の行が空行と空白だけの行だけ (CMT-1。文書は変えない) | コメントにする行がありません |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |
 | `info.eol.converted` | 改行コードを変換した (01 FR-113 AC-4、03 §8.4。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない) | {count} 個の改行を {eol} に変換しました (元に戻すで戻せます) |
 | `info.eol.unchanged` | 変換する改行が無かった (すべて `{eol}` か、改行が無い。新しく挿入する改行だけを `{eol}` にした) | 改行はすでに {eol} です |

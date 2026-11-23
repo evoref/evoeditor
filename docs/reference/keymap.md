@@ -1,6 +1,6 @@
 # 既定キーマップ
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 184 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 186 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
 
 - コンテキストは 07 §7.1 の順。同じコンテキストの中は優先の順 (層の順・登録の順)。キーを探すときの参照の順 (`search` → `prompt` → `global` など) は 07 §7.1。
 - **キー** は画面の表記 (04 §7.8)、**設定の表記** は `keymap.toml` に書く形 (07 §7.2)。**拡張キー** の「要」は拡張キーが無い端末では届かない割当 (07 §11.6 の `[E]`)。
@@ -121,6 +121,8 @@
 | `Ctrl+K V` | `ctrl+k v` | `edit.paste` | 貼り付け | — | — |
 | `Ctrl+]` | `ctrl+]` | `cursor.goto_bracket` | 対応する括弧へ移動 | — | — |
 | `Ctrl+K %` | `ctrl+k %` | `cursor.goto_bracket` | 対応する括弧へ移動 | — | — |
+| `Ctrl+/` | `ctrl+/` | `edit.toggle_comment` | 行コメントの切替 | — | — |
+| `Ctrl+K /` | `ctrl+k /` | `edit.toggle_comment` | 行コメントの切替 | — | — |
 | `Ctrl+K ←` | `ctrl+k left` | `cursor.home` | 行頭へ移動 | — | — |
 | `Ctrl+K →` | `ctrl+k right` | `cursor.end` | 行末へ移動 | — | — |
 | `Ctrl+K Shift+←` | `ctrl+k shift+left` | `select.extend_home` | 行頭まで選択 | — | — |

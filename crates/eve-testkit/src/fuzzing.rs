@@ -1037,7 +1037,8 @@ pub fn editor_sequence(data: &[u8]) {
         .iter()
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
-        // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
+        // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
+        // 行コメントの切替 (M33) はこの一覧に入れない (同じ理由。性質は eve-core の試験 `toggle_comment` の proptest で見る)
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1048,6 +1049,7 @@ pub fn editor_sequence(data: &[u8]) {
                         | "select.add_cursor_above"
                         | "select.add_cursor_below"
                         | "cursor.goto_bracket"
+                        | "edit.toggle_comment"
                 )
         })
         .collect();
