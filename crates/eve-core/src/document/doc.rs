@@ -803,6 +803,9 @@ impl Document {
         self.disk_stamp = Some(stamp);
         self.external_pending = None;
         self.load_state = LoadState::Ready;
+        // ディスクの本文に替えた: もう新しいファイルの文書ではない (後で「新規として保持」しても、読んだ本文の形を設定で
+        // 変えない、07 §3.6 の LAYER-4)
+        self.new_file = false;
     }
 
     /// 保存の開始 (03 §9.3 手順 3): 履歴を封印し、保存に使う Snapshot とその時点の履歴上の位置を返す。

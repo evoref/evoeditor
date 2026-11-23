@@ -1127,6 +1127,32 @@ fn 開いたときの一時の失敗は_1_回だけ積み直す() {
     );
 }
 
+// verifies: AC-FR-705-4
+#[test]
+fn 開いた直後に置き換わった読み直しの一時の失敗も_値が無ければ_1_回だけ積み直す() {
+    let mut h = start(&Setup {
+        files: &[(EC_REPO, b"[*]\nindent_size = 2\n")],
+        ..Setup::default()
+    });
+    h.open(B);
+    assert!(h.run_one_job(), "開く");
+    // 開いたときの読込の結果は、読み直しを積むまで渡さない (読み直しに置き換わって捨てられる)
+    let opened = run_holding_editorconfig(&mut h);
+    assert_eq!(opened.len(), 1);
+    reload_until_editorconfig(&mut h);
+    h.deliver(opened);
+    assert_eq!(indent(&h).1, 4, "まだ値を持たない");
+    // A と B の読み直しの最初の段がどちらも一時の失敗
+    h.fs.busy_times(FsOp::ReadChecked, 2);
+    h.run_jobs();
+    assert_eq!(indent(&h).1, 2, "値を持たない B は積み直した読込で読めた");
+    assert_eq!(
+        count(&h, "msg.config.reload_busy_kept"),
+        1,
+        "値を持つ A は前の値を保って知らせる"
+    );
+}
+
 // verifies: AC-FR-705-3
 #[test]
 fn 結果を返さなかった読込は_安全な場所が変わっていれば前の値を外す() {

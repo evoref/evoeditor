@@ -43,9 +43,11 @@ pub(crate) struct EditorConfigApplied {
 pub(crate) enum EditorConfigTrigger {
     /// 読込の完了・名前を付けて保存でパスが変わった (値を持たずに読む)。`Busy` なら 1 回だけ積み直す。
     Open,
-    /// `Open` の読込が `Busy` で終わり、積み直した読込 (もう積み直さない)。
+    /// 値を持たない文書の読込 (`Open`、または開いた直後に置き換わった `Reload`) が `Busy` で終わり、積み直した読込
+    /// (もう積み直さない)。
     Retry,
-    /// `config.reload` (届くまで前の値を使う)。`round` は読み直しの回 (知らせを同じファイルごとに 1 回にする)。
+    /// `config.reload` (届くまで前の値を使う)。`round` は読み直しの回 (知らせを同じファイルごとに 1 回にする)。値を
+    /// 持たない文書で `Busy` なら 1 回だけ積み直す。
     Reload {
         /// 読み直しの回。
         round: u64,
@@ -544,8 +546,9 @@ impl EditorState {
                             &file,
                         );
                     }
-                } else if trigger == EditorConfigTrigger::Open {
-                    // 開いたときの一時の失敗: 1 回だけ積み直す (番号を新しくする)。2 回目も `Busy` なら値を持たない
+                } else if trigger != EditorConfigTrigger::Retry {
+                    // 値を持たない文書の一時の失敗 (開いた直後の読込が `config.reload` に置き換わった場合も): 1 回だけ積み直す
+                    // (番号を新しくする)。2 回目も `Busy` なら値を持たない
                     self.start_editorconfig_read(doc, EditorConfigTrigger::Retry);
                 }
             }

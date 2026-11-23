@@ -103,11 +103,12 @@ impl EditorState {
                 }
             }
         }
-        // 要約も上限を掛けた後の列で作る
+        // 要約も上限を掛けた後の列で作る。ワークスペース層のファイルの診断 (言語定義の読み直し・正規表現の組立ての結果) は
+        // ジョブの結果で非同期に届くので、表示中の警告・エラーを置き換えない (07 §12.5 の WSC-3)
         if workspace {
             let mut shown = diagnostics.to_vec();
             eve_config::cap_diagnostics(&mut shown);
-            self.show_config_problems(file, &shown, Delivery::Replace);
+            self.show_config_problems(file, &shown, Delivery::Background);
         } else {
             self.show_config_problems(file, diagnostics, Delivery::Replace);
         }

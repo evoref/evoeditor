@@ -358,7 +358,7 @@ pub enum JobKind {
     },
 }
 
-/// 1 回の `run_job` の終わり方 (02 §9.3)。区切って譲るジョブ (`WorkspaceScan`) は、1 区切りを終えると終端の結果を送らずに
+/// 1 回の `run_job` の終わり方 (02 §9.3)。区切って譲るジョブ (`WorkspaceScan`・`WorkspaceSearch`・`ReadEditorConfig`) は、1 区切りを終えると終端の結果を送らずに
 /// 続きを返し、ワーカーのレーンが **同じ `JobId`・同じ `CancelToken` のまま** 自分のキューの末尾へ積む (間に投入された
 /// ジョブが先に走る)。ほかのジョブは `Done` だけを返す。
 #[derive(Debug)]

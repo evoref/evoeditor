@@ -1104,3 +1104,29 @@ fn ワークスペース層の診断の要約は表示中の警告を置き換�
     assert!(log.contains("nope"), "{log}");
     assert!(diagnostics(&mut h).iter().any(|(t, _)| t.contains("nope")));
 }
+
+// verifies: AC-FR-705-2
+#[test]
+fn ワークスペース層の言語定義の診断の要約も表示中の警告を置き換えない() {
+    // 言語定義の読み直し・正規表現の組立てのジョブの結果で後から届く診断 (`[[language]]` の `first_line`) も同じ (WSC-3)
+    let mut h = start(&Setup {
+        ws: Some("[[language]]\nname = \"foo\"\nfirst_line = \"(\"\n"),
+        files: &["/w/repo/nodir/new.txt"],
+        ..Setup::default()
+    });
+    assert!(
+        h.messages().iter().any(|m| m == "msg.open.parent_missing"),
+        "{:?}",
+        h.messages()
+    );
+    let f = h.frame();
+    let current = f.messages.current.expect("警告を出している");
+    assert_eq!(current.level, eve_view::MessageLevel::Warn);
+    assert!(!cell_text(&current.text).contains("first_line"));
+    assert!(
+        list(&mut h, "config.show_diagnostics", "first_line")
+            .iter()
+            .any(|(t, f)| t.contains("first_line") && *f == ws_file(3)),
+        "診断は一覧に入っている"
+    );
+}
