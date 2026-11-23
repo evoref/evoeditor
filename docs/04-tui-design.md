@@ -1960,9 +1960,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.bracket.too_far` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が探す範囲 (`{limit}` = `1 MiB`) の中に無い (BRK-4) | 対応する括弧は {limit} の範囲に見つかりませんでした |
 | `info.comment.unsupported` (v0.5) | `edit.toggle_comment` で、文書の言語に行コメントの記号 (`comment.line`) が無い (`plain` を含む。03 §15.6 の CMT-6。`{language}` は言語の `display_name`、言語が決まっていなければ `plain`。文書は変えない) | {language} には行コメントの記号がありません |
 | `info.comment.no_lines` (v0.5) | `edit.toggle_comment` で、対象の行が空行と空白だけの行だけ (CMT-1。文書は変えない) | コメントにする行がありません |
-| `info.external.changed` (v0.5) | ファイル監視で、文書のファイルが外部で変更されたと分かった (03 §9.5.1 の WATCH-6。`{name}` はファイル名。同じ回の照合で 2 つ以上の文書に印が付いたら下の `changed_many`) | {name} が外部で変更されました |
+| `info.external.changed` (v0.5) | ファイル監視で、文書のファイルが外部で変更されたと分かった (03 §9.5.1 の WATCH-6。`{name}` はファイル名。照合の回の結果がまとまって 2 つ以上の文書に印が付いたら下の `changed_many`。まとめ方は WATCH-6: 回が終わったとき、ほかの文書の待ち合わせの期限が 100 ms の内なら保留して次の回と合わせる) | {name} が外部で変更されました |
 | `info.external.deleted` (v0.5) | ファイル監視で、文書のファイルが外部で削除されたと分かった (WATCH-6) | {name} が外部で削除されました |
-| `info.external.changed_many` (v0.5) | 同じ回の照合で 2 つ以上の文書に外部の変更・削除の印が付いた (WATCH-6。`{count}` は印の付いた文書の数) | {count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります) |
+| `info.external.changed_many` (v0.5) | 照合の回 (保留して合わせた回を含む。WATCH-6) で 2 つ以上の文書に外部の変更・削除の印が付いた (出すときの今の印で数える。`{count}` は印の付いた文書の数) | {count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります) |
 | `info.external.reloaded` (v0.5) | 表示中の未編集の文書を、ファイル監視で確認なしに読み直した (WATCH-6。読み直した後に読み取り専用の文書は `info.reload.done_read_only`) | {name} を外部の変更に合わせて読み直しました (元に戻すこともできます) |
 | `info.watch.unavailable` (v0.5) | 文書のフォルダを監視できない (WATCH-2。理由の種類ごとにプロセスで 1 回。`{path}` はそのフォルダの最初の文書のパス、`{reason}` は下の `ui.watch.reason.*`) | {path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます |
 | `ui.watch.reason.network` (v0.5) | 上の `{reason}` (`WatchError::Unsupported` の `fs` が `network`。開くジョブで `FsKind::Network` と分かった文書も。WSL2 の DrvFs (`/mnt/c`) は 9p で `Network` と判定する) | ネットワークや仮想の FS (WSL の /mnt/c など) |

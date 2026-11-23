@@ -53,6 +53,8 @@ pub(crate) enum Pending {
         switch: bool,
         /// 照合を積んだ時刻 (その後に知らせが届いたかを見る)。
         at: crate::time::Tick,
+        /// 打ち切りの照合 (WATCH-4。結果を捨てない)。
+        cap: bool,
     },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
@@ -349,8 +351,9 @@ impl EditorState {
                 round,
                 switch,
                 at,
+                cap,
             } => {
-                self.finish_watch_check(doc, round, switch, at, r);
+                self.finish_watch_check(doc, round, switch, at, cap, r);
             }
             Pending::Search => {}
             Pending::FindNext {

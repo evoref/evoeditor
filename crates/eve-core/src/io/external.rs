@@ -195,7 +195,10 @@ impl EditorState {
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.external_seen = Some(stamp);
             // 監視の印は、尋ねた変更のものだけを外す (尋ねている間に届いた新しい変更の印は残す、WATCH-8)
-            if d.external_pending == Some(crate::document::ExternalPending::Modified(stamp)) {
+            // (オンライン専用のファイルの監視の照合は内容ハッシュを持たないので、`same_on_disk` で比べる)
+            if matches!(d.external_pending,
+                Some(crate::document::ExternalPending::Modified(s)) if same_on_disk(&s, &stamp))
+            {
                 d.external_pending = None;
             }
         }

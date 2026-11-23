@@ -430,6 +430,8 @@ impl Editor {
             InputEvent::CapabilitiesChanged(caps) => self.set_caps(caps),
             // フォーカス復帰: 表示中の文書の外部変更を確かめる (03 §9.5)
             InputEvent::Focus(true) => self.state.on_focus_gained(),
+            // フォーカスを失った: 延ばしたフォーカス復帰の確かめを捨てる (03 §9.5.1 の WATCH-8 の (b))
+            InputEvent::Focus(false) => self.state.watch_focus_lost(),
             // システムクリップボードの読み取りの応答。最後の要求の token と違えば捨てる
             InputEvent::ClipboardContent { token, text } => {
                 self.state.on_clipboard_content(token, text);

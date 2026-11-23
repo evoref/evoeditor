@@ -293,11 +293,14 @@ impl EditorState {
             keys::INFO_RELOAD_DONE
         };
         let name = path.file_name().unwrap_or_default();
-        self.show_message(
-            MessageLevel::Info,
-            key,
-            &[("path", &path.display()), ("name", &name)],
-        );
+        let args = [("path", path.display()), ("name", name)];
+        let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        if watch {
+            // 監視の読み直しの知らせは、表示中の警告・エラーを置き換えない (03 §9.5.1 の WATCH-7)
+            self.show_watch_message(key, &args);
+        } else {
+            self.show_message(MessageLevel::Info, key, &args);
+        }
     }
 
     /// 開き直しの取消し・失敗: 旧本文・書式・履歴をそのまま保って `Ready` に戻す。

@@ -247,10 +247,42 @@ impl EditorState {
                 .filter(|(_, d)| d.load_state == LoadState::Ready && d.path.is_some())
                 .map(|(id, _)| *id)
                 .collect();
-            for doc in docs {
-                self.watch_sync_doc(doc);
+            for doc in &docs {
+                self.watch_sync_doc(*doc);
+            }
+            // 止めていた間の変更に気付くよう、監視を頼んだ文書を 1 回ずつ照合する (まとめ方は WATCH-6 のとおり)。監視
+            // できない (ネットワークの FS など) と分かっているフォルダの文書は、監視していない文書と同じく照合しない
+            let registered: Vec<DocumentId> = docs
+                .into_iter()
+                .filter(|d| {
+                    self.watch
+                        .docs
+                        .get(d)
+                        .and_then(|r| self.watch.dirs.get(&r.dir))
+                        .is_some_and(|e| !matches!(e.state, DirState::Failed(_)))
+                })
+                .collect();
+            if !registered.is_empty() {
+                let round = self.watch_new_round();
+                for doc in registered {
+                    self.watch_check(doc, Some(round), false, false);
+                }
+                self.watch_round_done(round, None);
             }
         } else {
+            // 監視からの読み直しを取り消して旧本文のまま `Ready` に戻す (止めた後に当てない。読込中の打鍵を捨てない)
+            let reloads: Vec<(DocumentId, JobId)> = self
+                .watch
+                .reloads
+                .iter()
+                .map(|(d, (j, _))| (*d, *j))
+                .collect();
+            for (doc, job) in reloads {
+                if self.io.pending.remove(&job).is_some() {
+                    self.jobs.cancel(job);
+                }
+                self.reopen_restore(doc);
+            }
             if let Some(w) = self.watch.watcher.clone() {
                 for id in self.watch.ids.keys() {
                     w.unwatch(*id);
@@ -523,7 +555,13 @@ impl EditorState {
     pub(crate) fn watch_deadline(&self) -> Option<Tick> {
         let waits = self.watch.waits.values().map(|w| w.due());
         let due = self.watch.due.values().copied();
-        let held = self.watch.held_since.map(|t| t + WATCH_SETTLE);
+        // 照合の回が残っている間は、保留の期限を入れない (回の結果で `watch_round_done` が知らせる。過去の期限で
+        // Host を空回りさせない)
+        let held = self
+            .watch
+            .held_since
+            .filter(|_| self.watch.rounds.is_empty())
+            .map(|t| t + WATCH_SETTLE);
         waits.chain(due).chain(held).min()
     }
 
@@ -532,16 +570,17 @@ impl EditorState {
         // ジョブの結果無しに `Ready` に戻った文書 (開く前の確認を `Esc` で閉じた再読込など) の延ばした照合も再開する
         self.watch_resume();
         let now = self.now;
-        let mut fire: Vec<DocumentId> = Vec::new();
+        // (文書, 打ち切りの照合か)
+        let mut fire: Vec<(DocumentId, bool)> = Vec::new();
         let mut settled: Vec<DocumentId> = Vec::new();
         for (doc, w) in &mut self.watch.waits {
             if now >= w.settle_at() {
                 // 待ち合わせの期限: この文書の知らせはすべて、この照合 (以降) が取り込む
-                fire.push(*doc);
+                fire.push((*doc, false));
                 settled.push(*doc);
             } else if w.cap_at().is_some_and(|c| now >= c) {
                 // 打ち切りの照合: 待ち合わせの期限は消さない (期限が後ならもう 1 回照合する、WATCH-4)
-                fire.push(*doc);
+                fire.push((*doc, true));
                 w.first = None;
             }
         }
@@ -557,14 +596,14 @@ impl EditorState {
             .collect();
         for doc in due {
             self.watch.due.remove(&doc);
-            if !fire.contains(&doc) {
-                fire.push(doc);
+            if !fire.iter().any(|(d, _)| *d == doc) {
+                fire.push((doc, false));
             }
         }
         if !fire.is_empty() {
             let round = self.watch_new_round();
-            for doc in fire {
-                self.watch_check(doc, Some(round), false);
+            for (doc, cap) in fire {
+                self.watch_check(doc, Some(round), false, cap);
             }
             self.watch_round_done(round, None);
         }
@@ -589,7 +628,7 @@ impl EditorState {
                 .get(&doc)
                 .is_some_and(|d| d.external_pending.is_some())
         {
-            self.watch_check(doc, None, true);
+            self.watch_check(doc, None, true, false);
         }
     }
 
@@ -612,7 +651,7 @@ impl EditorState {
         let round = self.watch_new_round();
         for (doc, switch) in ready {
             self.watch.deferred.remove(&doc);
-            self.watch_check(doc, (!switch).then_some(round), switch);
+            self.watch_check(doc, (!switch).then_some(round), switch, false);
         }
         self.watch_round_done(round, None);
     }
@@ -647,6 +686,11 @@ impl EditorState {
         self.watch.focus_pending = Some(doc);
     }
 
+    /// フォーカスを失った: 延ばしたフォーカス復帰の確かめは捨てる (次の復帰で確かめる)。
+    pub(crate) fn watch_focus_lost(&mut self) {
+        self.watch.focus_pending = None;
+    }
+
     fn resume_focus_check(&mut self) {
         let Some(doc) = self.watch.focus_pending else {
             return;
@@ -662,8 +706,9 @@ impl EditorState {
         self.on_focus_gained();
     }
 
-    /// 照合のジョブを積む。その文書のジョブがあれば延ばす。`round` は同じ時刻の照合の回 (`None` は切替の照合)。
-    fn watch_check(&mut self, doc: DocumentId, round: Option<u64>, switch: bool) {
+    /// 照合のジョブを積む。その文書のジョブがあれば延ばす。`round` は同じ時刻の照合の回 (`None` は切替の照合)。`cap` は
+    /// 打ち切りの照合 (WATCH-4。結果を捨てない)。
+    fn watch_check(&mut self, doc: DocumentId, round: Option<u64>, switch: bool, cap: bool) {
         let Some(d) = self.docs.documents.get(&doc) else {
             return;
         };
@@ -692,6 +737,7 @@ impl EditorState {
                 round,
                 switch,
                 at,
+                cap,
             },
         );
         if let Some(r) = round
@@ -736,19 +782,27 @@ impl EditorState {
             return;
         }
         let horizon = self.now + WATCH_SETTLE;
-        let near = self.watch.waits.values().any(|w| w.due() <= horizon);
+        let held = &self.watch.held;
+        let near = self
+            .watch
+            .waits
+            .iter()
+            .any(|(d, w)| w.due() <= horizon && !held.iter().any(|(h, _)| h == d));
         if near && self.now < since + WATCH_SETTLE {
             return;
         }
         self.watch.held_since = None;
         let mut marked: Vec<(DocumentId, bool)> = Vec::new();
-        for (d, deleted) in std::mem::take(&mut self.watch.held) {
-            // 回の間に閉じた文書の印は数えない。同じ文書は後の印で数える
-            if !self.docs.documents.contains_key(&d) {
+        for (d, _) in std::mem::take(&mut self.watch.held) {
+            // 今の印で数え直す (閉じた文書・保留の間に印が外れた文書は数えない。同じ文書は 1 回)
+            let Some(now_mark) = self.docs.documents.get(&d).and_then(|x| x.external_pending)
+            else {
+                continue;
+            };
+            if marked.iter().any(|(x, _)| *x == d) {
                 continue;
             }
-            marked.retain(|(x, _)| *x != d);
-            marked.push((d, deleted));
+            marked.push((d, now_mark == ExternalPending::Deleted));
         }
         match marked.as_slice() {
             [] => {}
@@ -807,16 +861,26 @@ impl EditorState {
         round: Option<u64>,
         switch: bool,
         at: Tick,
+        cap: bool,
         r: JobResult,
     ) {
         // 監視を止めた後に届いた結果は使わない (回も捨ててある)
         if !self.watch.enabled {
             return;
         }
-        let marked = self.apply_watch_check(doc, switch, at, r);
-        if let Some(rd) = round {
+        let marked = self.apply_watch_check(doc, switch, at, cap, r);
+        if let Some(rd) = round.filter(|r| self.watch.rounds.contains_key(r)) {
             self.watch_round_done(rd, marked.map(|deleted| (doc, deleted)));
+        } else if let (Some(_), Some(deleted)) = (round, marked) {
+            // 監視を止めて入れ直す前に積んだ照合 (その回はもう無い): 保留に足して、今の回と合わせて知らせる
+            if self.watch.held.is_empty() {
+                self.watch.held_since = Some(self.now);
+            }
+            self.watch.held.push((doc, deleted));
+            self.watch_flush_held();
         } else if let Some(deleted) = marked {
+            // 切替の照合で知らせた文書は、保留している回の知らせから外す (2 回知らせない)
+            self.watch.held.retain(|(d, _)| *d != doc);
             self.watch_notify_one(doc, deleted);
         }
         self.mark_dirty_render();
@@ -842,6 +906,7 @@ impl EditorState {
         doc: DocumentId,
         switch: bool,
         at: Tick,
+        cap: bool,
         r: JobResult,
     ) -> Option<bool> {
         let d = self.docs.documents.get(&doc)?;
@@ -852,8 +917,9 @@ impl EditorState {
             return None;
         }
         // 照合を積んだ後に知らせが届き、その待ち合わせの照合がまだ来ていない: この (古いかもしれない) 結果は当てずに、
-        // 次の照合に任せる。続けては捨てない (書き続けるファイルでも、打ち切りの照合の結果を当てる。WATCH-4 / WATCH-5)
+        // 次の照合に任せる。打ち切りの照合の結果は捨てない (WATCH-4 の最長 1 s を守る)。続けても捨てない (WATCH-5)
         if !switch
+            && !cap
             && self.watch.waits.get(&doc).is_some_and(|w| w.last >= at)
             && self.watch.discarded.insert(doc)
         {
@@ -874,7 +940,7 @@ impl EditorState {
                     return None;
                 }
                 // 「無視」を選んだ変更は、もう知らせない (WATCH-7、03 §9.5 の「同じ変更で何度も聞かない」)
-                if seen == Some(stamp) {
+                if seen.is_some_and(|s| same_on_disk(&s, &stamp)) {
                     return None;
                 }
                 match self.watch_reloadable(doc, meta.len) {
@@ -981,6 +1047,8 @@ impl EditorState {
         if let Some(m) = mark
             && let Some(deleted) = self.watch_mark(doc, m, false)
         {
+            // 保留している回の知らせから外す (2 回知らせない)
+            self.watch.held.retain(|(d, _)| *d != doc);
             self.watch_notify_one(doc, deleted);
         }
     }
@@ -1016,6 +1084,12 @@ impl EditorState {
         path: FsPath,
         r: JobResult,
     ) {
+        // 監視を止めた後に届いた結果は当てない (止めるときに取り消してあるので、ふつうは届かない)
+        if !self.watch.enabled {
+            self.watch.reloads.remove(&doc);
+            self.reopen_restore(doc);
+            return;
+        }
         match r {
             // 読込のときにも大きさの上限を確かめる (照合の後に大きくなった。WATCH-6 の (a))
             JobResult::Complete { meta, .. } if meta.len > WATCH_RELOAD_MAX_BYTES => {
@@ -1038,12 +1112,9 @@ impl EditorState {
                 self.watch_note_fs(doc, meta.fs_kind);
                 self.watch_sync_doc(doc);
                 // 読んでいる間に変わった: 読んだ内容はディスクと違うかもしれないので印を残し、待ち合わせの後に照合し直す
+                // 知らせは `info.external.reloaded` の 1 件にし、印 (ステータスバー) だけを残す
                 if changed_during_load {
-                    if let Some(deleted) =
-                        self.watch_mark(doc, ExternalPending::Modified(stamp), false)
-                    {
-                        self.watch_notify_one(doc, deleted);
-                    }
+                    let _ = self.watch_mark(doc, ExternalPending::Modified(stamp), false);
                     self.watch.due.insert(doc, self.now + WATCH_SETTLE);
                 }
             }
