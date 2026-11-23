@@ -824,6 +824,8 @@ impl EditorState {
                     // 名前を付けて保存のパスは、書けてから文書のパスにする (03 §9.3 手順 7)
                     doc.path = Some(path.clone());
                     doc.finish_save(at, Some(report.new_stamp));
+                    // 保存した: もう新しいファイルの文書ではない (設定が届いても形を決め直さない、07 §3.6 の LAYER-4)
+                    doc.new_file = false;
                 }
                 self.push_event(EditorEvent::DocumentSaved {
                     doc: doc_id,
@@ -834,6 +836,8 @@ impl EditorState {
                 // (07 §9.6 の LANG-7、§3.6 の LAYER-3)
                 if path_changed {
                     self.redetect_language(doc_id);
+                    // `.editorconfig` も新しいパスで読み直す (07 §10.3 の EC-1。名前が変わると当たるセクションも変わる)
+                    self.editorconfig_on_path_changed(doc_id);
                 }
                 // 直接上書きで書いたことは 1 回示す (03 §9.3 手順 7)。つながりを承認した保存の完了は、`info.save.done` に
                 // 代えて `info.save.escape_merged` にする (03 §8.3.1 の「つながったまま保存した後」)。直接上書きでは

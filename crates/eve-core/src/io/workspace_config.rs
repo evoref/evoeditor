@@ -9,8 +9,9 @@
 //!   経路 (ユーザー層を読み直した後にこのジョブを積み、届いてから全体を差し替えて要約を 1 回出す)。
 //!
 //! 所有者の検査で読まなかったファイルは、ファイルごとに 1 件の警告 (OWN-7)。一時の失敗 (`Busy`) は診断を出さず、前に読んだ
-//! 層とその診断をそのまま使う (次の読込で読み直す)。`config.reload` で構文エラー・読めないファイルは、前に読んだ層を保って
-//! `msg.config.reload_kept` を出す (07 §6 の規則 1)。
+//! 層とその診断をそのまま使い (次の読込で読み直す)、前の層があれば `msg.config.reload_busy_kept` を出す。`config.reload` で
+//! 構文エラー・読めないファイルは、前に読んだ層を保って `msg.config.reload_kept` を出す (07 §6 の規則 1)。診断の要約は
+//! ジョブの結果で非同期に届くので、表示中の警告・エラーを置き換えない (WSC-3)。
 //!
 //! spec: 07 §12.5, 07 §12.1, 07 §12.3, 07 §7.4, 07 §6
 
@@ -29,6 +30,7 @@ use crate::io::fs::{
 use crate::io::fspath::FsPath;
 use crate::io::pending::Pending;
 use crate::jobs::{JobKind, JobResult};
+use crate::ui_model::config_report::Delivery;
 use crate::ui_model::keys;
 
 /// ワークスペース設定のファイルの名前 (`<root>/.eve/config.toml`、07 §12.1)。
@@ -117,7 +119,7 @@ fn components(p: &FsPath) -> Vec<String> {
 }
 
 /// 読まなかった理由の診断 (07 §12.1 の OWN-7)。`value` は判定に落ちた物 (置き場所のディレクトリかファイル) のパス。
-fn rejected(
+pub(crate) fn rejected(
     what: CheckedObject,
     verdict: OwnerVerdict,
     dir: &FsPath,
@@ -437,13 +439,14 @@ impl EditorState {
         if !layer.keeps_diagnostics() {
             self.settings.workspace_notes = config_notes;
         }
-        let mut kept: Vec<&str> = Vec::new();
+        // (文言キー, ファイル): エラーで前の層を保つ (`reload_kept`) か、一時の失敗で保つ (`reload_busy_kept`)
+        let mut kept: Vec<(&str, &str)> = Vec::new();
         // 一時の失敗で前の層を保つときも知らせる (知らせなく古い層が残らないように)
         if layer == Fetched::Keep && self.settings.workspace_layer.is_some() {
-            kept.push(&config_name);
+            kept.push((keys::MSG_CONFIG_RELOAD_BUSY_KEPT, &config_name));
         }
         if keymap == Fetched::Keep && self.keys.workspace_keymap_file.is_some() {
-            kept.push(&keymap_name);
+            kept.push((keys::MSG_CONFIG_RELOAD_BUSY_KEPT, &keymap_name));
         }
         match layer {
             Fetched::Absent => {
@@ -455,7 +458,7 @@ impl EditorState {
                 self.settings.workspace_layer = Some(Arc::new(l));
             }
             // 起動時は層を持たない。`config.reload` では前に読んだ層を保つ (07 §6 の規則 1)
-            Fetched::Broken if reloading => kept.push(&config_name),
+            Fetched::Broken if reloading => kept.push((keys::MSG_CONFIG_RELOAD_KEPT, &config_name)),
             Fetched::Broken => {
                 self.settings.workspace_layer = None;
                 self.settings.workspace_languages.clear();
@@ -464,28 +467,24 @@ impl EditorState {
         }
         match keymap {
             Fetched::Absent => {
-                self.report_config(&keymap_name, &keymap_notes);
+                self.report_config_with(&keymap_name, &keymap_notes, Delivery::Background);
                 self.keys.workspace_keymap_pending = Some((None, keymap_name.clone()));
             }
             Fetched::Got(k) => {
                 self.keys.workspace_keymap_pending = Some((Some(k), keymap_name.clone()));
             }
             Fetched::Broken => {
-                self.report_config(&keymap_name, &keymap_notes);
+                self.report_config_with(&keymap_name, &keymap_notes, Delivery::Background);
                 if reloading {
-                    kept.push(&keymap_name);
+                    kept.push((keys::MSG_CONFIG_RELOAD_KEPT, &keymap_name));
                 } else {
                     self.keys.workspace_keymap_pending = Some((None, keymap_name.clone()));
                 }
             }
             Fetched::Keep => {}
         }
-        for file in kept {
-            self.show_message(
-                MessageLevel::Warn,
-                keys::MSG_CONFIG_RELOAD_KEPT,
-                &[("file", file)],
-            );
+        for (key, file) in kept {
+            self.show_message(MessageLevel::Warn, key, &[("file", file)]);
         }
         match reload {
             // `config.reload`: 言語定義の読み直しは、再読込が積む (判定し直さない、LANG-7)。新しいファイルの形は決め直す
@@ -512,7 +511,8 @@ impl EditorState {
         let mut diags = self.settings.workspace_notes.clone();
         diags.extend(classified.iter().cloned());
         eve_config::cap_diagnostics(&mut diags);
-        self.report_config(&name, &diags);
+        // ジョブの結果で非同期に届くので、表示中の警告・エラーを置き換えない (WSC-3)
+        self.report_config_with(&name, &diags, Delivery::Background);
     }
 
     /// ユーザー層・ワークスペース層・コマンドライン層を重ね直して差し替える (ワークスペース層が届いたとき。07 §12.5 の

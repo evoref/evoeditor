@@ -16,7 +16,7 @@ use super::{
 /// 03 §12.7.7)。結果は `emit` に渡す (終端は最後の 1 つ)。
 ///
 /// 依頼は値で受け取り、ジョブの入力 (区切って譲るジョブの状態・解放する一覧) はこの呼出しの中 (= ワーカーのスレッド) で
-/// 手放す。区切って譲るジョブ (`WorkspaceScan` / `WorkspaceSearch`) は、1 区切りを終えると終端の結果を送らずに `JobStep::Continue` で続きを
+/// 手放す。区切って譲るジョブ (`WorkspaceScan` / `WorkspaceSearch` / `ReadEditorConfig`) は、1 区切りを終えると終端の結果を送らずに `JobStep::Continue` で続きを
 /// 返す (02 §9.3。積み直すのは呼び出し側)。ほかは `JobStep::Done`。
 pub fn run_job(
     req: JobRequest,
@@ -105,6 +105,16 @@ pub fn run_job(
                 ports,
                 cancel,
                 emit,
+            );
+        }
+        // `.editorconfig` の探索は祖先 1 段ごとに区切って譲る (`io` を長く占めない、07 §10.3 の EC-8)
+        JobKind::ReadEditorConfig {
+            path,
+            safe_dirs,
+            walk,
+        } => {
+            return crate::io::editorconfig::run_editorconfig_step(
+                req.id, path, safe_dirs, walk, ports, emit,
             );
         }
         kind => JobRequest { kind, ..req },
@@ -503,8 +513,9 @@ pub fn run_job(
         JobKind::WorkspaceScan { .. }
         | JobKind::FinderMatch { .. }
         | JobKind::WorkspaceSearch { .. }
-        | JobKind::ReleaseCandidates { .. } => {
-            unreachable!("ワークスペースのジョブは上で処理した")
+        | JobKind::ReleaseCandidates { .. }
+        | JobKind::ReadEditorConfig { .. } => {
+            unreachable!("区切って譲るジョブと解放のジョブは上で処理した")
         }
     };
     emit(JobOutput { job: req.id, body });

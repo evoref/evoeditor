@@ -176,6 +176,13 @@ pub struct Document {
     /// 利用者が改行・文字コードを明示的に選んだ (`file.set_line_ending` など)。新しいファイルの形を設定から決め直さない
     /// (07 §3.6 の LAYER-4)。
     pub(crate) format_chosen: bool,
+    /// 無題で作った文書か、存在しないパスで開いた文書 (まだ保存していない新しいファイル。07 §3.6 の LAYER-4)。設定が届いたら
+    /// 改行と文字コードを決め直してよい文書の印。保存の成功で外す。外部で消えたファイルを「新規として保持」した文書・再読込・
+    /// 開き直しでは立てない。
+    pub(crate) new_file: bool,
+    /// 文書に当たった `.editorconfig` の値 (07 §3.6 の LAYER-1 の (5)、§10.3 の EC-1)。届く前・パスの無い文書・読まない起動は
+    /// `None`。
+    pub(crate) editorconfig: Option<crate::io::editorconfig::EditorConfigApplied>,
     /// canonical のパス (同じファイルの判定に使う。03 §12.7.6 の 0、境界の型ではない)。開くジョブの `Identity` と、名前を
     /// 付けて保存の成功で直す。canonicalize できなかったときは正規化したパス。無題・`Identity` が届く前は `None`。
     pub(crate) canonical: Option<FsPath>,
@@ -314,6 +321,8 @@ impl Document {
             preserved_anomalies: 0,
             stdin: None,
             format_chosen: false,
+            new_file: false,
+            editorconfig: None,
             canonical: None,
             file_id_unique: false,
             loading_file_id: None,
@@ -794,6 +803,9 @@ impl Document {
         self.disk_stamp = Some(stamp);
         self.external_pending = None;
         self.load_state = LoadState::Ready;
+        // ディスクの本文に替えた: もう新しいファイルの文書ではない (後で「新規として保持」しても、読んだ本文の形を設定で
+        // 変えない、07 §3.6 の LAYER-4)
+        self.new_file = false;
     }
 
     /// 保存の開始 (03 §9.3 手順 3): 履歴を封印し、保存に使う Snapshot とその時点の履歴上の位置を返す。

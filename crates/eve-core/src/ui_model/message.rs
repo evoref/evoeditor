@@ -166,21 +166,54 @@ impl EditorState {
     /// ファイル監視の知らせ (情報、03 §9.5.1 の WATCH-6 / WATCH-7)。表示中のメッセージが警告・エラーなら、それを置き換えずに
     /// 履歴にだけ積む (読まれていない警告・エラーを、利用者の操作に依らない監視の知らせで消さない)。
     pub(crate) fn show_watch_message(&mut self, key: &str, args: &[(&str, &str)]) {
+        self.show_background_message(MessageLevel::Info, key, args);
+    }
+
+    /// 利用者の操作に依らず、ジョブの結果で非同期に届く知らせ (監視の知らせ、`.editorconfig` とワークスペース層の診断の
+    /// 要約。07 §10.3 の段 6 の細目)。表示中のメッセージが警告・エラーなら、それを置き換えずに履歴にだけ積む。
+    pub(crate) fn show_background_message(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        args: &[(&str, &str)],
+    ) {
+        let (text, hint) = self.resolve_message(self.catalog(), key, args);
+        self.push_background_message(level, key, text, hint);
+    }
+
+    /// `show_background_message` の、補う言語の **同梱の** カタログで解決するもの (言語ファイルの診断の要約、07 §17.4)。
+    pub(crate) fn show_builtin_background_message(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        args: &[(&str, &str)],
+    ) {
+        let (text, hint) = self.resolve_message(self.builtin_catalog(), key, args);
+        self.push_background_message(level, key, text, hint);
+    }
+
+    /// 解決した非同期の知らせを出す: 表示中が警告・エラーなら履歴にだけ積み、そうでなければ `push_message` と同じ。
+    fn push_background_message(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        text: String,
+        hint: Option<String>,
+    ) {
         let alert = self
             .ui
             .message
             .as_ref()
             .is_some_and(|m| m.level != MessageLevel::Info);
         if !alert {
-            self.show_message(MessageLevel::Info, key, args);
+            self.push_message(level, key, text, hint);
             return;
         }
-        let (text, hint) = self.resolve_message(self.catalog(), key, args);
         if self.ui.message_log.len() >= HISTORY_MAX {
             self.ui.message_log.pop_front();
         }
         self.ui.message_log.push_back(LoggedMessage {
-            level: MessageLevel::Info,
+            level,
             text,
             hint,
             at: self.now,

@@ -177,6 +177,8 @@ pub enum JobResult {
     },
     /// `ReadWorkspaceConfig` の結果。
     WorkspaceConfigRead(crate::io::workspace_config::WorkspaceRead),
+    /// `ReadEditorConfig` の結果。
+    EditorConfigRead(crate::io::editorconfig::EditorConfigRead),
     /// `PrecompileLanguages` の結果。
     LanguagesPrecompiled {
         /// 組んだ定義の集まり (古い結果を見分ける)。

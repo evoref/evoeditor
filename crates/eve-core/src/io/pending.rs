@@ -27,6 +27,15 @@ pub(crate) enum Pending {
         /// 読込に使った `workspace.safe_directories` (前回と変わったかを見る)。
         safe_dirs: Vec<String>,
     },
+    /// `.editorconfig` の読込 (07 §10.3 の EC-1)。`seq` は文書ごとの読込の番号 (後に積んだものが勝つ)、`path` は積んだときの
+    /// 文書のパス、`safe_dirs` は使った `workspace.safe_directories` (書いた形)、`trigger` は積んだ契機。
+    EditorConfig {
+        doc: DocumentId,
+        seq: u64,
+        path: FsPath,
+        safe_dirs: Vec<String>,
+        trigger: crate::io::editorconfig::EditorConfigTrigger,
+    },
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
     LanguagesRead {
         startup: bool,
@@ -216,6 +225,7 @@ impl EditorState {
                 Pending::Open { doc: d, .. }
                 | Pending::OpenStdin { doc: d, .. }
                 | Pending::CheckUnchanged { doc: d }
+                | Pending::EditorConfig { doc: d, .. }
                 | Pending::ExternalCheck { doc: d, .. }
                 | Pending::WatchCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
@@ -258,6 +268,7 @@ impl EditorState {
             self.io.pending.remove(&id);
             self.jobs.cancel(id);
         }
+        self.settings.editorconfig_latest.remove(&doc);
         // 保存を中止して終了の待ちの対象 (標準入力の読込) が、文書を閉じて外れた: 終われるかを見直す (03 §9.7 (f) 3)
         self.quit_abort_check();
     }
@@ -417,6 +428,13 @@ impl EditorState {
             Pending::LanguagesPrecompile { redetect } => {
                 self.finish_languages_precompile(r, redetect);
             }
+            Pending::EditorConfig {
+                doc,
+                seq,
+                path,
+                safe_dirs,
+                trigger,
+            } => self.finish_editorconfig(doc, seq, &path, safe_dirs, trigger, r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

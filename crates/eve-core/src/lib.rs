@@ -47,6 +47,10 @@ pub use editor::{
     config_diagnostic_texts_long, config_problem_count, format_stroke, normalize_eol,
     parse_sequence, parse_stroke, resolve_theme, scan_locales,
 };
+/// `fuzz_editorconfig` の本体 (docs/09 §3.3。eve-config の `.editorconfig` の読込と glob の照合)。cargo-fuzz のターゲット
+/// (eve-core を通して使う) と、CI の proptest (eve-config の試験) が同じ関数を使う。
+#[doc(hidden)]
+pub use eve_config::editorconfig_fuzzing;
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;
 /// `fuzz_gitignore` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。
@@ -57,6 +61,11 @@ pub use gitignore::{
     IGNORE_FILE_MAX_PATTERNS, IGNORE_LINE_MAX_BYTES, IgnoreHit, IgnoreRules, IgnoreSource,
     ParseReport, PathKind, RepoIgnore, parse_commondir_file, parse_core_ignorecase,
     parse_gitdir_file,
+};
+/// `.editorconfig` の探索の本体と Windows の名前の直し方 (docs/07 §10.3)。試験と性質の検査 (proptest) が使う。
+#[doc(hidden)]
+pub use io::editorconfig::{
+    EditorConfigRead, EditorConfigReport, align_disk_names, read_editorconfig,
 };
 pub use io::fs::*;
 pub use io::fspath::FsPath;

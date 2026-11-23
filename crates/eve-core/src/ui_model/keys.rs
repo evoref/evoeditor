@@ -100,6 +100,7 @@ pub(crate) const MSG_CLIPBOARD_FALLBACK: &str = "msg.clipboard.fallback";
 pub(crate) const MSG_CONFIG_PROBLEM: &str = "msg.config.problem";
 pub(crate) const MSG_CONFIG_PROBLEMS: &str = "msg.config.problems";
 pub(crate) const MSG_CONFIG_RELOAD_KEPT: &str = "msg.config.reload_kept";
+pub(crate) const MSG_CONFIG_RELOAD_BUSY_KEPT: &str = "msg.config.reload_busy_kept";
 pub(crate) const MSG_EDIT_READ_ONLY: &str = "msg.edit.read_only";
 pub(crate) const MSG_EDIT_READ_ONLY_BINARY: &str = "msg.edit.read_only_binary";
 pub(crate) const MSG_EDIT_READ_ONLY_INVALID_BYTES: &str = "msg.edit.read_only_invalid_bytes";
@@ -218,6 +219,7 @@ pub(crate) const UI_CONFIG_DIAGNOSTICS_TITLE: &str = "ui.config_diagnostics.titl
 pub(crate) const UI_CONFIG_ORIGIN_CLI: &str = "ui.config_origin.cli";
 pub(crate) const UI_CONFIG_ORIGIN_CONDITION: &str = "ui.config_origin.condition";
 pub(crate) const UI_CONFIG_ORIGIN_DEFAULT: &str = "ui.config_origin.default";
+pub(crate) const UI_CONFIG_ORIGIN_EDITORCONFIG: &str = "ui.config_origin.editorconfig";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN: &str = "ui.config_origin.language_builtin";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_FILE: &str = "ui.config_origin.language_file";
 pub(crate) const UI_CONFIG_ORIGIN_USER: &str = "ui.config_origin.user";
@@ -374,6 +376,7 @@ pub(crate) const UI_WATCH_REASON_UNSUPPORTED_FS: &str = "ui.watch.reason.unsuppo
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
 const ALL: &[&str] = &[
+    UI_CONFIG_ORIGIN_EDITORCONFIG,
     UI_CONFIG_ORIGIN_WORKSPACE,
     UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
     HINT_UI_CANCEL,

@@ -1651,7 +1651,7 @@ struct JobRequest {
 fn run_job(req: JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut dyn FnMut(JobOutput)) -> JobStep;
     // 依頼は値で受け取る (v0.5 の M31 の段 4 で `&JobRequest` から改めた): 積み直しの状態 (WorkspaceWalk) を複製せずに続きへ移し、
     // 解放するジョブ (ReleaseCandidates) の一覧を run_job の中 (= ワーカーのスレッド) で手放すため
-enum JobStep { Done, Continue(JobKind) }  // v0.5 の M31 で足す (03 §12.7.2): 区切って譲るジョブ (WorkspaceScan / WorkspaceSearch) は、1 区切りを終えると
+enum JobStep { Done, Continue(JobKind) }  // v0.5 の M31 で足す (03 §12.7.2): 区切って譲るジョブ (WorkspaceScan / WorkspaceSearch、v0.5 の M33 の段 6 から io の ReadEditorConfig も) は、1 区切りを終えると
     // 終端の結果を送らずに続きの JobKind (積み直しの状態を持つ) を返す。ワーカーのレーンはそれを **同じ JobId・同じ CancelToken のまま** 自分のキューの
     // 末尾へ積む (間に投入されたジョブが先に走る。JobSpawner::cancel は続きにも効き、取り消されていれば続きを積まずに Failed { Cancelled } を送る)。
     // ManualJobSpawner も同じく続きを自分のキューの末尾に積み、run_jobs() はキューが空になるまで、run_one() は 1 区切りだけ回す (走査の途中の状態を
@@ -1757,9 +1757,12 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み
                                                                       // (dir は <root>/.eve、links = NoFollowFromEve、safe_dirs をそのまま渡す。安全な場所の下かは Port が開いたディレクトリの最終のパスで決める、§4.5)、
                                                                       // 解析・条件の解決・検証までジョブの中で行い (WSC-2)、書かれた値と書いた所・キーの割当・診断を返す。分類 (07 §12.3) は主スレッドで重ねるたびに今のユーザー層と比べて行う。doc は None
-    ReadEditorConfig { path: FsPath /*文書の開いたときの絶対パス*/, safe_dirs: Arc<[FsPath]> },
+    ReadEditorConfig { path: FsPath /*文書の開いたときの絶対パス*/, safe_dirs: Arc<[FsPath]>, walk: Option<Box<EditorConfigWalk>> },
                                                                       // io。文書の読込の完了・名前を付けて保存・config.reload で積む (07 §10.3 の EC-1)。上へ read_checked で .editorconfig を集めて読み
-                                                                      // (dir は各祖先、links = Follow、safe_dirs をそのまま渡す)、解析と glob の照合までジョブの中で行い、当たったプロパティ (由来つき) と診断を返す
+                                                                      // (dir は各祖先、links = Follow、safe_dirs をそのまま渡す)、解析と glob の照合までジョブの中で行い、当たったプロパティ (由来つき) と診断を返す。
+                                                                      // 祖先 1 段ごとに区切って譲る (JobStep::Continue。walk に集めた途中の状態を持つ。最初の投入は None)。
+                                                                      // 区切りの間に積んだ保存・読込が先に走り、取り消すと続きを積まない (07 §10.3 の EC-8。M33 の段 6 のレビューで足した)。
+                                                                      // bg に移さない (横断検索・ワークスペースの走査の後ろで字下げが遅れないように)
 }
 struct OpenOptions {               // 開くジョブの指定 (Copy)。確認 (ConfirmAsk) の回答で立てて先頭から再投入する。前の回答で立てたものは引き継ぐ (選択肢の正本は 03 §9.2 の表)
     forced: Option<Encoding>,      // --encoding か「文字コードを指定して開く」(FR-111)。判定とバイナリ・UTF-32 の BOM の確認を行わない

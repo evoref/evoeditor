@@ -83,6 +83,8 @@ pub enum DiagKind {
     /// ワークスペース層 (`.eve/config.toml`・`.eve/keymap.toml`) で使わなかった項目・割当と、読まなかったファイル
     /// (07 §12.5 の WSC-4、§7.4 の WKEY-2、§12.1 の OWN-7)。
     Workspace(crate::workspace::WorkspaceProblem),
+    /// `.editorconfig` の誤り・写せない値・読まなかったファイル (07 §10.1 / §10.3 の EC-6。`msg.editorconfig.*`)。
+    EditorConfig(crate::editorconfig::EditorConfigProblem),
     /// 1 つのファイルの診断が上限 ([`CONFIG_MAX_DIAGNOSTICS`](crate::CONFIG_MAX_DIAGNOSTICS)) を超えた: 超えた分は残さず、
     /// この 1 件にまとめる (警告。`msg.config.more`)。要約と `--check-config` の件数は `count` 件と数える。
     More {

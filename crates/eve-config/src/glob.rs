@@ -125,6 +125,28 @@ impl Glob {
     /// `subject` の全体に当たるか。
     #[must_use]
     pub fn is_match(&self, subject: &str) -> bool {
+        let mut steps = 0;
+        self.is_match_counted(subject, &mut steps)
+    }
+
+    /// 組んだ状態の数 (glob の文字数 + 1 を超えない。照合の手数の上限 [`Glob::step_bound`] の元)。
+    #[must_use]
+    pub fn state_count(&self) -> usize {
+        self.states.len()
+    }
+
+    /// 長さ `subject_chars` (文字数) の照合の手数の上限: 状態の数 × 23 × (文字の数 + 1)。各位置で状態を 1 回ずつ見て、数の範囲は
+    /// その所から符号と 21 字までを読む (EC-4 の「glob の長さ × パスの長さに比例する上限」、09 §3.3 の `fuzz_editorconfig`)。
+    #[must_use]
+    pub fn step_bound(&self, subject_chars: usize) -> usize {
+        self.states
+            .len()
+            .saturating_mul(NUMBER_MAX_DIGITS + 3)
+            .saturating_mul(subject_chars.saturating_add(1))
+    }
+
+    /// [`Glob::is_match`] と同じだが、照合の手数 (見た状態の数と、数の範囲で読んだ字の数) を `steps` に足す。
+    pub fn is_match_counted(&self, subject: &str, steps: &mut usize) -> bool {
         let text: Vec<char> = subject.chars().map(|c| fold(c, self.case)).collect();
         let n = text.len();
         let mut pending: Vec<Vec<usize>> = vec![Vec::new(); n + 1];
@@ -137,6 +159,7 @@ impl Glob {
                     continue;
                 }
                 seen[s] = pos;
+                *steps += 1;
                 match &self.states[s] {
                     State::Match => {
                         if pos == n {
@@ -160,6 +183,7 @@ impl Glob {
                         }
                     }
                     State::Num { lo, hi, next } => {
+                        *steps += (n - pos).min(NUMBER_MAX_DIGITS + 2);
                         if let Some(len) = number_at(&text[pos..], *lo, *hi) {
                             pending[pos + len].push(*next);
                         }

@@ -842,6 +842,10 @@ text = "Configuration problem ({file}〔:{line}〕): {detail}"
 hint = "See Show Settings Diagnostics for all"
 text = "There are {count} problems in the configuration. The first: {detail}"
 
+[msg.config.reload_busy_kept]
+hint = "Close that program, then reload again"
+text = "Another program had {file} open, so the previous settings are kept"
+
 [msg.config.reload_kept]
 hint = "Fix the errors, then reload again"
 text = "{file} has errors, so the previous settings are kept"
@@ -969,6 +973,22 @@ text = "Content written by \"Save to recovery folder\" remains: {dir} ({count} b
 [msg.recovery.unknown_format]
 hint = "Open it with a newer version of evoeditor"
 text = "The backup in {dir} is in a newer format, so it is not read (it was not moved or deleted)"
+
+[msg.editorconfig.invalid_value]
+hint = "Allowed: {allowed}. This value is not used"
+text = "{item} = {value} in .editorconfig is invalid"
+
+[msg.editorconfig.charset_unmapped]
+hint = "New files use the current default encoding"
+text = "charset = {value} in .editorconfig is not supported"
+
+[msg.editorconfig.too_large]
+hint = "The settings in this .editorconfig are not used"
+text = "Did not read {path} ({reason})"
+
+[msg.editorconfig.bad_glob]
+hint = "Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This section is not used"
+text = "The section [{item}] in .editorconfig is too complex"
 
 [msg.language.ambiguous]
 hint = "Fix file_types or other patterns in one of the definitions"
@@ -1680,11 +1700,17 @@ language_builtin = "language {language} (built-in)"
 language_file = "language {language}: {file}:{line}"
 workspace = "workspace: .eve/config.toml:{line}"
 language_workspace = "language {language}: .eve/config.toml:{line}"
+editorconfig = ".editorconfig:{line} [{section}]"
 
 [ui.lang_set]
 title = "Set Language (current: {language})"
 auto = "Detect automatically"
 current = "{language} (current)"
+
+[ui.editorconfig.reason]
+too_large = "larger than 256 KiB"
+not_utf8 = "not UTF-8"
+total_limit = "over the total limit for one document"
 
 [ui.finder]
 title = "Open File ({root})"

@@ -1264,10 +1264,12 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `msg.workspace.item_no_effect` | 効かない項目 (WSC-4。情報) | {item} はワークスペース設定では効きません (起動時に決まります) / ユーザーの設定に書いてください | {item} has no effect in workspace settings (decided at startup) / Write it in your user settings |
 | `msg.workspace.key_rejected` | 使わないキーの割当 (07 §7.4 の WKEY-2。情報) | ワークスペースのキー割当 {key} は使いません ({reason}) | Workspace key binding {key} is not used ({reason}) |
 | `ui.workspace.key_reason.bound` / `.shadows` / `.text` / `.args` / `.none` / `.exec` | 上の `{reason}` (WKEY-2 の (a)〜(f)) | 既にある割当を変えるため / 既にある割当を使えなくするため / 文字入力のキーのため / 引数を持つため / 割当の解除のため / 外部コマンドのため | it changes an existing binding / it disables an existing binding / it takes a text key / it has arguments / it removes a binding / it runs an external command |
-| `msg.editorconfig.invalid_value` | 誤った値 (07 §10.1。警告) | .editorconfig の {item} = {value} は使えません / 許される値: {allowed} | {item} = {value} in .editorconfig is invalid / Allowed: {allowed} |
-| `msg.editorconfig.charset_unmapped` | 写せない `charset` (§10.1。情報) | .editorconfig の charset = {value} には対応していません (新しいファイルは今の既定の文字コードで作ります) | charset = {value} in .editorconfig is not supported (new files use the current default encoding) |
-| `msg.editorconfig.too_large` | 大きすぎる・UTF-8 でない・合計の上限 (EC-2。警告) | {path} を読みませんでした ({reason}) | Did not read {path} ({reason}) |
+| `msg.editorconfig.invalid_value` | 誤った値 (07 §10.1。警告。M33 の段 6 で足した。ここから `msg.editorconfig.bad_glob` までの行と、§15 の目録の `ui.config_origin.editorconfig` も段 6 で足した。`msg.*` の文言はどれも本文と対処の 2 つ (NFR-602) なので、案の 1 文だった `charset_unmapped`・`too_large` と、`invalid_value` の対処を段 6 で 2 つに分けた) | .editorconfig の {item} = {value} は使えません / 許される値: {allowed}。この値は使いません | {item} = {value} in .editorconfig is invalid / Allowed: {allowed}. This value is not used |
+| `msg.editorconfig.charset_unmapped` | 写せない `charset` (§10.1。情報) | .editorconfig の charset = {value} には対応していません / 新しいファイルは今の既定の文字コードで作ります | charset = {value} in .editorconfig is not supported / New files use the current default encoding |
+| `msg.editorconfig.too_large` | 大きすぎる・UTF-8 でない・合計の上限 (EC-2。警告) | {path} を読みませんでした ({reason}) / この .editorconfig の設定は使いません | Did not read {path} ({reason}) / The settings in this .editorconfig are not used |
 | `ui.editorconfig.reason.too_large` / `.not_utf8` / `.total_limit` | 上の `{reason}` | 256 KiB を超えています / UTF-8 ではありません / 1 つの文書で読む量の上限を超えました | larger than 256 KiB / not UTF-8 / over the total limit for one document |
+| `msg.config.reload_busy_kept` | `config.reload` で、ほかのプログラムが開いていて (共有違反・リース) 読み直せず、前の値を使い続ける (07 §12.5 の WSC-1 のワークスペース層と §10.3 の EC-2 の `.editorconfig`。警告。1 回の `config.reload` で同じファイルごとに 1 回。M33 の段 6 のレビューで足した。案に無かった。エラーのある設定ファイルの `msg.config.reload_kept` から分けた) | {file} をほかのプログラムが開いていたため、前の設定のままにしました / そのプログラムを閉じてから、もう一度読み直してください | Another program had {file} open, so the previous settings are kept / Close that program, then reload again |
+| `msg.editorconfig.bad_glob` | 資源の上限 (`{` の入れ子 8 段・選択肢 1,024 個、07 §10.3 の EC-4) を超えるセクションの glob (警告。そのセクションを使わない。M33 の段 6 で足した。案に無かった) | .editorconfig のセクション [{item}] は複雑すぎます / {{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。このセクションは使いません | The section [{item}] in .editorconfig is too complex / Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This section is not used |
 | `info.watch.unavailable` | 監視できない (03 §9.5.1 の WATCH-2。理由ごとにプロセスで 1 回) | {path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます | Cannot watch the folder of {path} ({reason}). External changes are checked when you return to the editor and when you save |
 | `ui.watch.reason.network` / `.unsupported_fs` / `.limit` / `.denied` / `.not_found` / `.failed` | 上の `{reason}` (`WatchError::Unsupported` は `fs` が `network` なら `.network`、ほかは `.unsupported_fs`。`Limit` / `Denied` / `NotFound` / `Other` はそれぞれの語) | ネットワークや仮想の FS (WSL の /mnt/c など) / この FS ({fs}) では監視しません / 監視の数が OS の上限に達しました / 権限がありません / フォルダがありません / 監視を始められません | a network or virtual file system (such as WSL's /mnt/c) / this file system ({fs}) is not watched / the OS limit on watches was reached / permission denied / the folder does not exist / watching could not be started |
 | `info.external.changed` / `.deleted` | 監視で外部の変更・削除が分かった (WATCH-6) | {name} が外部で変更されました / {name} が外部で削除されました | {name} was changed outside the editor / {name} was deleted outside the editor |
@@ -1759,6 +1761,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config_origin.language_file` | 同上。ユーザー層の言語定義で決めた (`{file}` は `config.toml`・`languages/<file>.toml`、`{line}` は値を書いた行) | 言語 {language}: {file}:{line} |
 | `ui.config_origin.workspace` | 同上。ワークスペース層 (`.eve/config.toml`) で決めた (07 §3.5。`{line}` は値を書いた行。v0.5 の M33 の段 5) | ワークスペース: .eve/config.toml:{line} |
 | `ui.config_origin.language_workspace` | 同上。ワークスペース層の言語定義 (`.eve/config.toml` の `[[language]]`) で決めた (07 §3.6 の LAYER-1 の (7)。同上) | 言語 {language}: .eve/config.toml:{line} |
+| `ui.config_origin.editorconfig` | 同上。`.editorconfig` で決めた (07 §3.6 の LAYER-1 の (5)。`{line}` は値を書いた行、`{section}` は当たったセクションの glob。v0.5 の M33 の段 6) | .editorconfig:{line} [{section}] |
 | `ui.lang_set.title` | 言語の一覧 (`lang.set`、07 §9.6 の LANG-8。v0.5 の M33 の段 2) の見出し。`{language}` はフォーカスの文書の言語 ID | 言語を選ぶ (今: {language}) |
 | `ui.lang_set.auto` | 同上。先頭の行 (明示の指定を外して判定し直す) | 自動で判定 |
 | `ui.lang_set.current` | 同上。今の言語の行の右の列 (`{language}` は言語 ID) | {language} (今の言語) |
@@ -2021,7 +2024,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.workspace.opened_elsewhere` (v0.5) | 安全な場所の下で、開いたファイルが判定した場所と違った (OWN-6 の `Unknown { query_failed }` のうち、書いた形で `workspace.safe_directories` の下のもの。警告。M33 の段 5 で足した、07 §12.6.3) | {path} を読みませんでした: 開いたファイルが確かめた場所にありません / 途中のリンクやジャンクションの行き先を確かめてから、設定を読み直してください |
 | `msg.workspace.not_regular` (v0.5) | ふつうのファイルでない (`.eve` とファイルのシンボリックリンク・ジャンクション・FIFO など。OWN-6。警告。同上) | {path} を読みませんでした: ふつうのファイルではありません (シンボリックリンク・ジャンクションなど) / リンクにせず、ふつうのファイルとして置いてください |
 | `msg.workspace.too_large` (v0.5) | 256 KiB を超えるワークスペース設定のファイル (WSC-1。警告。同上) | {path} を読みませんでした: 大きすぎます / 256 KiB 以下にしてください |
-| `msg.workspace.not_reread` (v0.5) | `config.reload` で `workspace.safe_directories` が変わり、ワークスペース層のファイルが一時の失敗 (共有違反・リース) で読み直せず、前の層を外した (07 §12.5 の WSC-1。警告。M33 の段 5 の再レビューで足した) | {path} を外しました / ほかのプログラムが開いていて、変えた安全な場所で読み直せませんでした。閉じてから設定を読み直してください |
+| `msg.workspace.not_reread` (v0.5) | `config.reload` で `workspace.safe_directories` が変わり、ワークスペース層のファイルが一時の失敗 (共有違反・リース) で読み直せず、前の層を外した (07 §12.5 の WSC-1。警告。M33 の段 5 の再レビューで足した。段 6 から、同じ場面の `.editorconfig` (前に当てた値を外した、07 §10.3 の EC-2) にも使う) | {path} を外しました / ほかのプログラムが開いていて、変えた安全な場所で読み直せませんでした。閉じてから設定を読み直してください |
 | `ui.workspace.class.semi_safe` (v0.5) | `msg.workspace.item_pending` の `{class}` | 準安全 |
 | `ui.workspace.key_reason.bound` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (a) 下の層に割当のあるキー) | 既にある割当を変えるため |
 | `ui.workspace.key_reason.shadows` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (b) 下の層の割当を使えなくするチョード) | 既にある割当を使えなくするため |
@@ -2031,6 +2034,13 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.workspace.key_reason.exec` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (f) `exec` のコマンド) | 外部コマンドのため |
 | `ui.workspace.key_reason.command` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (g) Motion・Ui・Edit でないコマンドと `app.*` (M33 の段 5 で足した)) | ワークスペースからは割り当てられないコマンドのため |
 | `ui.workspace.key_reason.dialog` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (h)。確認のダイアログ (`dialog`) への割当。M33 の段 5 のレビューで足した) | 確認のダイアログのキーのため |
+| `msg.editorconfig.invalid_value` (v0.5) | `.editorconfig` の写すプロパティの誤った値 (範囲の外・知らない値。07 §10.1。警告。その値を使わず、`unset` と同じく、それまでに重ねた `.editorconfig` の値を取り消す (M33 の段 6 のレビュー)。`{item}` はプロパティの名前、`{allowed}` は許される値。前置きの `root` の `true` / `false` でない値も。M33 の段 6) | .editorconfig の {item} = {value} は使えません / 許される値: {allowed}。この値は使いません |
+| `msg.editorconfig.charset_unmapped` (v0.5) | `.editorconfig` の写せない `charset` (`latin1` と仕様に無い値。07 §10.1。情報。`unset` と同じく、それまでに重ねた `charset` を取り消す。同上) | .editorconfig の charset = {value} には対応していません / 新しいファイルは今の既定の文字コードで作ります |
+| `msg.editorconfig.too_large` (v0.5) | `.editorconfig` を読まなかった (256 KiB を超える・UTF-8 でない・1 つの文書で読む量の上限。07 §10.3 の EC-2。警告。`{reason}` は `ui.editorconfig.reason.*`。同上) | {path} を読みませんでした ({reason}) / この .editorconfig の設定は使いません |
+| `msg.editorconfig.bad_glob` (v0.5) | 資源の上限 (`{` の入れ子 8 段・選択肢 1,024 個、07 §10.3 の EC-4) を超える `.editorconfig` のセクションの glob (警告。そのセクションを使わない。`{item}` は glob。同上) | .editorconfig のセクション [{item}] は複雑すぎます / {{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。このセクションは使いません |
+| `ui.editorconfig.reason.too_large` (v0.5) | `msg.editorconfig.too_large` の `{reason}` (256 KiB を超える) | 256 KiB を超えています |
+| `ui.editorconfig.reason.not_utf8` (v0.5) | 同上 (UTF-8 でない) | UTF-8 ではありません |
+| `ui.editorconfig.reason.total_limit` (v0.5) | 同上 (1 つの文書で読む `.editorconfig` の合計 1 MiB・2,000 セクションを超えた。このファイルとより上のファイルを使わない) | 1 つの文書で読む量の上限を超えました |
 | `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
 | `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 
@@ -2143,6 +2153,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.config.locale_untranslated` (v0.4) | `--check-config` だけに出す情報 (画面・ログには出さない)。同梱していない言語のファイルで、補う言語の同梱の文言にあって書いていないキーの数 `{count}` | 訳の無いキーが {count} 件あります (英語で出ます) |
 | `info.config.locale_untranslated_key` (v0.4) | 同上。訳の無いキー 1 つ (`{item}`)。1 つのファイルで 1 万件と「ほか N 件」まで | {item} の訳がありません |
 | `msg.config.reload_kept` | 同上。ファイルにエラー (構文エラー・読めない) があり、そのファイルは前の設定のまま (07 §6 の規則 1。診断は `msg.config.problem` で別に出す) | {file} にエラーがあるため、前の設定のままにしました / エラーを直してから、もう一度読み直してください |
+| `msg.config.reload_busy_kept` (v0.5) | 同上。ワークスペース層のファイルか `.editorconfig` を、ほかのプログラムが開いていて (共有違反・リース。一時の失敗) 読み直せず、前の値を使い続ける (07 §12.5 の WSC-1・§10.3 の EC-2。警告。1 回の `config.reload` で同じファイルごとに 1 回。M33 の段 6 のレビューで足した) | {file} をほかのプログラムが開いていたため、前の設定のままにしました / そのプログラムを閉じてから、もう一度読み直してください |
 | `info.config.no_diagnostics` | `config.show_diagnostics` (07 §4.3、v0.3) で、診断が 1 件も無い (一覧を開かない) | 設定の診断はありません |
 | `info.config.diagnostic_no_file` | 同上。一覧で選んだ診断が、ファイルに書かれたものではない (`--set` の値、v0.4 の M26 から `--locale` / `EVE_LANG` の見つからない言語と、名前の規則に合わない言語ファイルの一覧 `locales/`) ので開けない。`{file}` は `--set` / `--locale` / `EVE_LANG` / `locales/` | {file} の診断は、ファイルに書かれたものではないため開けません |
 | `info.config.unsupported` (v0.2) | 公開前のキー・予約のセクション・後の版の値 (07 §5 冒頭の「このバージョンでは未対応」)。v0.1 は画面に出さず、件数にも数えず、ログにだけ書く (07 §4.3)。`config.show_diagnostics` (v0.2) の一覧で使う | {item} はこのバージョンでは未対応のため無視しました |
