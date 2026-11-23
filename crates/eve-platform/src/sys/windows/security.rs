@@ -102,7 +102,7 @@ pub(crate) fn create_dir_private(dir: &Path) -> io::Result<()> {
 // ---------- SID ----------
 
 /// SID を文字列 (`S-1-5-21-…`) にする。
-fn sid_string(sid: PSID) -> io::Result<String> {
+pub(super) fn sid_string(sid: PSID) -> io::Result<String> {
     let mut s: *mut u16 = ptr::null_mut();
     // SAFETY: `sid` は呼び側が有効な SID を渡す。`s` は書込先の有効なポインタ。
     if unsafe { ConvertSidToStringSidW(sid, &raw mut s) } == 0 {

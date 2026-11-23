@@ -83,6 +83,9 @@ fn 契約試験は既定の実装のままの操作を見逃さない() {
         "read_dir_は空のディレクトリで空",
         "read_dir_は種類を返しリンクを辿らない",
         "read_dir_は_max_entries_で打ち切る",
+        // read_checked の既定 (Unsupported) は「無い」とも「読んだ」とも区別できる
+        "read_checked_は判定を通ったファイルを読む",
+        "read_checked_は無いファイルを_missing_で返す",
     ] {
         assert!(failed.contains(&want), "{want} が落ちない: {failed:?}");
     }

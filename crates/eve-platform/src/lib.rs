@@ -176,6 +176,7 @@ mod inplace;
 pub mod locale;
 pub mod log;
 pub mod path;
+mod read_checked;
 mod read_dir;
 pub mod rescue;
 #[cfg(windows)]
