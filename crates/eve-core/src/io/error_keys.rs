@@ -91,13 +91,27 @@ pub(crate) fn reason_label(err: &JobError) -> String {
     }
 }
 
-/// `FsError` の `{reason}`: 種類の名前を小文字にしたもの (`Conflict { .. }` なら `conflict`)。
+/// `FsError` の `{reason}`: 種類の名前を小文字にしたもの (`Conflict { .. }` なら `conflict`)。設定ファイル・言語定義のファイルの
+/// 読めない理由 (`config.reload`・`ReadLanguages`) も同じものを使う。
 pub(crate) fn fs_reason(e: &FsError) -> String {
-    format!("{:?}", e.kind)
-        .split([' ', '{'])
-        .next()
-        .unwrap_or("unknown")
-        .to_lowercase()
+    use crate::io::fs::FsErrorKind as K;
+    match &e.kind {
+        K::NotFound => "notfound",
+        K::PermissionDenied => "permissiondenied",
+        K::Busy => "busy",
+        K::InvalidPath => "invalidpath",
+        K::DiskFull => "diskfull",
+        K::ReadOnlyFs => "readonlyfs",
+        K::Other => "other",
+        K::Unsupported => "unsupported",
+        K::Conflict { .. } => "conflict",
+        K::AtomicUnsupported => "atomicunsupported",
+        K::SourceFailed => "sourcefailed",
+        K::ReplacedMovedToBackup { .. } => "replacedmovedtobackup",
+        K::BackupFailed => "backupfailed",
+        K::InPlaceFailed { .. } => "inplacefailed",
+    }
+    .to_owned()
 }
 
 #[cfg(test)]
@@ -207,6 +221,28 @@ mod tests {
             "inplacefailed"
         );
         assert_eq!(reason_label(&JobError::Fs(fs(FsErrorKind::Busy))), "busy");
+        // どの種類も、種類の名前を小文字にしたもの (v0.4 までの書き方と同じ)
+        let kinds = [
+            FsErrorKind::NotFound,
+            FsErrorKind::PermissionDenied,
+            FsErrorKind::Busy,
+            FsErrorKind::InvalidPath,
+            FsErrorKind::DiskFull,
+            FsErrorKind::ReadOnlyFs,
+            FsErrorKind::Other,
+            FsErrorKind::Unsupported,
+            FsErrorKind::AtomicUnsupported,
+            FsErrorKind::SourceFailed,
+            FsErrorKind::ReplacedMovedToBackup {
+                backup: FsPath::from("b"),
+            },
+            FsErrorKind::BackupFailed,
+        ];
+        for kind in kinds {
+            let name = format!("{kind:?}");
+            let name = name.split([' ', '{']).next().unwrap().to_lowercase();
+            assert_eq!(fs_reason(&fs(kind)), name);
+        }
         assert_eq!(
             reason_label(&JobError::OutOfMemory { requested: 1 }),
             "out of memory"

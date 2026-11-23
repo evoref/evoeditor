@@ -50,6 +50,57 @@ fn check_config_は警告なら_0_エラーなら_3() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+// verifies: AC-FR-704-2
+#[test]
+fn check_config_は言語定義のファイルと設定ファイルの言語定義も検査する() {
+    let d = dir("check-lang");
+    std::fs::write(
+        d.join("config.toml"),
+        "[[language]]\nname = \"rust\"\nfirst_line = \"(\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(d.join("languages")).unwrap();
+    std::fs::write(
+        d.join("languages").join("a.toml"),
+        "[[language]]\nname = \"go\"\nauto_pairs = { \"(\" = \")\" }\nindent = { width = 0 }\n",
+    )
+    .unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 0, "警告と情報だけ: {out}");
+    assert!(out.contains("config.toml:3:"), "正規表現の誤り: {out}");
+    assert!(out.contains("languages/a.toml:3:"), "未対応の情報: {out}");
+    assert!(out.contains("languages/a.toml:4:"), "範囲の外: {out}");
+    // 構文エラーのファイルはエラー (終了コード 3)
+    std::fs::write(d.join("languages").join("b.toml"), "[[language]\n").unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 3, "{out}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn dump_languages_は組込みにユーザーの定義を重ねて出す() {
+    let d = dir("dump-lang");
+    std::fs::create_dir_all(d.join("languages")).unwrap();
+    std::fs::write(
+        d.join("languages").join("a.toml"),
+        "[[language]]\nname = \"go\"\nindent = { width = 8 }\n[[language]]\nname = \"tmpl\"\nfile_types = [\"tmpl\"]\n",
+    )
+    .unwrap();
+    let (code, out) = run(&d, &["--dump-languages"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("name = \"go\"\ndisplay_name = \"Go\"\nfile_types = [\"go\"]\nfile_names = []\nfile_globs = []\nindent = { unit = \"tab\", width = 8 }\n"),
+        "{out}"
+    );
+    assert!(out.contains("name = \"tmpl\""), "{out}");
+    // --no-config なら組込みだけ
+    let (code, out) = run(&d, &["--dump-languages", "--no-config"]);
+    assert_eq!(code, 0);
+    assert!(!out.contains("tmpl"), "{out}");
+    assert_eq!(out.matches("[[language]]").count(), 24);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 // verifies: FR-701
 #[test]
 fn dump_config_は層を重ねた結果を出す() {

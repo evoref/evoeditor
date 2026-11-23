@@ -13,6 +13,7 @@ pub(crate) mod fs;
 pub(crate) mod fspath;
 pub(crate) mod interrupted;
 pub(crate) mod io_jobs;
+pub(crate) mod languages;
 pub(crate) mod last_version;
 pub(crate) mod leftover;
 pub(crate) mod leftover_offer;

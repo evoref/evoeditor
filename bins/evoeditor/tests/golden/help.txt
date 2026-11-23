@@ -28,6 +28,8 @@ Options:
                                        設定を確かめて問題を表示し、終了します
   --dump-config [--defaults] [--json]  Print the resolved settings (or the defaults) and exit
                                        解決した設定 (または既定値) を表示して終了します
+  --dump-languages                     Print the language definitions (built-in merged with yours) and exit
+                                       言語定義 (組込みにユーザーの定義を重ねたもの) を表示して終了します
   -V, --version                        Show the version and build information
                                        版とビルド情報を表示して終了します
   -h, --help                           Show this help

@@ -164,6 +164,21 @@ pub enum JobResult {
         /// `locales` を一覧した結果。調べなかったときは `None`。
         locales: Option<crate::io::config_reload::LocaleScan>,
     },
+    /// `ReadLanguages` の結果。
+    LanguagesRead {
+        /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現はまだ組んでいない。組むのは
+        /// `PrecompileLanguages`)。
+        set: std::sync::Arc<eve_config::LanguageSet>,
+        /// ファイルごとの診断 (表示名 `languages/<file>.toml`・`config.toml` など)。
+        reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    },
+    /// `PrecompileLanguages` の結果。
+    LanguagesPrecompiled {
+        /// 組んだ定義の集まり (古い結果を見分ける)。
+        set: std::sync::Arc<eve_config::LanguageSet>,
+        /// 組めなかった `first_line` の診断 (表示名ごと)。
+        reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    },
     /// 起動時の退避ディレクトリの走査の結果 (新しい順ではなく列挙した順。main が整えて案内する)。
     RecoveryFound {
         /// 見つけた退避ディレクトリ。

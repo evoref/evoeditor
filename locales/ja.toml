@@ -258,6 +258,10 @@ title = "上のペインへ"
 description = "下に隣り合うペインへフォーカスを移します。"
 title = "下のペインへ"
 
+[cmd.lang.set]
+description = "文書の言語 (字下げとコメントの記号) を替えます"
+title = "言語を選ぶ"
+
 [cmd.pane.close]
 description = "今のペインを閉じます。文書は閉じません (未保存の変更があっても確認しません)。文書を閉じるのは「文書を閉じる」(buffer.close) です。"
 title = "ペインを閉じる"
@@ -499,6 +503,9 @@ unsupported = "{item} はこのバージョンでは未対応のため無視し�
 
 [info.cursor]
 limit = "カーソルは {limit} 個までです。選択を変えませんでした"
+
+[info.lang]
+changed = "言語を {language} にしました"
 
 [info.eol]
 converted = "{count} 個の改行を {eol} に変換しました (元に戻すで戻せます)"
@@ -794,6 +801,10 @@ text = "editor.multi_cursor は使えません。複数カーソルは常に有�
 hint = "{range} で指定してください。この項目は {default} を使います"
 text = "{item} の値 {value} は範囲外です"
 
+[msg.config.out_of_range_no_default]
+hint = "{range} で指定してください。この項目は使いません"
+text = "{item} の値 {value} は範囲外です"
+
 [msg.config.problem]
 hint = "{hint}"
 text = "設定の問題 ({file}〔:{line}〕): {detail}"
@@ -929,6 +940,54 @@ text = "「退避先に保存」で書いた内容が残っています: {dir} (
 [msg.recovery.unknown_format]
 hint = "新しい版の evoeditor で開いてください"
 text = "{dir} の退避は新しい版の形式なので読みません (移動も削除もしていません)"
+
+[msg.language.ambiguous]
+hint = "どちらかの定義の file_types などを直してください"
+text = "{file} は言語 {first} と {second} の両方に当たるため、{second} を使います"
+
+[msg.language.bad_comment]
+hint = "1〜16 バイトで、空白と制御文字を含まない記号にしてください。この項目は使いません"
+text = "{item} の記号 {value} は使えません"
+
+[msg.language.bad_first_line]
+hint = "正規表現を直してください。この項目は使いません"
+text = "{item} の正規表現 {value} を組めません ({reason})"
+
+[msg.language.bad_glob]
+hint = "{{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。この glob は使いません"
+text = "{item} の glob {value} は複雑すぎます"
+
+[msg.language.dir_unreadable]
+hint = "フォルダの権限を確かめてください。言語定義のファイルは読まず、ほかの設定は使います"
+text = "languages/ を読めません ({reason})"
+
+[msg.language.file_type_dot]
+hint = "file_types は先頭の . を付けずに書いてください (rs)。この値は当たりません"
+text = "{item} の {value} は . で始まっています"
+
+[msg.language.too_many_definitions]
+hint = "超えた分の定義は使いません"
+text = "言語定義が {count} 個を超えています"
+
+[msg.language.file_too_large]
+hint = "256 KiB 以下にしてください"
+text = "この言語定義のファイルは大きすぎるため読みません"
+
+[msg.language.invalid_name]
+hint = "英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません)"
+text = "言語の名前 {value} は使えません"
+
+[msg.language.missing_name]
+hint = "name = \"rust\" のように言語の名前を書いてください。この定義は使いません"
+text = "言語定義に name がありません"
+
+[msg.language.too_long]
+hint = "display_name は 64 文字、first_line と配列の要素は 256 バイト、配列は 64 個までです。この項目は使いません"
+text = "{item} が長すぎます"
+
+[msg.language.too_many_files]
+hint = "名前の順で {count} 個までを読みます。残りは読みません"
+text = "languages/ の言語定義のファイルが {count} 個を超えています"
 
 [msg.leftover.failed]
 hint = "パスと権限を確認してください"
@@ -1517,6 +1576,13 @@ default = "既定"
 user = "ユーザー: {file}:{line}"
 cli = "--set"
 condition = "{origin} [{condition}]"
+language_builtin = "言語 {language} (組込み)"
+language_file = "言語 {language}: {file}:{line}"
+
+[ui.lang_set]
+title = "言語を選ぶ (今: {language})"
+auto = "自動で判定"
+current = "{language} (今の言語)"
 
 [ui.finder]
 title = "ファイルを開く ({root})"

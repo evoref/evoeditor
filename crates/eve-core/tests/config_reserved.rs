@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use eve_config::reserved::{
-    ALWAYS_ON_KEYS, CONDITIONAL_SECTIONS, RESERVED_KEYS, RESERVED_SECTIONS,
+    ALWAYS_ON_KEYS, CONDITIONAL_SECTIONS, LANGUAGE_SECTION, RESERVED_KEYS, RESERVED_SECTIONS,
 };
 use eve_docs_tables::{identifiers, section, strip_parentheticals, tables_in};
 
@@ -121,7 +121,15 @@ fn 公開前のセクションは_07_の_5_のセクションのうち公開キ�
         .iter()
         .map(|k| k[..k.find('.').unwrap_or(k.len())].to_owned())
         .collect();
-    let want: Vec<&String> = spec_sections.difference(&public).collect();
+    // 言語定義の表の配列 (`[[language]]`) は公開キーを持たないが、v0.5 の M33 から読む (07 §9.6)
+    assert!(
+        spec_sections.contains(LANGUAGE_SECTION),
+        "07 §5 に [[language]] がある"
+    );
+    let want: Vec<&String> = spec_sections
+        .difference(&public)
+        .filter(|s| s.as_str() != LANGUAGE_SECTION)
+        .collect();
     let mut have: Vec<&str> = RESERVED_SECTIONS.to_vec();
     have.sort_unstable();
     assert_eq!(have, want.iter().map(|s| s.as_str()).collect::<Vec<_>>());

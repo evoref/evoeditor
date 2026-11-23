@@ -381,7 +381,7 @@ pub fn ignored_args(args: &[String]) -> Bi {
 
 /// `--help` の本文 (`cli.help.*`)。オプション名の後ろに英語の説明、次の行に日本語の説明を揃えて出す。
 pub fn help() -> String {
-    const OPTIONS: [(&str, &str, &str); 16] = [
+    const OPTIONS: [(&str, &str, &str); 17] = [
         (
             "-R, --readonly",
             "Open the file read-only",
@@ -437,6 +437,12 @@ pub fn help() -> String {
             "--dump-config [--defaults] [--json]",
             "Print the resolved settings (or the defaults) and exit",
             "解決した設定 (または既定値) を表示して終了します",
+        ),
+        // 07 §18.3。v0.5 の M33 の段 2 (言語定義、07 §9.6 の LANG-1)
+        (
+            "--dump-languages",
+            "Print the language definitions (built-in merged with yours) and exit",
+            "言語定義 (組込みにユーザーの定義を重ねたもの) を表示して終了します",
         ),
         (
             "-V, --version",
@@ -604,6 +610,7 @@ mod tests {
             "--set",
             "--check-config",
             "--dump-config",
+            "--dump-languages",
             "--log-level",
             "--crash-report",
             "--workspace",

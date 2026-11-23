@@ -15,6 +15,8 @@ pub struct StartupConfig {
     pub config: Option<eve_config::Config>,
     /// 設定の値の由来 (`config.show`、07 §3.5)。
     pub config_origins: Option<eve_config::Origins>,
+    /// 設定ファイルの `[[language]]` の定義 (`eve_config::Resolved::languages`、07 §9.6)。起動時の言語定義の読込に渡す。
+    pub config_languages: Option<Vec<eve_config::LanguageDef>>,
     /// テーマファイルから読んだテーマ (名前、読めなければ `None`。07 §8.6)。
     pub user_theme: Option<(String, Option<eve_config::theme::Theme>)>,
     /// 設定の読込元 (`config.reload` が同じ元を読み直す、07 §6)。
@@ -77,6 +79,11 @@ impl Editor {
         }
         if let Some(origins) = c.config_origins {
             st.settings.config_origins = origins;
+            // 文書ごとの値は由来 (`--set` か) で決まる (07 §3.6 の LAYER-1)
+            st.refresh_all_doc_settings();
+        }
+        if let Some(defs) = c.config_languages {
+            st.set_config_languages(defs);
         }
         if let Some((name, theme)) = c.user_theme {
             st.set_user_theme(&name, theme);

@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 111 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 112 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -65,6 +65,7 @@
 | `help.commands` | コマンド一覧を開く | Ui | — | — | `ui` | — | 出す |
 | `help.keys` | キー一覧を開く | Ui | — | — | `ui` | — | 出す |
 | `help.open` | ヘルプを開く | Ui | — | — | `ui` | `global`: `Ctrl+K H` | 出す |
+| `lang.set` | 言語を選ぶ | Ui | `language?`: `string` | — | `ui` | — | 出す |
 | `pane.close` | ペインを閉じる | Ui | — | `pane.split` | `ui` | `editor`: `Ctrl+K Q` | 出す |
 | `pane.equalize` | ペインの大きさを揃える | Ui | — | `pane.split` | `ui` | `editor`: `Ctrl+K =` | 出す |
 | `pane.focus_down` | 下のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |

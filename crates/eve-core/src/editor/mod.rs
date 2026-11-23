@@ -6,6 +6,7 @@
 
 pub(crate) mod buffer;
 mod host_api;
+pub(crate) mod language;
 pub(crate) mod pane_cmds;
 pub(crate) mod pane_tree;
 pub use crate::io::config_reload::{
@@ -80,6 +81,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::io::config_reload::register(&mut r);
     crate::ui_model::config_report::register(&mut r);
     crate::ui_model::config_show::register(&mut r);
+    language::register(&mut r);
     crate::view::view_cmds::register(&mut r);
     crate::view::mouse::register(&mut r);
     crate::command::line_ops::register(&mut r);
@@ -287,6 +289,8 @@ impl Editor {
         read_only: bool,
         forced: Option<crate::Encoding>,
     ) {
+        // 言語定義の読込は、起動時のパスを開くジョブより前に積む (07 §9.6 の LANG-2。`io` は直列)
+        self.state.start_languages_read(true);
         match files.first() {
             None => self.open_initial_with(None, read_only, forced),
             Some(_) => {
@@ -318,6 +322,7 @@ impl Editor {
         read_only: bool,
         forced: Option<crate::Encoding>,
     ) {
+        self.state.start_languages_read(true);
         match path {
             None => {
                 let doc = self.state.blank_document();

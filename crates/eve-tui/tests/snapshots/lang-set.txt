@@ -1,0 +1,18 @@
+ 1│こんにちは、世界
+ 2┌─ 言語を選ぶ (今: plain) ─────────────────────────────────────────────────┐
+ 3│ p                                                                        │
+ 4│ ▶ plain                                                 plain (今の言語) │
+~ │   Python                                                          python │
+~ │   JavaScript                                                  javascript │
+~ │   TypeScript                                                  typescript │
+~ │   C++                                                                cpp │
+~ └─────────────────────────────────────────────────────────────────── 5/26 ─┘
+~
+~
+~
+~
+~
+memo.txt                                                     行 1, 桁 1 UTF-8 LF
+
+Esc 取消  Enter 決定
+cursor: Some(CellPos { col: 5, row: 2 })

@@ -145,6 +145,7 @@ fn 設定の値と由来の一覧の画面() {
             keymap: None,
             sets: vec!["editor.backspace_unit=codepoint".to_owned()],
             themes: None,
+            languages: None,
             locales: None,
             conditions: eve_config::Conditions {
                 os: Some(eve_config::Os::Linux),
@@ -168,6 +169,17 @@ fn 設定の値と由来の一覧の画面() {
     // 公開キーで絞り込むと、枠と見出し (文書の名前と言語) と 4 種類の由来が 1 画面に入る
     h.text("editor.");
     check("config-show", &mut h);
+}
+
+// verifies: AC-FR-704-1
+#[test]
+fn 言語を選ぶ一覧の画面() {
+    // 今の言語 (`plain` の memo.txt) に印、先頭は「自動で判定」(07 §9.6 の LANG-8)
+    let mut h = with_file();
+    h.cmd("lang.set");
+    // 絞り込むと枠と見出し (今の言語) が 1 画面に入る
+    h.text("p");
+    check("lang-set", &mut h);
 }
 
 // verifies: AC-NFR-603-6

@@ -9,10 +9,11 @@ use std::fmt;
 /// core が値を返す `when` の識別子 (07 §7.3 の表のうち、今の版で実装しているもの)。`EditorState::context_value` は
 /// これらにだけ値を返す。利用者のキーマップの `when` にこれ以外の識別子があれば、警告してその割当を使わない
 /// (07 §7.3)。表の変数を実装したら、ここと `context_value` の両方に足す (`tests/when_identifiers.rs` が突き合わせる)。
-pub const CONTEXT_VARS: [&str; 16] = [
+pub const CONTEXT_VARS: [&str; 17] = [
     "caps.can_suspend",
     "caps.mouse",
     "doc.has_path",
+    "doc.language",
     "doc.modified",
     "doc.read_only",
     "doc.read_only_releasable",

@@ -260,6 +260,10 @@ title = "Focus Pane Above"
 description = "Move the focus to the pane below."
 title = "Focus Pane Below"
 
+[cmd.lang.set]
+description = "Change the language of the document (indentation and comment marker)"
+title = "Set Language"
+
 [cmd.pane.close]
 description = "Close the current pane. The document stays open (no prompt, even with unsaved changes). To close the document, use Close Document (buffer.close)."
 title = "Close Pane"
@@ -501,6 +505,9 @@ unsupported = "{item} is not supported in this version and was ignored"
 
 [info.cursor]
 limit = "Up to {limit} cursors; selection unchanged"
+
+[info.lang]
+changed = "Language set to {language}"
 
 [info.eol]
 converted = "Converted {count} line endings to {eol} (undo restores them)"
@@ -796,6 +803,10 @@ text = "editor.multi_cursor is not supported; multiple cursors are always availa
 hint = "Specify a value in {range}. This item uses {default}"
 text = "The value {value} of {item} is out of range"
 
+[msg.config.out_of_range_no_default]
+hint = "Specify a value in {range}. This item is not used"
+text = "The value {value} of {item} is out of range"
+
 [msg.config.problem]
 hint = "{hint}"
 text = "Configuration problem ({file}〔:{line}〕): {detail}"
@@ -931,6 +942,54 @@ text = "Content written by \"Save to recovery folder\" remains: {dir} ({count} b
 [msg.recovery.unknown_format]
 hint = "Open it with a newer version of evoeditor"
 text = "The backup in {dir} is in a newer format, so it is not read (it was not moved or deleted)"
+
+[msg.language.ambiguous]
+hint = "Fix file_types or other patterns in one of the definitions"
+text = "{file} matches both {first} and {second}; using {second}"
+
+[msg.language.bad_comment]
+hint = "Use 1 to 16 bytes without spaces or control characters. This item is not used"
+text = "The marker {value} of {item} is invalid"
+
+[msg.language.bad_first_line]
+hint = "Fix the regular expression. This item is not used"
+text = "The regular expression {value} of {item} is invalid ({reason})"
+
+[msg.language.bad_glob]
+hint = "Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This glob is not used"
+text = "The glob {value} of {item} is too complex"
+
+[msg.language.dir_unreadable]
+hint = "Check the permissions of the folder. Language files are not read; other settings are used"
+text = "Cannot read languages/ ({reason})"
+
+[msg.language.file_type_dot]
+hint = "Write file_types without the leading . (rs). This value never matches"
+text = "{value} in {item} starts with ."
+
+[msg.language.too_many_definitions]
+hint = "The definitions beyond the limit are not used"
+text = "There are more than {count} language definitions"
+
+[msg.language.file_too_large]
+hint = "Keep it at 256 KiB or less"
+text = "This language definition file is too large and is not read"
+
+[msg.language.invalid_name]
+hint = "Use lowercase letters, digits, _, + and - (up to 32; plain is reserved)"
+text = "Language name {value} is invalid"
+
+[msg.language.missing_name]
+hint = "Write the language name, as in name = \"rust\". This definition is not used"
+text = "The language definition has no name"
+
+[msg.language.too_long]
+hint = "display_name is up to 64 characters, first_line and array items up to 256 bytes, and arrays up to 64 items. This item is not used"
+text = "{item} is too long"
+
+[msg.language.too_many_files]
+hint = "The first {count} files in name order are read; the rest are not"
+text = "languages/ has more than {count} language definition files"
 
 [msg.leftover.failed]
 hint = "Check the path and permissions"
@@ -1519,6 +1578,13 @@ default = "default"
 user = "user: {file}:{line}"
 cli = "--set"
 condition = "{origin} [{condition}]"
+language_builtin = "language {language} (built-in)"
+language_file = "language {language}: {file}:{line}"
+
+[ui.lang_set]
+title = "Set Language (current: {language})"
+auto = "Detect automatically"
+current = "{language} (current)"
 
 [ui.finder]
 title = "Open File ({root})"

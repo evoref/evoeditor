@@ -2,11 +2,13 @@
 //!
 //! 公開キーを宣言の表 (07 §4.1) の順に 1 行ずつ `キー = 値` で出し、右の列に由来 (既定・ユーザー: ファイル:行・`--set`。
 //! 条件付きセクションの値は `[os.windows]` を足す) を出す。部品は `config.show_diagnostics` と同じ一覧 (意味的モデル
-//! `List`、04 §8.5a)。`Enter` は由来にファイルと行があれば、そのファイルのその行を開く。
+//! `List`、04 §8.5a)。`Enter` は由来にファイルと行があれば、そのファイルのその行を開く。文書ごとに決まるキー (07 §3.6) は、
+//! フォーカスの文書の値と、勝った所 (言語定義なら `言語 rust (組込み)`・`言語 rust: languages/rust.toml:3`) を出し、見出しに
+//! 文書の名前と言語を出す。
 //!
-//! spec: 07 §3.5, 07 §3.4
+//! spec: 07 §3.5, 07 §3.4, 07 §3.6
 
-use eve_config::{Origin, escape_untrusted, sanitize_untrusted};
+use eve_config::{LangOrigin, Origin, ValueOrigin, escape_untrusted, sanitize_untrusted};
 use eve_view::{CutPolicy, InputFieldModel, ListItem, OverlayModel};
 
 use crate::command::ids;
@@ -21,12 +23,8 @@ use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};
 struct Row {
     label: String,
     origin_text: String,
-    origin: Origin,
+    origin: ValueOrigin,
 }
-
-/// `config.show` の見出しの言語 (`{language}`)。M33 の段 1 では文書の言語を決めないので、どの文書も `plain`
-/// (言語定義は段 2、07 §9.6)。
-const LANGUAGE_PLAIN: &str = "plain";
 
 impl EditorState {
     /// 由来の文言 (`ui.config_origin.*`)。ファイルの名前は切らずに制御文字などだけを直す (場所を示すため)。
@@ -52,20 +50,69 @@ impl EditorState {
         }
     }
 
-    /// 公開キーの行 (宣言の表の順)。値は設定ファイル由来の文字列を含み得るので無害化する (07 §4.3)。
+    /// 文書ごとに決まる値の由来の文言 (言語定義なら `ui.config_origin.language_*`、ほかは層の由来)。
+    fn value_origin_text(&self, origin: &ValueOrigin) -> String {
+        let render = |key: &str, args: &[(&str, &str)]| self.catalog().render(key, args, &|_| None);
+        match origin {
+            ValueOrigin::Config(o) => self.config_origin_text(o),
+            ValueOrigin::Language { language, at } => {
+                let language = sanitize_untrusted(language);
+                match at {
+                    LangOrigin::Builtin => render(
+                        keys::UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN,
+                        &[("language", &language)],
+                    ),
+                    LangOrigin::File { source, line, .. } => render(
+                        keys::UI_CONFIG_ORIGIN_LANGUAGE_FILE,
+                        &[
+                            ("language", &language),
+                            ("file", &escape_untrusted(source)),
+                            ("line", &line.to_string()),
+                        ],
+                    ),
+                }
+            }
+        }
+    }
+
+    /// 公開キーの行 (宣言の表の順)。文書ごとに決まるキーは、フォーカスの文書の値と由来 (07 §3.6 の LAYER-5)。値は設定
+    /// ファイル由来の文字列を含み得るので無害化する (07 §4.3)。
     fn config_show_rows(&self) -> Vec<Row> {
+        let doc = self
+            .active_document()
+            .and_then(|d| self.docs.documents.get(&d))
+            .map(|d| self.doc_values_of(d));
         eve_config::declared(self.config())
             .into_iter()
             .map(|(key, value)| {
+                let per_doc = doc.as_ref().and_then(|v| match key {
+                    "editor.tab_width" => {
+                        Some((v.tab_width.value.to_string(), &v.tab_width.origin))
+                    }
+                    "editor.indent_width" => {
+                        Some((v.indent_width.value.to_string(), &v.indent_width.origin))
+                    }
+                    "editor.indent_unit" => Some((
+                        format!("\"{}\"", v.indent_unit.value.name()),
+                        &v.indent_unit.origin,
+                    )),
+                    _ => None,
+                });
+                let (value, origin) = match per_doc {
+                    Some((value, origin)) => (value, origin.clone()),
+                    None => (
+                        value,
+                        ValueOrigin::Config(self.settings.config_origins.of(key).clone()),
+                    ),
+                };
                 let label = self.catalog().render(
                     keys::UI_CONFIG_SHOW_ITEM,
                     &[("key", key), ("value", &sanitize_untrusted(&value))],
                     &|_| None,
                 );
-                let origin = self.settings.config_origins.of(key).clone();
                 Row {
                     label,
-                    origin_text: self.config_origin_text(&origin),
+                    origin_text: self.value_origin_text(&origin),
                     origin,
                 }
             })
@@ -108,14 +155,23 @@ impl EditorState {
             return CommandResult::Done;
         };
         let rows = self.config_show_rows();
-        let Origin::User {
-            source,
-            line,
-            column,
-            ..
-        } = &rows[i].origin
-        else {
-            return CommandResult::Done;
+        let (source, line, column) = match &rows[i].origin {
+            ValueOrigin::Config(Origin::User {
+                source,
+                line,
+                column,
+                ..
+            })
+            | ValueOrigin::Language {
+                at:
+                    LangOrigin::File {
+                        source,
+                        line,
+                        column,
+                    },
+                ..
+            } => (source, line, column),
+            _ => return CommandResult::Done,
         };
         let Some(path) = self.config_diagnostic_path(source) else {
             return CommandResult::Done;
@@ -156,6 +212,13 @@ impl EditorState {
             .active_document()
             .and_then(|d| crate::ui_model::pane_bar::display_names(self).remove(&d))
             .unwrap_or_default();
+        // 文書の言語 (決めていない読込中の文書・文書が無いときは `plain`)
+        let language = self
+            .active_document()
+            .and_then(|d| self.docs.documents.get(&d))
+            .map(EditorState::language_id)
+            .filter(|l| !l.is_empty())
+            .unwrap_or(eve_config::PLAIN);
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
         let selection = crate::ui_model::overlay::field_selection(p.all_selected, cells.len());
@@ -178,7 +241,7 @@ impl EditorState {
                     keys::UI_CONFIG_SHOW_TITLE,
                     &[
                         ("name", &escape_untrusted(&name)),
-                        ("language", LANGUAGE_PLAIN),
+                        ("language", &sanitize_untrusted(language)),
                     ],
                 ),
                 CutPolicy::Middle,

@@ -93,6 +93,34 @@ impl Default for DisplaySettings {
     }
 }
 
+/// 字下げの設定 (`editor.indent_unit`・`editor.indent_width`。文書ごとに決まる値、07 §3.6)。Editor が文書の言語と設定から
+/// 決めて写す。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IndentSettings {
+    /// Tab とインデントの操作で入れる単位。
+    pub unit: eve_config::IndentUnit,
+    /// スペースの字下げの幅 (表示列)。
+    pub width: u8,
+}
+
+impl Default for IndentSettings {
+    fn default() -> IndentSettings {
+        IndentSettings {
+            unit: eve_config::IndentUnit::Space,
+            width: 4,
+        }
+    }
+}
+
+/// 文書の言語 (07 §9.6 の LANG-7 / LANG-8)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DocLanguage {
+    /// 言語 ID (`plain` を含む)。決めていない (読込中) なら `None` (`doc.language` は `""`)。
+    pub id: Option<String>,
+    /// `lang.set` で明示した (文書を閉じるまで保つ。判定し直さない)。
+    pub explicit: bool,
+}
+
 /// 1 つの文書 (02 §5.1、03 §6)。本文・Revision・Undo 履歴と、ファイルの形式・読み取り専用の理由・読込状態を持つ。
 /// 本文を変えるのは `apply` / `undo` / `redo` だけ。
 pub struct Document {
@@ -126,6 +154,10 @@ pub struct Document {
     pub load_total: u64,
     /// 表示の設定 (設定から写す)。
     pub display: DisplaySettings,
+    /// 字下げの設定 (文書の言語と設定から写す、07 §3.6)。
+    pub indent: IndentSettings,
+    /// 文書の言語 (07 §9.6)。読込の完了・`lang.set`・名前を付けて保存で決める。
+    pub language: DocLanguage,
     /// レイアウトの覚え (長い行の表示単位・長大行の列の索引)。読み書きするのは `layout/` だけ。
     pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
     /// 無題の通し番号 (`無題-{n}` の n、03 §9.8)。`EditorState::add_document` が振る。名前を付けて保存した後も戻さない。
@@ -258,6 +290,8 @@ impl Document {
             load_percent: 0,
             load_total: 0,
             display: DisplaySettings::default(),
+            indent: IndentSettings::default(),
+            language: DocLanguage::default(),
             layout_cache: std::cell::RefCell::default(),
             untitled_no: None,
             preserved,
