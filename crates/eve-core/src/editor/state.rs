@@ -122,6 +122,14 @@ pub(crate) struct Settings {
     /// 選んだ言語の文言の表 (07 §17.4。同梱の表にユーザーの言語ファイルを重ねたもの。起動時に 1 回作り、実行中は変えない)。
     /// 言語を選ぶと、補う言語の同梱の表になる。
     pub(crate) catalog: std::sync::Arc<eve_config::Catalog>,
+    /// 言語定義の集まり (組込みにユーザー層を重ねたもの、07 §9.6)。`ReadLanguages` の結果で差し替える。届くまでは組込みだけ。
+    pub(crate) languages: std::sync::Arc<eve_config::LanguageSet>,
+    /// 設定ファイルの `[[language]]` の定義 (起動時に Host が渡し、`config.reload` で差し替える。`ReadLanguages` に渡す)。
+    pub(crate) config_languages: Vec<eve_config::LanguageDef>,
+    /// 警告した、同じ層で重なった言語の組 (同じ組について 1 回、07 §9.6 の LANG-6 (d))。
+    pub(crate) ambiguous_noted: BTreeSet<(String, String)>,
+    /// 起動時の言語定義の読込を積んだ。
+    pub(crate) languages_requested: bool,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -390,6 +398,10 @@ impl EditorState {
                 locale: eve_config::Locale::default(),
                 catalog: eve_config::Catalog::builtin_shared(eve_config::Locale::default()),
                 user_theme: None,
+                languages: std::sync::Arc::new(eve_config::LanguageSet::builtin()),
+                config_languages: Vec::new(),
+                ambiguous_noted: BTreeSet::new(),
+                languages_requested: false,
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
                     eve_view::ColorDepth::TrueColor,
@@ -422,10 +434,8 @@ impl EditorState {
         self.term.mouse_on = config.mouse;
         self.term.hint_bar_on = config.hint_bar;
         self.settings.config = config;
-        let display = self.display_settings();
-        for d in self.docs.documents.values_mut() {
-            d.display = display;
-        }
+        // 文書ごとの値 (タブの幅・字下げ) は文書の言語と設定から決め直す (07 §3.6 の LAYER-3)
+        self.refresh_all_doc_settings();
         // 折り返しの設定は View ごとの状態で、設定の差し替えで既存の View にも写す。
         // 変わっていなければ写さない (再読込で、`view.toggle_wrap` で切り替えた状態を戻さない)
         let wrap = self.config_wrap();
@@ -535,6 +545,10 @@ impl EditorState {
         doc.format.has_bom = has_bom;
         doc.format.default_eol = self.config_eol();
         doc.display = self.display_settings();
+        doc.indent = crate::document::IndentSettings {
+            unit: self.settings.config.indent_unit,
+            width: self.settings.config.indent_width,
+        };
         doc
     }
 
@@ -559,9 +573,13 @@ impl EditorState {
             doc.untitled_no = doc.untitled_no.or(old.untitled_no);
             // 同じファイルの判定の識別 (03 §12.7.6) は、読込の途中に `Identity` で受けたものを引き継ぐ
             doc.inherit_identity(old);
+            // 言語は引き継ぐ (再読込・開き直しで判定し直さない、07 §9.6 の LANG-7)。読込中の仮の文書はまだ決めていない
+            doc.language.clone_from(&old.language);
         }
         self.docs.documents.insert(id, doc);
         self.clamp_views_of(id);
+        // 言語 (読込の完了で初めて判定する。再読込・開き直しは前の言語を保つ、07 §9.6 の LANG-7) と文書ごとの値
+        self.settle_language(id);
     }
 
     /// 本文を差し替えた文書 `doc` の全 View の選択とスクロールを、新しい本文の範囲と書記素の境界に収める (差し替えの経路が
@@ -679,6 +697,7 @@ impl EditorState {
         }
         let doc_id = DocumentId(self.fresh_id());
         self.docs.documents.insert(doc_id, doc);
+        self.settle_language(doc_id);
         let view_id = self.add_view(doc_id);
         self.out
             .events
@@ -1258,6 +1277,10 @@ impl EditorState {
         match name {
             "doc.read_only" => doc.map_or(b(false), |d| b(!d.is_editable())),
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
+            // 文書の言語 ID (07 §9.6 の LANG-9。言語を決めていない文書 (読込中) と文書が無いときは空)
+            "doc.language" => Some(CtxValue::Str(
+                doc.map_or("", EditorState::language_id).to_owned(),
+            )),
             "doc.read_only_releasable" => b(doc.is_some_and(Document::read_only_releasable)),
             "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),

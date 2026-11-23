@@ -20,6 +20,7 @@ fn harness(os: Os, ssh: bool, sets: &[&str]) -> Harness {
             keymap: Some(FsPath::new(KEYMAP)),
             sets: sets.iter().map(|s| (*s).to_owned()).collect(),
             themes: None,
+            languages: None,
             locales: None,
             conditions: Conditions {
                 os: Some(os),

@@ -55,6 +55,8 @@ pub enum Mode {
     CheckConfig,
     /// `--dump-config [--defaults] [--json]`: 解決済みの設定 (または既定値) を出し、終える。
     DumpConfig { defaults: bool, json: bool },
+    /// `--dump-languages`: 組込みの言語定義にユーザー層の定義を重ねた結果を出し、終える (07 §9.6 の LANG-1)。
+    DumpLanguages,
     /// `--crash-report`: 最新のクラッシュログを表示して終える (09 §10.2)。
     CrashReport,
     /// `--licenses` (隠し): 同梱の第三者告知を表示して終える (05 §17.1)。
@@ -190,6 +192,7 @@ pub fn parse(
     let mut ignored = Vec::new();
     let mut config = ConfigArgs::default();
     let (mut check, mut dump, mut defaults, mut json) = (false, false, false, false);
+    let mut dump_languages = false;
     let (mut crash_report, mut licenses) = (false, false);
     let (mut list_commands, mut dump_keymap) = (false, false);
     let mut log_level = None;
@@ -264,6 +267,7 @@ pub fn parse(
                 .push(checked_set(s["--set=".len()..].to_owned())?),
             "--check-config" => check = true,
             "--dump-config" => dump = true,
+            "--dump-languages" => dump_languages = true,
             "--defaults" => defaults = true,
             "--crash-report" => crash_report = true,
             "--licenses" => licenses = true,
@@ -340,6 +344,8 @@ pub fn parse(
         Mode::CheckConfig
     } else if dump {
         Mode::DumpConfig { defaults, json }
+    } else if dump_languages {
+        Mode::DumpLanguages
     } else if list_commands {
         Mode::ListCommands { json }
     } else if dump_keymap {
@@ -544,6 +550,7 @@ mod tests {
             _ => panic!(),
         };
         assert_eq!(mode(&["--check-config"]), Mode::CheckConfig);
+        assert_eq!(mode(&["--dump-languages"]), Mode::DumpLanguages);
         assert_eq!(
             mode(&["--dump-config", "--defaults", "--json"]),
             Mode::DumpConfig {

@@ -356,6 +356,24 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
+        JobKind::PrecompileLanguages { set } => JobResult::LanguagesPrecompiled {
+            reports: set.precompile(),
+            set: set.clone(),
+        },
+        JobKind::ReadLanguages { dir, config } => {
+            let (mut defs, mut reports) = match dir {
+                Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),
+                None => (Vec::new(), Vec::new()),
+            };
+            let mut all = config.clone();
+            all.append(&mut defs);
+            let (set, more) = eve_config::LanguageSet::build(&all);
+            eve_config::merge_reports(&mut reports, more);
+            JobResult::LanguagesRead {
+                set: std::sync::Arc::new(set),
+                reports,
+            }
+        }
         JobKind::Metadata {
             path,
             purpose,
@@ -443,7 +461,7 @@ fn read_config_file(fs: &dyn crate::io::fs::FileSystem, path: &FsPath) -> Config
     let mut r = match fs.open_read(path) {
         Ok(r) => r,
         Err(e) if e.kind == crate::io::fs::FsErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(format!("{:?}", e.kind)),
+        Err(e) => return Err(crate::io::error_keys::fs_reason(&e)),
     };
     let mut out = Vec::new();
     loop {

@@ -7,7 +7,6 @@ pub const RESERVED_SECTIONS: &[&str] = &[
     "ai",
     "formatter",
     "keys",
-    "language",
     "language-server",
     "log",
     "lsp",
@@ -16,6 +15,11 @@ pub const RESERVED_SECTIONS: &[&str] = &[
     "session",
     "workspace",
 ];
+
+/// 言語定義の表の配列 (`[[language]]`、docs/07 §5.8・§9.6)。公開キーを持たないが、v0.5 の M33 (FR-704) から読む
+/// (公開前のセクションには入れない)。eve-core の試験 `config_reserved` は、07 §5 の見出しのセクションのうち公開キーを持たない
+/// ものが、公開前のセクションとこれの和と一致することを確かめる。
+pub const LANGUAGE_SECTION: &str = "language";
 
 /// 条件付きセクションの条件の種類 (`[os.*]`・`[env.*]`・`[frontend.*]`・`[host.*]`。docs/07 §3.4 の表の `条件キー` 列)。
 /// v0.5 の M33 (NFR-405) から `os`・`frontend`・`env` を解決する (`config.rs` の読込、§3.4 の COND-1〜COND-8)。`host` と

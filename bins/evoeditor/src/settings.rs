@@ -55,6 +55,8 @@ pub(crate) fn config_sources(
         keymap: (!args.no_config && has_dir).then(|| dir.join(KEYMAP_FILE)),
         sets: args.sets.clone(),
         themes: (!args.no_config && has_dir).then(|| dir.join("themes")),
+        // 言語定義のファイル (07 §9.6 の LANG-2)。`--no-config` では読まない
+        languages: (!args.no_config && has_dir).then(|| dir.join("languages")),
         // ユーザーの言語ファイル (07 §17.4)。`--no-config` では見ない
         locales: (!args.no_config && has_dir).then(|| dir.join("locales")),
         conditions: conditions(),
@@ -113,6 +115,31 @@ pub(crate) fn load_config(src: &eve_core::ConfigSources) -> eve_config::Resolved
         })
         .collect();
     eve_config::resolve(&sources, &src.sets, src.conditions)
+}
+
+/// 言語定義を読んで重ねる (07 §9.6): 設定ファイルの `[[language]]` (`config`) と `languages/*.toml` (名前の順)。
+/// `--check-config` と `--dump-languages` が使う (端末で動くときは io のジョブ `ReadLanguages` が同じ関数で読む)。
+/// 戻り値は (定義の集まり, 表示名ごとの診断)。
+pub(crate) fn load_languages(
+    paths: &NativePaths,
+    src: &eve_core::ConfigSources,
+    config: &[eve_config::LanguageDef],
+) -> (
+    eve_config::LanguageSet,
+    Vec<(String, Vec<eve_config::Diagnostic>)>,
+) {
+    let mut defs = config.to_vec();
+    let mut reports = Vec::new();
+    if let Some(dir) = &src.languages {
+        let fs = crate::NativeFs::new(paths.state_dir().as_path());
+        let (mut more, r) = eve_core::read_language_dir(&fs, dir);
+        defs.append(&mut more);
+        reports = r;
+    }
+    let (set, built) = eve_config::LanguageSet::build(&defs);
+    eve_config::merge_reports(&mut reports, built);
+    eve_config::merge_reports(&mut reports, set.precompile());
+    (set, reports)
 }
 
 /// `keymap.toml` を読む。無ければ空。読めないときは診断を 1 件出して空。

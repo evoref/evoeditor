@@ -123,6 +123,8 @@ pub(crate) struct PaletteState {
     pub diagnostics: bool,
     /// 設定の値と由来の一覧 (`config.show`、07 §3.5)。パレットと同じリスト部品で、候補が公開キーになる。
     pub settings: bool,
+    /// 言語の一覧 (`lang.set` の引数を尋ねる、07 §9.6 の LANG-8)。候補は `auto` と言語。
+    pub languages: bool,
 }
 
 struct Hit {
@@ -426,6 +428,7 @@ impl EditorState {
             _ if p.buffers => self.buffer_hits(&p.text).len(),
             _ if p.diagnostics => self.config_diagnostic_hits(&p.text).len(),
             _ if p.settings => self.config_show_hits(&p.text).len(),
+            _ if p.languages => self.lang_set_hits(&p.text).len(),
             Some(def) => self.arg_hits(def, &p.text).len(),
             None => self.palette_hits(&p.text).len(),
         }
@@ -490,6 +493,9 @@ impl EditorState {
         }
         if p.settings {
             return self.config_show_confirm();
+        }
+        if p.languages {
+            return self.lang_set_confirm();
         }
         if let Some(def) = p.stage {
             // 引数の値を選んだ: パレットを閉じて、その値でコマンドを実行する
@@ -602,6 +608,9 @@ impl EditorState {
         }
         if p.settings {
             return self.config_show_model(p);
+        }
+        if p.languages {
+            return self.lang_set_model(p);
         }
         if let Some(def) = p.stage {
             return self.arg_model(p, def);

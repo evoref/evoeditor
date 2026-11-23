@@ -60,6 +60,9 @@ pub use gitignore::{
 pub use io::fs::*;
 pub use io::fspath::FsPath;
 pub use io::io_jobs::OpenOptions;
+pub use io::languages::{
+    LANGUAGE_FILE_MAX_BYTES, LANGUAGE_FILES_MAX, LANGUAGES_PREFIX, read_language_dir,
+};
 pub use io::last_version::{LAST_VERSION_FILE, LastVersionOutcome};
 pub use io::leftover::{Leftover, LeftoverKind, LeftoverOp};
 pub use io::paths::Paths;

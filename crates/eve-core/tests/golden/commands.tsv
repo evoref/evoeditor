@@ -55,6 +55,7 @@ file.toggle_read_only	File	None	doc.read_only_releasable || !doc.read_only
 help.commands	Ui	Ui	—
 help.keys	Ui	Ui	—
 help.open	Ui	Ui	—
+lang.set	Ui	Ui	—
 pane.close	Ui	Ui	pane.split
 pane.equalize	Ui	Ui	pane.split
 pane.focus_down	Ui	Ui	pane.split

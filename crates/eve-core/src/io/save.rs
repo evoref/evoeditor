@@ -830,6 +830,11 @@ impl EditorState {
                     revision,
                     path: path.display(),
                 });
+                // 名前を付けて保存でパスが変わった: 明示の指定が無ければ言語を判定し直し、文書ごとの値を決め直す
+                // (07 §9.6 の LANG-7、§3.6 の LAYER-3)
+                if path_changed {
+                    self.redetect_language(doc_id);
+                }
                 // 直接上書きで書いたことは 1 回示す (03 §9.3 手順 7)。つながりを承認した保存の完了は、`info.save.done` に
                 // 代えて `info.save.escape_merged` にする (03 §8.3.1 の「つながったまま保存した後」)。直接上書きでは
                 // `info.save.in_place` の後に出す (完了の要点を最後に残す)

@@ -45,6 +45,9 @@ pub struct Resolved {
     pub ui_locale_at: Option<(KeyOrigin, String)>,
     /// 公開キーの値の由来 (層・ファイル・行・条件。`config.show`、07 §3.5)。
     pub origins: Origins,
+    /// 設定ファイル (`config.toml`・`--config`) の `[[language]]` の定義 (重ねた順。`source` はファイルの表示名。07 §9.6 の
+    /// LANG-2)。構文エラーのファイルのものは含めない。
+    pub languages: Vec<crate::LanguageDef>,
 }
 
 /// 公開キーの値の由来 (07 §3.5。`config.show` の右の列)。
@@ -227,6 +230,7 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
     let mut theme_name_at = None;
     let mut ui_locale_at = None;
     let mut origins = Origins::default();
+    let mut languages = Vec::new();
     // 値を使った所を、由来と、テーマ・言語の診断の場所に記録する
     let mut record = |source: Option<&str>, written: &[Written]| {
         for w in written {
@@ -275,6 +279,7 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
                 config: config.clone(),
                 diagnostics: vec![unreadable(e.clone())],
                 written: Vec::new(),
+                languages: Vec::new(),
             },
         };
         let error = loaded
@@ -285,6 +290,10 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
         if !error {
             config = loaded.config;
             record(Some(&s.name), &loaded.written);
+            languages.extend(loaded.languages.into_iter().map(|mut d| {
+                d.source.clone_from(&s.name);
+                d
+            }));
         }
         if !loaded.diagnostics.is_empty() {
             reports.push((s.name.clone(), loaded.diagnostics));
@@ -309,6 +318,7 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
         theme_name_at,
         ui_locale_at,
         origins,
+        languages,
     }
 }
 
