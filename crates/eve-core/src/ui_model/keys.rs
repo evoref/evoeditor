@@ -17,6 +17,7 @@ pub(crate) const INFO_CONFIG_RELOAD_UNCHANGED: &str = "info.config.reload_unchan
 pub(crate) const INFO_CONFIG_RELOADED: &str = "info.config.reloaded";
 pub(crate) const INFO_CONFIG_UNSUPPORTED: &str = "info.config.unsupported";
 pub(crate) const INFO_CURSOR_LIMIT: &str = "info.cursor.limit";
+pub(crate) const INFO_LANG_CHANGED: &str = "info.lang.changed";
 pub(crate) const INFO_EOL_CONVERTED: &str = "info.eol.converted";
 pub(crate) const INFO_EOL_UNCHANGED: &str = "info.eol.unchanged";
 pub(crate) const INFO_EXTERNAL_UNCHANGED: &str = "info.external.unchanged";
@@ -214,11 +215,16 @@ pub(crate) const UI_CONFIG_DIAGNOSTICS_TITLE: &str = "ui.config_diagnostics.titl
 pub(crate) const UI_CONFIG_ORIGIN_CLI: &str = "ui.config_origin.cli";
 pub(crate) const UI_CONFIG_ORIGIN_CONDITION: &str = "ui.config_origin.condition";
 pub(crate) const UI_CONFIG_ORIGIN_DEFAULT: &str = "ui.config_origin.default";
+pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN: &str = "ui.config_origin.language_builtin";
+pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_FILE: &str = "ui.config_origin.language_file";
 pub(crate) const UI_CONFIG_ORIGIN_USER: &str = "ui.config_origin.user";
 pub(crate) const UI_CONFIG_SHOW_ITEM: &str = "ui.config_show.item";
 pub(crate) const UI_CONFIG_SHOW_NO_MATCH: &str = "ui.config_show.no_match";
 pub(crate) const UI_CONFIG_SHOW_PLACEHOLDER: &str = "ui.config_show.placeholder";
 pub(crate) const UI_CONFIG_SHOW_TITLE: &str = "ui.config_show.title";
+pub(crate) const UI_LANG_SET_AUTO: &str = "ui.lang_set.auto";
+pub(crate) const UI_LANG_SET_CURRENT: &str = "ui.lang_set.current";
+pub(crate) const UI_LANG_SET_TITLE: &str = "ui.lang_set.title";
 pub(crate) const UI_CONFIRM_CANCEL: &str = "ui.confirm.cancel";
 pub(crate) const UI_CONFIRM_NAV_HINT: &str = "ui.confirm.nav_hint";
 pub(crate) const UI_CONFIRM_QUIT_SAVING_OTHERS: &str = "ui.confirm.quit_saving.others";
@@ -345,7 +351,7 @@ pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 321] = [
+const ALL: [&str; 327] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -360,6 +366,7 @@ const ALL: [&str; 321] = [
     INFO_CONFIG_RELOADED,
     INFO_CONFIG_UNSUPPORTED,
     INFO_CURSOR_LIMIT,
+    INFO_LANG_CHANGED,
     INFO_EOL_CONVERTED,
     INFO_EOL_UNCHANGED,
     INFO_EXTERNAL_UNCHANGED,
@@ -551,11 +558,16 @@ const ALL: [&str; 321] = [
     UI_CONFIG_ORIGIN_CLI,
     UI_CONFIG_ORIGIN_CONDITION,
     UI_CONFIG_ORIGIN_DEFAULT,
+    UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN,
+    UI_CONFIG_ORIGIN_LANGUAGE_FILE,
     UI_CONFIG_ORIGIN_USER,
     UI_CONFIG_SHOW_ITEM,
     UI_CONFIG_SHOW_NO_MATCH,
     UI_CONFIG_SHOW_PLACEHOLDER,
     UI_CONFIG_SHOW_TITLE,
+    UI_LANG_SET_AUTO,
+    UI_LANG_SET_CURRENT,
+    UI_LANG_SET_TITLE,
     UI_CONFIRM_CANCEL,
     UI_CONFIRM_NAV_HINT,
     UI_CONFIRM_QUIT_SAVING_OTHERS,

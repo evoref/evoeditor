@@ -1725,8 +1725,12 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     ReadConfig { files: Vec<FsPath>, keymap: Option<FsPath>, locales: Option<(FsPath, Locale)> },        // io (v0.2)。config.reload の設定ファイルとキーマップの読込 (07 §6)
     ReadTheme { dir: FsPath, name: String },                          // io (v0.2)。テーマファイルを inherits の親までたどって読む (07 §8.6)
     // ── 設定と言語 (v0.5 の M33。07 §9.6 / §12.5 / §10.3) ──
-    ReadLanguages { dir: FsPath /*<config_dir>/languages*/ },         // io。起動時に、起動時のパスを開くジョブより前に積む (07 §9.6 の LANG-2)。config.reload でも積む。
-                                                                      // 名前の順に *.toml を読み (256 ファイル・1 ファイル 256 KiB まで)、本文と読めなかった理由を返す (解析は主スレッド。ユーザー層なので config.reload と同じ)
+    ReadLanguages { dir: Option<FsPath> /*<config_dir>/languages。--no-config は None*/, config: Vec<LanguageDef> /*config.toml の [[language]]*/ },
+                                                                      // io。起動時に、起動時のパスを開くジョブより前に積む (07 §9.6 の LANG-2)。config.reload でも積む。
+                                                                      // 名前の順に *.toml を読み (256 ファイル・1 ファイル 256 KiB まで)、解析し、config の後に重ね、ユーザー層の first_line の
+                                                                      // 正規表現と file_globs の glob を組んで、定義の集まり (Arc<LanguageSet>) と診断を返す (M33 の段 2 で決めた: 正規表現を
+                                                                      // 主スレッドで組まない (§12.1 の eve-config の禁止事項) ため、解析もジョブで行う。WSC-2 のワークスペース層と同じ形)
+    PrecompileLanguages,                                              // io。組込みの言語定義の first_line の正規表現を組む (プロセスで共有)。起動時に、起動時のパスを開くジョブの後ろに 1 回
     ReadWorkspaceConfig { root: FsPath, conditions: Conditions /*07 §3.4 の COND-2*/, user: Arc<ResolvedConfig> /*「方向のみ」の比較に使う*/,
                           safe_dirs: Arc<[FsPath]> /*workspace.safe_directories*/ },
                                                                       // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み、

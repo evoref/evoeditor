@@ -244,6 +244,13 @@ impl EditorState {
                 .filter(|_| eve_config::Locale::from_file_name(name).is_some())
                 .map(|dir| dir.join(name));
         }
+        // 言語定義のファイル (`languages/<file>.toml`、07 §9.6)。ファイルの多すぎる診断 (`languages/`) は開かない
+        if let Some(name) = file.strip_prefix(crate::io::languages::LANGUAGES_PREFIX) {
+            return src
+                .languages
+                .filter(|_| !name.is_empty())
+                .map(|dir| dir.join(name));
+        }
         let theme = file.strip_prefix(THEME_PREFIX)?;
         src.themes.map(|dir| dir.join(theme))
     }
@@ -412,6 +419,8 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
     let default = default_display(&d.key);
     let word = |key: &str, args: &[(&str, &str)]| cat.render(key, args, &|_| None);
     let mut args: Vec<(&str, String)> = vec![("item", clean(&d.key)), ("value", clean(&d.value))];
+    // 文言のキーの群 (`msg.config.*`。言語定義の誤りは `msg.language.*`、07 §9.6)
+    let mut group = "config";
     let kind = match &d.kind {
         // 「このバージョンでは未対応」は情報の 1 文だけ (`info.config.unsupported`、07 §4.3。対処は無い)
         DiagKind::Unsupported => {
@@ -451,7 +460,12 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
         DiagKind::OutOfRange { min, max } => {
             args.push(("range", format!("{min}〜{max}")));
             args.push(("default", default.to_owned()));
-            "out_of_range"
+            // 既定値を持たない項目 (言語定義の `indent.width` など) は、既定値の文の無い文言にする
+            if default.is_empty() {
+                "out_of_range_no_default"
+            } else {
+                "out_of_range"
+            }
         }
         DiagKind::Keymap(p) => {
             use eve_config::KeymapProblem as P;
@@ -522,9 +536,25 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             }
             p.message_name()
         }
+        // 言語定義の誤り (07 §9.6。`msg.language.*`)
+        DiagKind::Language(p) => {
+            use eve_config::LanguageProblem as L;
+            match p {
+                L::Ambiguous { first, second } => {
+                    args.push(("file", clean(&d.value)));
+                    args.push(("first", clean(first)));
+                    args.push(("second", clean(second)));
+                }
+                L::BadFirstLine { reason } => args.push(("reason", clean(reason))),
+                L::TooManyFiles => args.push(("count", clean(&d.value))),
+                _ => {}
+            }
+            group = "language";
+            p.message_name()
+        }
     };
     let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let key = |part: &str| format!("msg.config.{kind}.{part}");
+    let key = |part: &str| format!("msg.{group}.{kind}.{part}");
     let text = cat.render(&key("text"), &refs, &|_| None);
     (
         with_condition(cat, text, d),
@@ -644,6 +674,7 @@ pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
         DiagKind::ThemeNotFound { .. } => "theme_not_found",
         DiagKind::Locale(p) => p.message_name(),
         DiagKind::Condition(p) => p.message_name(),
+        DiagKind::Language(p) => p.message_name(),
     }
 }
 

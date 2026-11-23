@@ -223,6 +223,11 @@ fn main() -> ProcessExit {
             ..
         }) => modes::dump_config(&config, defaults, json),
         Ok(Cli::Run {
+            mode: cli::Mode::DumpLanguages,
+            config,
+            ..
+        }) => modes::dump_languages(&config),
+        Ok(Cli::Run {
             mode: cli::Mode::ListCommands { json },
             config,
             locale,

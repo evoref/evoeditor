@@ -74,6 +74,9 @@ pub enum DiagKind {
     /// 条件付きセクションの書き方の誤り (07 §3.4 の COND-5 / COND-6。警告)。そのセクション (と、その下のキー) を使わない。
     /// `Diagnostic.key` は誤りの所までの名前 (`os.win`・`os.windows.env.ssh`・`os.windows.tab_width` など)。
     Condition(ConditionProblem),
+    /// 言語定義 (`[[language]]`・`languages/*.toml`) の誤り (07 §9.6 の LANG-2〜LANG-6。警告)。その項目 (名前の誤りでは
+    /// その定義) を使わない。`Diagnostic.key` は `language.<項目>`。
+    Language(crate::language::LanguageProblem),
 }
 
 /// 条件付きセクションの誤りの種類 (07 §3.4 の COND-5 / COND-6)。
@@ -583,6 +586,9 @@ pub struct Loaded {
     pub diagnostics: Vec<Diagnostic>,
     /// 値を使った公開キーと、書いた所 (重ねた順。同じキーは後のものが勝った値)。
     pub written: Vec<Written>,
+    /// `[[language]]` の定義 (書いた順。誤りの項目を除く。`source` は空で、層を重ねる [`resolve`](crate::resolve) が
+    /// ファイルの表示名を入れる。07 §9.6 の LANG-2)。
+    pub languages: Vec<crate::LanguageDef>,
 }
 
 /// 公開キーを持つセクション (公開キーの先頭の名前。並びは `--dump-config` の出力の順、07 §5 の表の順)。
@@ -628,6 +634,7 @@ pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> 
             config: base,
             diagnostics: Vec::new(),
             written: Vec::new(),
+            languages: Vec::new(),
         },
         conditions,
         apply: true,
@@ -847,6 +854,11 @@ impl Cx<'_> {
 
     fn section(&mut self, name: &Spanned<DeString<'_>>, value: &Spanned<DeValue<'_>>) {
         let n: &str = name.get_ref();
+        // 言語定義 (07 §9.6)。条件の中の `[[os.windows.language]]` は、呼ぶ前に誤り (COND-5 (d)) にしている
+        if n == crate::reserved::LANGUAGE_SECTION {
+            self.languages(value);
+            return;
+        }
         // 公開前のセクションは、セクションごとに未対応の情報診断にする
         if crate::reserved::RESERVED_SECTIONS.contains(&n) {
             self.diag(
@@ -1174,6 +1186,9 @@ pub(crate) fn distance(a: &str, b: &str) -> usize {
     }
     prev[b.len()]
 }
+
+mod language;
+pub use language::load_language_str;
 
 #[cfg(test)]
 mod tests;

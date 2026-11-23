@@ -218,6 +218,8 @@ v0.4 までの本節の例は `[os.windows.editor]` の `line_ending` (キーの
 
 **M33 の段 1 で決めた細目**: (1) 由来の行と桁は、値を使ったキーを書いた所 (`[editor]` の `tab_width`、点のキーでは最後の名前)。書いた値が誤り (型・範囲) で使わなかったときは、下の層の由来のまま。(2) 由来のファイル名 (`config.toml`・`--config` のパス) は場所を示すので 64 文字で切らず、制御文字などだけを直す (`escape_untrusted`)。値は `sanitize_untrusted` を通す。(3) `Enter` は、由来にファイルが無い行 (既定・`--set`) では何もしない (一覧を開いたまま)。(4) 段 1 では文書ごとに決まるキーがまだ無い (§3.6 は段 2 から) ので、どの行も層だけで決まった値で、見出しの `{language}` は `plain` (言語定義を入れる段 2 で、文書の言語にする)。(5) 一覧の名前 (`overlay.active`、§7.3) は `config_show` で、キーのフォーカスは一覧 (`list`、§7.1。`config.show_diagnostics` と同じ)。入力欄が空のときの案内は `ui.config_show.placeholder`、絞り込みに一致しないときは `ui.config_show.no_match` (04 §8.15)。
 
+**M33 の段 2 で決めた細目**: (1) 見出しの `{language}` はフォーカスの文書の言語 ID (`doc.language` と同じ値。言語を決めていない読込中の文書と、文書が無いときは `plain`)。(2) 文書ごとのキーのうち段 2 で値が文書で変わるのは、言語定義が持つ `editor.tab_width`・`editor.indent_unit`・`editor.indent_width` の 3 つで、`file.default_line_ending`・`file.default_encoding` は言語定義が持たない (§9.6 の LANG-3) ので、段 5 / 段 6 までは層の値と由来のまま。(3) 言語定義で決まった行の由来は `ui.config_origin.language_builtin` (`言語 go (組込み)`) か `ui.config_origin.language_file` (`言語 rust: languages/rust.toml:3`。`config.toml` の `[[language]]` なら `config.toml:3`)。行は値を書いたキー (`indent` の中の `width` など) の行。`Enter` はファイルのある由来 (ユーザー層の言語定義を含む) でそのファイルのその行を開く。(4) `--set` で決めた行は、言語定義があっても `--set` の由来 (LAYER-1 の (8))。
+
 ### 3.6 文書ごとに決まる値 (v0.5 の M33。FR-704 / FR-705)
 
 言語定義 (§9) と `.editorconfig` (§10) は、値を文書ごとに変える。v0.5 で文書ごとに決まるキーは `editor.tab_width`・`editor.indent_unit`・`editor.indent_width` と、新しいファイルだけに効く `file.default_line_ending`・`file.default_encoding` の 5 つ (文書ごとのキー)。ほかのキーは、文書に依らず層 (§3.1) だけで決まる。
@@ -743,7 +745,7 @@ literal:= '"' ... '"' | number | true | false
 | `panel.focus` | string | フォーカス中パネル名 (v0.5+) |
 | `pane.split` | bool | Window のペインが 2 つ以上 (v0.5、FR-509。03 §9.9)。`pane.close`・ペインの移動・大きさのコマンドの `when` (§11.6)。偽のときのパレットの理由は `ui.palette.reason.single_pane` |
 | `doc.read_only` | bool | 読み取り専用 |
-| `doc.language` | string | 言語名 (`"rust"`, `"plain"`)。v0.5 の M33 の段 2 で実装する (言語の ID、§9.6。言語を決めていない文書 (読込中) は `""`) |
+| `doc.language` | string | 言語名 (`"rust"`, `"plain"`)。v0.5 の M33 の段 2 で実装した (言語の ID、§9.6。言語を決めていない文書 (読込中) と、文書が無いときは `""`) |
 | `doc.modified` | bool | 未保存変更あり |
 | `doc.large` | bool | 巨大ファイル縮退中 (FR-123) |
 | `selection.empty` | bool | 選択が空 (v0.5 の M32 から: **全 Range が空** のとき真。Range が 1 つなら v0.4 までの「主選択が空」と同じ。03 §4.5.5) |
@@ -1264,6 +1266,23 @@ v0.5 の M33 の段 2 (§12.6.2) で入れる。受入基準は 01 §5.5 の FR-
 | LANG-7 | **判定の時期**: 開く (読込の完了。標準入力の文書は名前が無いので `first_line` だけ)・名前を付けて保存でパスが変わったとき (明示の指定が無ければ判定し直す)・`lang.set` で `auto` を選んだとき。再読込 (`file.reload`・外部変更の再読込) と `config.reload` では判定し直さない (§6 の「新規文書から」)。ただし **ワークスペース層が起動の後に届いたとき** (§12.5 の WSC-3) は、明示の指定の無い文書の言語を判定し直す (ワークスペース層の `[[language]]` と、ルートからの相対パスの `file_globs` が、起動時に開いた文書にも効くように。起動時に開いた文書と後で開いた文書で言語が変わらない)。無題の文書は `plain`。判定は主スレッドで行う (定義の数 × 名前の比較と、最初の 1 KiB への正規表現。組んだ正規表現と glob は定義を読んだときに 1 回だけ作る)。開くジョブの結果が定義 (`ReadLanguages`) より先に届いたとき (LANG-2 の順なので起きない想定) は、定義が届いたときに判定し直す |
 | LANG-8 | **`lang.set`** (ID は §11.6 の M33 の表): 引数 `language` (列挙。定義のある言語 ID と `auto`。パレットでは一覧で尋ね、`display_name` と ID を並べ、今の言語に印を付ける。先頭は `auto` (「自動で判定」)) で、フォーカスの文書の言語を明示して替える。明示の指定は文書を閉じるまで保つ (名前を付けて保存でも保つ。ディスクには書かない)。`auto` は明示の指定を外し、今の定義で判定し直す (07 §6 の v0.4 までの `lang.redetect` の役目。`lang.redetect` は予約のまま)。替えたら文書ごとのキーを決め直し (§3.6 の LAYER-3)、`info.lang.changed` (`{language}`) を出す。読み取り専用の文書でも使える (本文を変えない)。Undo の履歴に残らない |
 | LANG-9 | **見せ方**: `when` の `doc.language` (§7.3) に言語 ID を入れる。ステータスバーに言語を出さない (v0.5。04 §8.7 の項目と幅の割り振り、全画面のゴールデンを変えない。今の言語は `lang.set` の一覧の印と `config.show` の見出しで分かる) |
+
+**M33 の段 2 で決めた細目** (実装の PR。退けた案は PR の本文):
+
+| 点 | 決めたこと |
+|---|---|
+| 診断のキー | 定義の中の誤りの `{item}` は `language.<項目>` (`language.indent.width`・`language.file_types` など。言語の名前を含めない。場所は書いた行で示す)。綴りの候補は定義の中のキー (`language.indent` の中なら `unit`・`width`・`tab_width`) から探す。既定値を持たないので、型・範囲・許容値の誤りは「既定値 … を使います」の無い文言 (`msg.config.*_no_default`。範囲は新しい `msg.config.out_of_range_no_default`) |
+| `name` | 無ければ `msg.language.missing_name` (警告。その定義を使わない)。型の誤りは型の警告だけで、その定義を使わない |
+| 上限の超過 | `display_name` の 64 文字・`first_line` と配列の要素の 256 バイト・配列の 64 個を超えたら、その項目を使わずに `msg.language.too_long` (警告)。`comment.line` の誤りは `msg.language.bad_comment`、`first_line` の正規表現を組めないときは `msg.language.bad_first_line` (`{reason}` は `regex` の説明の最後の行)、`file_globs` の glob が §10.3 の EC-4 の資源の上限を超えたら、その glob だけを使わずに `msg.language.bad_glob` |
+| `languages/` のファイル | 拡張子は小文字の `.toml` だけ (`.TOML` は読まない。OS で読むファイルが変わらない)。256 ファイルを超えた分は `languages/` の名前で `msg.language.too_many_files` を 1 件、256 KiB を超えるファイルはそのファイルの名前で `msg.language.file_too_large` を 1 件 (どちらも警告)。メタデータを読めない・UTF-8 でないファイルは、設定ファイルと同じくエラーの構文の診断にしてそのファイルを使わない。ほかの表 (`[editor]` や条件付きセクション) は未知のキーの警告 |
+| 正規表現を組む所 | ユーザー層の `first_line` は `ReadLanguages` のジョブ (と `--check-config`) で組む (主スレッドで組まない、02 §12.1 の eve-config の禁止事項)。組込みの `first_line` (4 つ) はプロセスで 1 回だけ組んで共有し、起動時に、起動時のパスを開くジョブの後ろの io のジョブ (`PrecompileLanguages`) で組む (`ReadLanguages` で組むと、組む時間 (開発機で約 0.4 ms) だけ最初の文書の読込が遅れる。BM-102a)。それより先に判定で要ったとき (拡張子の無い起動時の文書) は、使うときに 1 回だけ組む |
+| 起動時のジョブ | Host が設定の読込元を渡したとき (bin はいつも渡す。`--no-config` では `languages/` を読まず、組込みの正規表現を組むだけ) か、設定ファイルに `[[language]]` があるときに積む。読込元を渡さない試験の起動はジョブを積まない (組込みの定義のまま) |
+| 判定の段の中の順 | `file_types` は長い拡張子が先に勝ち、同じ長さなら強い層、同じ層なら後の定義 (警告)。`file_names`・`file_globs`・`first_line` は強い層、同じ層なら後の定義 (警告)。警告の場所は使う定義の、当たった名前を書いた行で、`{file}` は文書のファイル名。同じ組の警告は定義を読み直すまで 1 回 |
+| ルートが決まったとき | ワークスペースのルート (03 §12.7.1) が決まったら、明示の指定の無い文書の言語を判定し直す (`/` を含む `file_globs` がルートからの相対パスに当たるので、起動時に開いた文書と後で開いた文書で言語が変わらないように。LANG-7 の「ワークスペース層が届いたとき」は段 5) |
+| `lang.set` の一覧 | パレットの一覧 (`overlay.active` は `palette`。引数を尋ねるパレットの段と同じ) で、行は `auto` (`ui.lang_set.auto`)・`plain`・定義のある言語 (組込みの表の順、ユーザー層で足した順)。本文は `display_name`、右の列は ID で、今の言語の行は `ui.lang_set.current` (`go (今の言語)`)。`plain` も選べる (言語を外す)。定義の無い ID を引数で渡したときは替えない (実行できないコマンドの扱い) |
+| `info.lang.changed` の `{language}` | `display_name (ID)` (`Go (go)`。表示の名前が ID と同じなら ID だけ) |
+| glob | §10.3 の EC-4 の glob を eve-config に置き (`glob.rs`。`*`・`**`・`?`・`[...]`・`{a,b}`・`{n1..n2}`・`\`、資源の上限)、言語の判定では ASCII の大文字小文字を区別しない (LANG-6)。段 6 の `.editorconfig` は同じ部品を区別する設定で使い、fuzz (`fuzz_editorconfig`) を足す |
+| `+` の付いたキー | `file_types+` などは TOML のキーに `+` を書けないので、引用符で囲む (`"file_types+" = ["inc"]`)。同じ定義に置換と追加の両方を書いたら、置換してから追加する |
 
 #### 9.6.1 組込みの言語定義の表 (v0.5 の M33。LANG-1 の正本)
 
@@ -2235,7 +2254,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。**v0.2 の M9c で実装した**: TOML はセクションごとの公開キーの全項目で、そのまま設定ファイルとして読める。`--json` は平らなキーの表。`--defaults` / `--json` は `--dump-config` の修飾で、単独では使い方の誤り。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.5 (§4.1) | v0.2 |
 | `--dump-schema` | — | JSON Schema (Could) | v0.5 |
 | `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用)。**v0.3 の M18 で実装した** (案): 端末を始めずに標準出力へ出し、終了コード 0。`--list-commands` は組込みのコマンドを CommandId の順に、`--dump-keymap` は解決後のキーマップ (組込みの既定に `keymap.toml` のユーザー層を重ねたもの。`--no-config` なら既定だけ。診断は出さず、`--check-config` で見る) を §7.1 のコンテキストの順 (同じコンテキストの中は層の優先順・登録の順) に出す。タイトルは §17.1 の順で選んだ UI の言語 (`--locale` が最上位)。`--json` が無いときは、`--list-commands` は 1 行 1 コマンド (`ID` タブ タイトル タブ 既定キー)、`--dump-keymap` は `keymap.toml` の書式 (§7.5。割当ごとの行末の注釈にタイトルと層)。`--json` の形 (`format` = 1。項目を足すときは版を変えずに足し、意味を変えるときに版を上げる): `--list-commands` は `{ format, locale, commands: [ { id, title, description, kind, args: [ { name, type, required } ], when, permission, hidden, keys: [ { context, key, label, enhanced } ] } ] }`、`--dump-keymap` は `{ format, locale, bindings: [ { context, key, label, command, title, when, layer, enhanced, args, disabled_by } ] }` (`args` は割当の引数の表 (無ければ `{}`)、`disabled_by` はプレフィックスの衝突で使えなくなった割当を無効にしたチョードのキー (使える割当は空文字列)。どちらも v0.5 の M29 で足した。使えなくなった割当は、そのコンテキストの後ろに並ぶ)。`key` は設定の表記 (§7.2。小文字、`mod` は `ctrl` に解決)、`label` は画面の表記 (04 §7.8 の `key_notation`)、`type` は §11.2 の表記、`permission` は §11.6 の perm 列の表記 (`-` / `read` / `propose` / `ui`)、`when` の空文字列は常に真、`keys` は組込みの既定キーマップの割当。`--json` は `--dump-config` / `--list-commands` / `--dump-keymap` の修飾 (単独では使い方の誤り)。`--help` には出さない | v0.3 (隠し。v0.1 の予定から送った) |
-| `--dump-languages` | — | §9.1。組込みの言語定義にユーザー層の定義を重ねた結果を `[[language]]` の TOML で標準出力へ出して終了する (終了コード 0。`--no-config` なら組込みだけ。ワークスペース層は含めない。§9.6 の LANG-1) | v0.5 (**M33 の段 2 で入れる**) |
+| `--dump-languages` | — | §9.1。組込みの言語定義にユーザー層の定義を重ねた結果を `[[language]]` の TOML で標準出力へ出して終了する (終了コード 0。`--no-config` なら組込みだけ。ワークスペース層は含めない。§9.6 の LANG-1)。出すのは v0.5 で効く項目 (`name`・`display_name`・`file_types`・`file_names`・`file_globs`・`first_line`・`indent`・`comment`) だけで、診断は出さない (`--check-config` で見る)。`--help` に出す (04 §15.2 の `cli.help.option.dump_languages`) | v0.5 (M33 の段 2 で入れた) |
 | `--log-level <level>` | — | `EVE_LOG` より優先。**v0.2 の M9c で実装した** (値は `error` / `warn` / `info` / `debug` / `trace`。それ以外・値なしは使い方の誤り、終了コード 2) | v0.2 |
 | `--log-file <path>` | — | ログ出力先の変更 | v0.5 |
 | `--debug-commands` | — | `debug.*` をパレットに出す | v0.5 |

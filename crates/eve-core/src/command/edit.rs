@@ -553,11 +553,16 @@ fn has_selection(ctx: &CommandCtx<'_>) -> bool {
         .is_some_and(|v| v.selection.iter().any(|r| !r.is_empty()))
 }
 
+/// フォーカスの文書の字下げの単位と幅 (文書ごとの値、07 §3.6。言語定義の `indent` が効く、01 FR-704 AC-1)。
+fn doc_indent(ctx: &CommandCtx<'_>) -> (eve_config::IndentUnit, usize) {
+    let i = active(ctx)
+        .and_then(|(_, d)| ctx.state.document(d))
+        .map_or_else(crate::document::IndentSettings::default, |d| d.indent);
+    (i.unit, usize::from(i.width.max(1)))
+}
+
 fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    let (unit, width) = {
-        let c = ctx.state.config();
-        (c.indent_unit, c.indent_width.max(1) as usize)
-    };
+    let (unit, width) = doc_indent(ctx);
     // 選択範囲のインデント (v0.2、03 §15.3): 触れる各行の行頭に 1 段足す
     if has_selection(ctx) {
         let step = match unit {
@@ -592,10 +597,10 @@ fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
     })
 }
 
-/// Shift+Tab: 行頭空白のうち、表示幅が `editor.indent_width` 以内に収まる部分を削除する。
+/// Shift+Tab: 行頭空白のうち、表示幅が `editor.indent_width` (文書ごとの値) 以内に収まる部分を削除する。
 /// 選択があれば、触れる各行に同じ規則を適用する (v0.2、03 §15.3)。
 fn outdent(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    let width = ctx.state.config().indent_width.max(1) as usize;
+    let (_, width) = doc_indent(ctx);
     if has_selection(ctx) {
         return crate::command::line_ops::outdent_lines(ctx, move |doc, ls, le| {
             outdent_bytes(doc, ls, le, width)

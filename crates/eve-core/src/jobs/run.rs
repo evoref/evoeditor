@@ -356,6 +356,24 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
+        JobKind::PrecompileLanguages => {
+            eve_config::precompile_builtin();
+            JobResult::LanguagesPrecompiled
+        }
+        JobKind::ReadLanguages { dir, config } => {
+            let (mut defs, mut reports) = match dir {
+                Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),
+                None => (Vec::new(), Vec::new()),
+            };
+            let mut all = config.clone();
+            all.append(&mut defs);
+            let (set, more) = eve_config::LanguageSet::build(&all);
+            eve_config::merge_reports(&mut reports, more);
+            JobResult::LanguagesRead {
+                set: std::sync::Arc::new(set),
+                reports,
+            }
+        }
         JobKind::Metadata {
             path,
             purpose,

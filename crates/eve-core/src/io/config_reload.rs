@@ -31,6 +31,8 @@ pub struct ConfigSources {
     pub sets: Vec<String>,
     /// テーマファイルの置き場 (`<設定ディレクトリ>/themes`)。`None` は読まない。
     pub themes: Option<crate::FsPath>,
+    /// 言語定義のファイルの置き場 (`<設定ディレクトリ>/languages`、07 §9.6 の LANG-2)。`None` は読まない (`--no-config`)。
+    pub languages: Option<crate::FsPath>,
     /// ユーザーの言語ファイルの置き場 (`<設定ディレクトリ>/locales`、07 §17.4)。`None` は見ない (`--no-config`)。
     /// 読むのは起動時の bin だけで、ここは診断の一覧から開くときと、`config.reload` で変わったかを見るときに使う。
     pub locales: Option<crate::FsPath>,
@@ -184,6 +186,8 @@ impl EditorState {
             keymap: Some(dir.join(KEYMAP_FILE)),
             sets: Vec::new(),
             themes: Some(dir.join("themes")),
+            // 言語定義のファイルは、Host が読込元を渡したときだけ読む (読込元を置かない試験の起動のジョブを変えない)
+            languages: None,
             locales: Some(dir.join("locales")),
             conditions: eve_config::Conditions::default(),
         }
@@ -308,12 +312,16 @@ impl EditorState {
             changed = eve_config::changed_keys(self.config(), &resolved.config);
             self.io.theme_name_at = resolved.theme_name_at.clone();
             self.settings.config_origins = resolved.origins;
+            self.set_config_languages(resolved.languages);
             self.apply_reloaded_config(resolved.config);
             // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
             self.start_theme_read();
         }
+        // 言語定義のファイル (`languages/*.toml`) も読み直す (07 §6。設定ファイルにエラーがあれば、その言語定義は前のまま)。
+        // 開いている文書の言語は判定し直さない (LANG-7)
+        self.start_languages_read(false);
         self.keys.reloaded = Some((keymap, changed));
     }
 

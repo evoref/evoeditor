@@ -109,6 +109,8 @@ pub(crate) fn start(
     };
     let config = loaded.config;
     let config_origins = loaded.origins;
+    // 設定ファイルの言語定義 (`languages/*.toml` と一緒に、起動の後の io のジョブで重ねる、07 §9.6 の LANG-2)
+    let config_languages = loaded.languages;
     let mut config_reports = loaded.reports;
     // `config.reload` で言語ファイルが変わったかを見るための、起動時の候補と、選んだ言語のファイル (一覧で得たパス) の
     // 大きさと更新日時 (07 §17.4。中身は上で読んだ)
@@ -157,6 +159,7 @@ pub(crate) fn start(
         initial_encoding: encoding,
         config: Some(config),
         config_origins: Some(config_origins),
+        config_languages,
         config_reports,
         user_theme,
         config_sources: Some(sources),

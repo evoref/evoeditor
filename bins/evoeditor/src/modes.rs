@@ -8,8 +8,8 @@ use eve_core::Paths as _;
 
 use crate::exit::{EXIT_CONFIG_ERROR, EXIT_ERROR};
 use crate::settings::{
-    LocaleRead, LocaleSetup, config_sources, load_config, load_keymap, load_user_theme,
-    setup_locale,
+    LocaleRead, LocaleSetup, config_sources, load_config, load_keymap, load_languages,
+    load_user_theme, setup_locale,
 };
 use crate::{NativePaths, cli, texts};
 
@@ -84,6 +84,9 @@ pub(crate) fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> 
     {
         eve_config::merge_reports(&mut reports, theme_reports);
     }
+    // 言語定義 (`config.toml` の `[[language]]` の正規表現と、`languages/*.toml`。07 §9.6 の LANG-2、FR-704 AC-2)
+    let (_, language_reports) = load_languages(&paths, &src, &resolved.languages);
+    eve_config::merge_reports(&mut reports, language_reports);
     let mut error = resolved.has_error || setup.has_error();
     let locale_reports = setup.reports.len();
     reports.extend(setup.reports.iter().cloned());
@@ -158,6 +161,21 @@ pub(crate) fn crash_report() -> u8 {
     let _ = writeln!(out);
     texts::crash_report_guide(&format!("{}/issues", env!("CARGO_PKG_REPOSITORY")))
         .write_to(&mut out);
+    0
+}
+
+/// `--dump-languages` (07 §18.3): 組込みの言語定義にユーザー層の定義 (設定ファイルの `[[language]]` と `languages/*.toml`) を
+/// 重ねた結果を `[[language]]` の TOML で出し、終える (`--no-config` なら組込みだけ。ワークスペース層は含めない、07 §9.6 の
+/// LANG-1)。診断は出さない (`--check-config` で見る)。
+pub(crate) fn dump_languages(args: &cli::ConfigArgs) -> u8 {
+    let paths = match NativePaths::from_process_env() {
+        Ok(p) => p,
+        Err(_) => return EXIT_ERROR,
+    };
+    let src = config_sources(&paths, args);
+    let resolved = load_config(&src);
+    let (set, _) = load_languages(&paths, &src, &resolved.languages);
+    print!("{}", set.dump());
     0
 }
 

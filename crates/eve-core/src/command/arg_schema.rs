@@ -93,6 +93,8 @@ const TABLE: &[(&str, &[ArgSpec])] = &[
         ids::FILE_SET_LINE_ENDING,
         &[arg("eol", ArgType::Enum(LINE_ENDINGS), true)],
     ),
+    // 言語 ID か `auto` (07 §9.6 の LANG-8)。言語の一覧は設定で変わるので、表の列挙ではなく文字列で受け、実行のときに確かめる
+    (ids::LANG_SET, &[arg("language", ArgType::String, false)]),
     (ids::PANE_GROW, CELLS),
     (ids::PANE_SHRINK, CELLS),
     (ids::SEARCH_OPEN, &[arg("query", ArgType::String, false)]),

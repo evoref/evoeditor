@@ -1230,6 +1230,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `ui.config_origin.language_builtin` / `.language_file` / `.editorconfig` | 同上 (文書ごとのキー、07 §3.6) | 言語 {language} (組込み) / 言語 {language}: {file}:{line} / .editorconfig:{line} [{section}] | language {language} (built-in) / language {language}: {file}:{line} / .editorconfig:{line} [{section}] |
 | `ui.config_origin.condition` | 条件付きセクションの値 (07 §3.4 の COND-7)。条件付きセクションの中の診断の本文にも、同じ形で条件を添える (`{origin}` に診断の本文、COND-4) | {origin} [{condition}] | {origin} [{condition}] |
 | `ui.lang_set.title` / `ui.lang_set.auto` | `lang.set` の一覧 (07 §9.6 の LANG-8) | 言語を選ぶ (今: {language}) / 自動で判定 | Set Language (current: {language}) / Detect automatically |
+| `ui.lang_set.current` | 同上。今の言語の行の右の列 (M33 の段 2 で足した) | {language} (今の言語) | {language} (current) |
 | `info.lang.changed` | 言語を替えた | 言語を {language} にしました | Language set to {language} |
 | `info.comment.unsupported` | 行コメントの記号の無い言語 (03 §15.6 の CMT-6) | {language} には行コメントの記号がありません | {language} has no line comment marker |
 | `info.comment.no_lines` | 対象が空行だけ (CMT-1) | コメントにする行がありません | No lines to comment |
@@ -1240,6 +1241,14 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `msg.config.condition_in_keymap` | `keymap.toml` の条件付きセクション (COND-6。警告。条件の種類ごとに 1 件) | keymap.toml では条件付きセクション ({item}) を使えません / OS ごとの割当は when = "os == \"windows\"" のように書いてください。このセクションは使いません | Conditional sections ({item}) are not supported in keymap.toml / Use when = "os == \"windows\"" for OS-specific bindings. This section is not used |
 | `msg.language.ambiguous` | 同じ層の 2 つの言語が当たる (07 §9.6 の LANG-6 (d)。警告) | {file} は言語 {first} と {second} の両方に当たるため、{second} を使います / どちらかの定義の file_types などを直してください | {file} matches both {first} and {second}; using {second} / Fix file_types or other patterns in one of the definitions |
 | `msg.language.invalid_name` | 使えない言語の名前 (LANG-3。警告) | 言語の名前 {value} は使えません / 英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません) | Language name {value} is invalid / Use lowercase letters, digits, _, + and - (up to 32; plain is reserved) |
+| `msg.language.missing_name` | `name` の無い定義 (LANG-3。警告。M33 の段 2 で足した、07 §9.6 の段 2 の細目) | 言語定義に name がありません / name = "rust" のように言語の名前を書いてください。この定義は使いません | The language definition has no name / Write the language name, as in name = "rust". This definition is not used |
+| `msg.language.too_long` | 長さ・数の上限の超過 (LANG-3。警告。同上) | {item} が長すぎます / display_name は 64 文字、first_line と配列の要素は 256 バイト、配列は 64 個までです。この項目は使いません | {item} is too long / display_name is up to 64 characters, first_line and array items up to 256 bytes, and arrays up to 64 items. This item is not used |
+| `msg.language.bad_comment` | 使えない `comment.line` (LANG-3。警告。同上) | {item} の記号 {value} は使えません / 1〜16 バイトで、空白と制御文字を含まない記号にしてください。この項目は使いません | The marker {value} of {item} is invalid / Use 1 to 16 bytes without spaces or control characters. This item is not used |
+| `msg.language.bad_first_line` | 組めない `first_line` (LANG-3。警告。`{reason}` は `regex` の説明の最後の行。同上) | {item} の正規表現 {value} を組めません ({reason}) / 正規表現を直してください。この項目は使いません | The regular expression {value} of {item} is invalid ({reason}) / Fix the regular expression. This item is not used |
+| `msg.language.bad_glob` | 資源の上限を超える `file_globs` の glob (07 §10.3 の EC-4。警告。同上) | {item} の glob {value} は複雑すぎます / {{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。この glob は使いません | The glob {value} of {item} is too complex / Nest {{ up to 8 levels and use up to 1,024 alternatives in total. This glob is not used |
+| `msg.language.too_many_files` | `languages/` のファイルが 256 を超えた (LANG-2。警告。`{count}` は上限。同上) | languages/ の言語定義のファイルが {count} 個を超えています / 名前の順で {count} 個までを読みます。残りは読みません | languages/ has more than {count} language definition files / The first {count} files in name order are read; the rest are not |
+| `msg.language.file_too_large` | 256 KiB を超える言語定義のファイル (LANG-2。警告。同上) | この言語定義のファイルは大きすぎるため読みません / 256 KiB 以下にしてください | This language definition file is too large and is not read / Keep it at 256 KiB or less |
+| `msg.config.out_of_range_no_default` | 範囲外のうち、既定値を持たない項目 (言語定義の `indent.width` など。同上) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は使いません | The value {value} of {item} is out of range / Specify a value in {range}. This item is not used |
 | `msg.workspace.not_owned` | 所有者が違う (07 §12.1 の OWN-7。警告) | {path} を読みませんでした: 所有者が {owner} です / 自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: it is owned by {owner} / Take ownership (takeown / chown), or add it to workspace.safe_directories in your user settings |
 | `msg.workspace.others_can_write` | 他人が書ける (OWN-7。警告) | {path} を読みませんでした: ほかのユーザー ({who}) が書き込めます / Windows は icacls で継承を切ってそのアカウントを外し、Unix は chmod o-w で外してください | Did not read {path}: other users ({who}) can write to it / On Windows, disable inheritance with icacls and remove that account; on Unix, run chmod o-w |
 | `msg.workspace.owner_unknown` | 判定できない FS (OWN-7。警告) | {path} を読みませんでした: この FS ({fs}) では所有者を判定できません / 読むときは、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: ownership cannot be checked on this file system ({fs}) / To read it, add it to workspace.safe_directories in your user settings |
@@ -1732,7 +1741,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config_diagnostics.no_match` | 同上。絞り込みに一致する診断が無いとき | 一致する診断はありません |
 | `ui.config_diagnostics.item` | 同上。1 行の本文。`{level}` は `ui.history.level.*`、`{text}` / `{hint}` は診断の本文と対処 (`msg.config.*` の `.text` / `.hint`) | {level}: {text} / {hint} |
 | `ui.config_diagnostics.item_no_hint` | 同上。対処の無い診断 (「このバージョンでは未対応」の情報診断) の 1 行 | {level}: {text} |
-| `ui.config_show.title` | 設定の値と由来の一覧 (`config.show`、07 §3.5。v0.5 の M33) の見出し。`{name}` はフォーカスの文書の名前、`{language}` は文書の言語 (M33 の段 1 では `plain`) | 設定 ({name}・{language}) |
+| `ui.config_show.title` | 設定の値と由来の一覧 (`config.show`、07 §3.5。v0.5 の M33) の見出し。`{name}` はフォーカスの文書の名前、`{language}` は文書の言語 ID (言語を決めていない読込中の文書と、文書が無いときは `plain`。M33 の段 1 では常に `plain`) | 設定 ({name}・{language}) |
 | `ui.config_show.placeholder` | 同上。入力欄が空のときの案内 (キー・値・由来で絞り込む) | キー・値・由来で絞り込み |
 | `ui.config_show.no_match` | 同上。絞り込みに一致する行が無いとき | 一致する設定はありません |
 | `ui.config_show.item` | 同上。1 行の本文 (`{key}` は公開キー、`{value}` は TOML の値の表記) | {key} = {value} |
@@ -1740,6 +1749,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config_origin.user` | 同上。ユーザー層のファイル (`{file}` は `config.toml` か `--config` のパス、`{line}` は行) | ユーザー: {file}:{line} |
 | `ui.config_origin.cli` | 同上。コマンドライン層 (`--set`) | --set |
 | `ui.config_origin.condition` | 同上。条件付きセクションの値 (`{origin}` は上の由来、`{condition}` は `os.windows` など。07 §3.4 の COND-7)。条件付きセクションの中の設定の診断の本文にも使う (`{origin}` に本文、COND-4) | {origin} [{condition}] |
+| `ui.config_origin.language_builtin` | 同上。文書ごとのキーの値を組込みの言語定義で決めた (07 §3.6。`{language}` は言語 ID。v0.5 の M33 の段 2) | 言語 {language} (組込み) |
+| `ui.config_origin.language_file` | 同上。ユーザー層の言語定義で決めた (`{file}` は `config.toml`・`languages/<file>.toml`、`{line}` は値を書いた行) | 言語 {language}: {file}:{line} |
+| `ui.lang_set.title` | 言語の一覧 (`lang.set`、07 §9.6 の LANG-8。v0.5 の M33 の段 2) の見出し。`{language}` はフォーカスの文書の言語 ID | 言語を選ぶ (今: {language}) |
+| `ui.lang_set.auto` | 同上。先頭の行 (明示の指定を外して判定し直す) | 自動で判定 |
+| `ui.lang_set.current` | 同上。今の言語の行の右の列 (`{language}` は言語 ID) | {language} (今の言語) |
 | `ui.help.title` | ヘルプ画面の見出し (04 §8.6。v0.2) | ヘルプ |
 | `ui.help.footer` | ヘルプ画面の下端の操作の案内 | ↑↓ PgUp PgDn で移動、Esc で閉じる |
 | `ui.history.title` | メッセージ履歴 (`ui.message_history`、§8.9。v0.2) の見出し | メッセージ履歴 |
@@ -1929,6 +1943,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.pane.no_room` (v0.5) | `pane.split_right` / `pane.split_down` で、分割した後の木の最小が編集面に入らないので分割しなかった (03 §9.9 の PANE-4 (a)) | ペインを分ける広さがありません。端末を広げるか、ほかのペインを閉じてください |
 | `info.pane.collapsed` (v0.5) | 編集面が木の最小より小さくなり、フォーカスのペインだけを出す縮退表示に入った (入ったときに 1 回。03 §9.9 の PANE-4 (b)。縮退表示の間はステータスバーに `status.degraded.panes.*`) | 端末が狭いので、フォーカスのペインだけを表示しています |
 | `info.pane.single_pane` (v0.5) | ペインが 1 つだけなので、`when` が `pane.split` のペインのコマンド (`pane.close`・移動・大きさ・揃える) をキーで実行して断った (03 §9.9 の PANE-5 (d)。「割り当てられていません」とは出さない。パレットでは淡色にして `ui.palette.reason.single_pane`) | ペインが 1 つだけです |
+| `info.lang.changed` (v0.5) | `lang.set` で文書の言語を替えた (07 §9.6 の LANG-8。`{language}` は `display_name (ID)`、表示の名前が ID と同じなら ID) | 言語を {language} にしました |
 | `info.cursor.limit` (v0.5) | カーソルを足す操作 (`select.add_next_match`・`select.add_cursor_above` / `_below`。後の版の矩形選択) で、足した後の数が上限 (`{limit}` = 10,000、千の区切りを付けない) を超えるので、選択を変えなかった (03 §4.5.1 の MCUR-6) | カーソルは {limit} 個までです。選択を変えませんでした |
 | `info.select.too_many_matches` (v0.5) | `select.all_matches` で、一致の数が上限 (`{limit}`) を超えるので、何も選ばなかった (一部だけを選ばない。03 §4.5.1 の MCUR-3) | 一致が {limit} 件を超えるため、選択を変えませんでした |
 | `info.select.no_word` (v0.5) | `select.add_next_match` / `select.all_matches` で、主のカーソルの位置に単語が無い (空白・改行の上。03 §4.5.1 の MCUR-2 / MCUR-3) | カーソルの位置に単語がありません |
@@ -2003,6 +2018,16 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.type_mismatch` | 型不一致。`{actual}` は書かれた値の型、`{expected}` は期待する型 (どちらも下の `ui.config.type.*`)。該当項目は下位層の値 (v0.1 は既定値) に戻す | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は既定値 {default} を使います |
 | `msg.config.type_mismatch_no_default` | 型不一致のうち、既定値を持たない項目 (節が表でない `editor = 1`、テーマファイルのロール `ui.selection = 1` など)。`msg.config.type_mismatch` の `{default}` が空になる場面の代わりに出す。該当の項目は使わない (テーマのロールは継いだ値のまま) | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は使いません |
 | `msg.config.out_of_range` | 範囲外。`{range}` は許容範囲 (例 `1〜16`)。`{default}` は戻した値 (丸める項目 (07 §4.2) は丸めた値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は {default} を使います |
+| `msg.config.out_of_range_no_default` (v0.5) | 範囲外のうち、既定値を持たない項目 (言語定義の `indent.width` など、07 §9.6)。`msg.config.out_of_range` の `{default}` が空になる場面の代わりに出す。該当の項目は使わない (下の層の値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は使いません |
+| `msg.language.ambiguous` (v0.5) | 同じ層の 2 つの言語定義が文書に当たった (07 §9.6 の LANG-6 (d)。警告。後の定義 `{second}` を使う。`{file}` は文書のファイル名。場所は使う定義の、当たった名前を書いた行) | {file} は言語 {first} と {second} の両方に当たるため、{second} を使います / どちらかの定義の file_types などを直してください |
+| `msg.language.invalid_name` (v0.5) | 使えない言語の名前 (LANG-3。警告。その定義を使わない) | 言語の名前 {value} は使えません / 英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません) |
+| `msg.language.missing_name` (v0.5) | `name` の無い定義 (LANG-3。警告。その定義を使わない) | 言語定義に name がありません / name = "rust" のように言語の名前を書いてください。この定義は使いません |
+| `msg.language.too_long` (v0.5) | `display_name` (64 文字)・`first_line` と配列の要素 (256 バイト)・配列 (64 個) の上限の超過 (LANG-3。警告。その項目を使わない) | {item} が長すぎます / display_name は 64 文字、first_line と配列の要素は 256 バイト、配列は 64 個までです。この項目は使いません |
+| `msg.language.bad_comment` (v0.5) | 使えない `comment.line` (1〜16 バイトで、空白・制御文字を含まない。LANG-3。警告) | {item} の記号 {value} は使えません / 1〜16 バイトで、空白と制御文字を含まない記号にしてください。この項目は使いません |
+| `msg.language.bad_first_line` (v0.5) | 組めない `first_line` の正規表現 (LANG-3。警告。`{reason}` は `regex` の説明の最後の行) | {item} の正規表現 {value} を組めません ({reason}) / 正規表現を直してください。この項目は使いません |
+| `msg.language.bad_glob` (v0.5) | 資源の上限 (`{` の入れ子 8 段・選択肢 1,024 個、07 §10.3 の EC-4) を超える `file_globs` の glob (警告。その glob を使わない) | {item} の glob {value} は複雑すぎます / {{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。この glob は使いません |
+| `msg.language.too_many_files` (v0.5) | `languages/` の `*.toml` が 256 を超えた (LANG-2。警告。`languages/` の名前で 1 件。`{count}` は上限) | languages/ の言語定義のファイルが {count} 個を超えています / 名前の順で {count} 個までを読みます。残りは読みません |
+| `msg.language.file_too_large` (v0.5) | 256 KiB を超える言語定義のファイル (LANG-2。警告。そのファイルを読まない) | この言語定義のファイルは大きすぎるため読みません / 256 KiB 以下にしてください |
 | `msg.config.multi_cursor_always` (v0.5) | 設定の診断 (情報)。設定に `editor.multi_cursor` を書いた (公開しない。複数カーソルは常に有効、07 §5.1。値は使わない。M32 の段 3) | editor.multi_cursor は使えません。複数カーソルは常に有効です / 使わないときは keymap.toml で足す操作のキーを "none" にしてください |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
 | `msg.config.invalid_value_no_default` | 列挙値不正のうち、既定値を持たない項目 (テーマファイルの色 `ui.selection.fg = "nope"` など)。`msg.config.invalid_value` の `{default}` が空になる場面の代わりに出す。該当の値は使わない | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は使いません |
@@ -2094,6 +2119,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.crash_report` (v0.2) | `--crash-report` | Show the latest crash log and exit | 最新のクラッシュログを表示して終了します |
 | `cli.help.option.check_config` (v0.2) | `--check-config` | Check the settings, print the problems, and exit | 設定を確かめて問題を表示し、終了します |
 | `cli.help.option.dump_config` (v0.2) | `--dump-config [--defaults] [--json]` | Print the resolved settings (or the defaults) and exit | 解決した設定 (または既定値) を表示して終了します |
+| `cli.help.option.dump_languages` (v0.5) | `--dump-languages` (07 §18.3。v0.5 の M33 の段 2) | Print the language definitions (built-in merged with yours) and exit | 言語定義 (組込みにユーザーの定義を重ねたもの) を表示して終了します |
 | `cli.help.option.wait` | `--wait` | Accepted for $EDITOR compatibility; has no effect | $EDITOR に設定するときの互換用です (何もしません) |
 | `cli.help.option.stdin` (v0.4) | `-` (07 §18.2) | Read standard input into an untitled document | 標準入力を読んで無題の文書として開きます |
 | `cli.help.option.end_of_options` | `--` | Treat the rest as file names | 以降をファイル名として扱います |

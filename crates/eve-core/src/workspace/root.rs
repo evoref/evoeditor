@@ -326,6 +326,11 @@ impl EditorState {
         for path in std::mem::take(&mut self.workspace.held_dirs) {
             self.notify_startup_dir(&path);
         }
+        // 言語定義の `/` を含む `file_globs` はルートからの相対パスに当てるので、ルートが決まったら明示の指定の無い文書の言語を
+        // 判定し直す (起動時に開いた文書と後で開いた文書で言語が変わらない、07 §9.6 の LANG-7)
+        if self.workspace.current.is_some() {
+            self.redetect_languages();
+        }
         // ファインダ: 待っていれば走査を始め、`DIR` で決まったら開く (03 §12.7.1、07 §18.2)
         if let Some(source) = self.workspace.current.as_ref().map(Workspace::source) {
             self.finder_on_root(source);

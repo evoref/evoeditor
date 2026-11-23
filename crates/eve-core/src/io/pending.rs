@@ -21,6 +21,10 @@ pub(crate) enum Pending {
     ConfigReload,
     /// テーマファイルの読込 (07 §8.6)。
     ThemeRead,
+    /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
+    LanguagesRead { startup: bool },
+    /// 組込みの言語定義の正規表現を組むジョブ (結果は使わない)。
+    LanguagesPrecompile,
     Open {
         doc: DocumentId,
         view: ViewId,
@@ -176,6 +180,8 @@ impl EditorState {
                 Pending::Save { .. }
                 | Pending::ConfigReload
                 | Pending::ThemeRead
+                | Pending::LanguagesRead { .. }
+                | Pending::LanguagesPrecompile
                 | Pending::RecoveryScan
                 | Pending::LastVersion
                 | Pending::WorkspaceRoot
@@ -338,6 +344,8 @@ impl EditorState {
             }
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
+            Pending::LanguagesRead { startup } => self.finish_languages_read(r, startup),
+            Pending::LanguagesPrecompile => {}
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

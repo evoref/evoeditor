@@ -7,6 +7,9 @@
 //! - **BM-101a-locale** (参考、v0.4 の M26): BM-101a と同じ区間を、設定ディレクトリに全訳のユーザーの言語ファイル
 //!   (`locales/ja.toml` に同梱の `ja` の写し) を置いて測る (`--only 101l`)。BM-101a との差が言語ファイルの読込・検査・重ね合わせの
 //!   増分 (目安は 07 §17.4。判定の条件にしない、09 §5.2)。同じ回に BM-101a と交互に測り、差の中央値も出す。
+//! - **BM-101a-lang / BM-102a-lang** (v0.5 の M33 の段 2): BM-101a / 102a と同じ区間を、`languages/` に 20 ファイルと、条件付き
+//!   セクションと `[[language]]` のある `config.toml` を置いた設定ディレクトリで測る (`--only 101g,102g`。07 §12.6.1 の「計測」)。
+//!   同じ回に設定ディレクトリの無い起動と交互に測り、差の中央値も出す。
 //! - **BM-103b**: 入力スレッドが入力を読み終えた時刻 → 描画の `write` が戻るまで (判定区間 (b))。打鍵間隔 30 ms。
 //! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
 //! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。正規表現のモードは
@@ -437,6 +440,84 @@ fn startup_locale_pair(dir: &Path, runs: usize, warmup: usize) -> (Vec<Duration>
         }
     }
     (with, without)
+}
+
+/// 言語定義の設定ディレクトリ (BM-101a-lang / 102a-lang): 条件付きセクションと `[[language]]` のある `config.toml` と、
+/// `languages/` に 20 ファイル (各 3 言語)。
+fn language_config(dir: &Path) -> String {
+    let conf = dir.join("lang-config");
+    let langs = conf.join("languages");
+    std::fs::create_dir_all(&langs).expect("設定ディレクトリ");
+    std::fs::write(
+        conf.join("config.toml"),
+        "[editor]\ntab_width = 4\n[os.windows.file]\ndefault_line_ending = \"crlf\"\n[os.linux.view]\nambiguous_width = 2\n\
+         [env.ssh.clipboard]\nosc52 = \"always\"\n[[language]]\nname = \"rust\"\nindent = { width = 4 }\n",
+    )
+    .expect("config.toml");
+    for i in 0..20 {
+        let mut text = String::new();
+        for j in 0..3 {
+            text.push_str(&format!(
+                "[[language]]\nname = \"lang{i}x{j}\"\ndisplay_name = \"Lang {i}-{j}\"\nfile_types = [\"l{i}x{j}\", \"m{i}x{j}\"]\n\
+                 file_globs = [\"*.g{i}x{j}\"]\nfirst_line = '^#!.*\\bl{i}x{j}\\b'\nindent = {{ unit = \"space\", width = 2 }}\ncomment = {{ line = \"#\" }}\n"
+            ));
+        }
+        std::fs::write(langs.join(format!("l{i:02}.toml")), text).expect("言語定義");
+    }
+    conf.to_str().unwrap().to_owned()
+}
+
+/// 起動 (a) の区間を、言語定義の設定ディレクトリと設定ディレクトリの無い起動とで、回ごとに交互に測る (BM-101a-lang /
+/// 102a-lang)。戻り値は (言語定義あり, なし)。
+fn startup_lang_pair(
+    dir: &Path,
+    file: Option<&Path>,
+    runs: usize,
+    warmup: usize,
+) -> (Vec<Duration>, Vec<Duration>) {
+    let conf = language_config(dir);
+    let env = [("EVE_CONFIG_DIR", conf.as_str())];
+    let (mut with, mut without) = (Vec::new(), Vec::new());
+    for i in 0..runs + warmup {
+        let (a, _) = startup_env(dir, file, 1, 0, &env);
+        let (b, _) = startup_env(dir, file, 1, 0, &[]);
+        if i >= warmup {
+            with.extend(a);
+            without.extend(b);
+        }
+    }
+    (with, without)
+}
+
+/// 交互に測った組の報告 (差の中央値を足す)。
+fn report_pair(
+    id: &str,
+    pair_id: &str,
+    label: &str,
+    with: Vec<Duration>,
+    without: &[Duration],
+    json: bool,
+    quick: bool,
+) {
+    let mut diff: Vec<f64> = with
+        .iter()
+        .zip(without)
+        .map(|(a, b)| a.as_secs_f64() * 1e3 - b.as_secs_f64() * 1e3)
+        .collect();
+    diff.sort_by(f64::total_cmp);
+    let mut base = without.to_vec();
+    base.sort();
+    let extra_json = format!(
+        ",\"pair_id\":\"{pair_id}\",\"pair_p50_ms\":{:.2},\"diff_p50_ms\":{:.2}",
+        ms(percentile(&base, 0.5)),
+        diff[diff.len() / 2]
+    );
+    let extra_text = format!(
+        "  同じ回の {pair_id} (設定ディレクトリなし) の p50 {:.2} ms、増分の中央値 {:.2} ms",
+        ms(percentile(&base, 0.5)),
+        diff[diff.len() / 2]
+    );
+    report_with(id, label, with, json, quick, &extra_json, &extra_text);
 }
 
 /// `startup` に、子プロセスの環境変数 `env` を足したもの。
@@ -1875,6 +1956,31 @@ fn main() {
             quick,
             &extra_json,
             &extra_text,
+        );
+    }
+    if traced && want("101g") {
+        let (with, without) = startup_lang_pair(&dir, None, runs, warmup);
+        report_pair(
+            "BM-101a-lang",
+            "BM-101a",
+            "起動 (a) main 入口 → 最初の Frame (languages/ に 20 ファイルと条件付きセクション)",
+            with,
+            &without,
+            json,
+            quick,
+        );
+    }
+    if traced && want("102g") {
+        let file = make_one_mb(&dir);
+        let (with, without) = startup_lang_pair(&dir, Some(&file), runs, warmup);
+        report_pair(
+            "BM-102a-lang",
+            "BM-102a",
+            "起動 (a) main 入口 → 本文の最初の Frame (1 MB。languages/ に 20 ファイルと条件付きセクション)",
+            with,
+            &without,
+            json,
+            quick,
         );
     }
     if traced && want("102") {

@@ -58,6 +58,7 @@ pub const FILE_TOGGLE_READ_ONLY: &str = "file.toggle_read_only";
 pub const HELP_COMMANDS: &str = "help.commands";
 pub const HELP_KEYS: &str = "help.keys";
 pub const HELP_OPEN: &str = "help.open";
+pub const LANG_SET: &str = "lang.set";
 pub const PANE_CLOSE: &str = "pane.close";
 pub const PANE_EQUALIZE: &str = "pane.equalize";
 pub const PANE_FOCUS_DOWN: &str = "pane.focus_down";
@@ -116,7 +117,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 111] = [
+pub const ALL: [&str; 112] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -173,6 +174,7 @@ pub const ALL: [&str; 111] = [
     HELP_COMMANDS,
     HELP_KEYS,
     HELP_OPEN,
+    LANG_SET,
     PANE_CLOSE,
     PANE_EQUALIZE,
     PANE_FOCUS_DOWN,

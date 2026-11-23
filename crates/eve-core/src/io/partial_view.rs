@@ -550,6 +550,8 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         Pending::Search => state.find.search.as_ref().map(|s| s.doc()),
         Pending::ConfigReload
         | Pending::ThemeRead
+        | Pending::LanguagesRead { .. }
+        | Pending::LanguagesPrecompile
         | Pending::RecoveryScan
         | Pending::LastVersion
         | Pending::WorkspaceRoot
