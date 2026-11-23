@@ -577,10 +577,14 @@ proptest! {
         let orig = split(&text);
         // CR の行の次の、記号 (と空白) だけで LF で終わる行は、外すと CR と LF が隣り合って CRLF の 1 つの改行になる
         // (行の数が変わる。03 §15.6 の細目 (c))。そのときは行ごとの比べ方だけを飛ばし、本文と Undo / Redo は確かめる
-        let merges_crlf = orig.windows(2).any(|w| {
-            w[0].1 == "\r" && w[1].1 == "\n" && (w[1].0 == token || w[1].0 == format!("{token} "))
-        });
         let content: Vec<usize> = targets.iter().copied().filter(|&l| !is_blank(&orig[l].0)).collect();
+        // 対の 2 行目が対象の行 (外す行) のときだけ
+        let merges_crlf = (1..orig.len()).any(|i| {
+            orig[i - 1].1 == "\r"
+                && orig[i].1 == "\n"
+                && content.contains(&i)
+                && (orig[i].0 == token || orig[i].0 == format!("{token} "))
+        });
         h.clear_log();
         prop_assert_eq!(toggle(&mut h), CommandResult::Done);
         if content.is_empty() {
@@ -620,7 +624,7 @@ proptest! {
             // (a) もう一度で元に戻る
             toggle(&mut h);
             prop_assert_eq!(h.doc_text(), text, "付けてから外すと元に戻る");
-        } else if same_lines {
+        } else {
             // 外す向き: 外した後に付けると、各行が「最も浅い字下げの位置 + 記号 + 空白」の形になる (外した後もすべての行が
             // 記号で始まっていれば (`###`)、2 回目も外す向きなので調べない)。2 回目の対象は、外した後の選択から決める
             // (選択の端が外した記号の中にあると、消した範囲の始まりへ寄るので、行頭へ寄った終わりの行は対象から外れる)

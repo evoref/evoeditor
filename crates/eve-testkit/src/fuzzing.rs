@@ -819,7 +819,7 @@ fn bracket_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("bracket {typed:?} + goto_bracket ×{n}")
 }
 
-/// 行コメントの切替 (docs/03 §15.6、07 §12.6.1 の fuzz。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
+/// 行コメントの切替 (docs/03 §15.6、docs/09 §3.3 の `fuzz_editor`。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
 /// (`#`・`//`・`;`) か `plain` に替え、フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を
 /// 含む) を置いて `edit.toggle_comment` を 1〜2 回実行し、ときどき Undo する。
 fn toggle_comment_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
