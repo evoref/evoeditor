@@ -130,8 +130,6 @@ pub(crate) struct Settings {
     pub(crate) ambiguous_noted: BTreeSet<(String, String)>,
     /// 起動時の言語定義の読込を積んだ。
     pub(crate) languages_requested: bool,
-    /// 起動時の組込みの正規表現を組むジョブを積んだ。
-    pub(crate) languages_precompiled: bool,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -404,7 +402,6 @@ impl EditorState {
                 config_languages: Vec::new(),
                 ambiguous_noted: BTreeSet::new(),
                 languages_requested: false,
-                languages_precompiled: false,
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
                     eve_view::ColorDepth::TrueColor,

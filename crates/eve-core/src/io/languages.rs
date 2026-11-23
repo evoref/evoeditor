@@ -7,7 +7,7 @@
 
 use eve_config::{DiagKind, Diagnostic, LanguageDef, LanguageProblem, Severity};
 
-use crate::io::fs::{FileKind, FileSystem, FsErrorKind};
+use crate::io::fs::{EntryKind, FileKind, FileSystem, FsErrorKind};
 use crate::io::fspath::FsPath;
 
 /// 言語定義のファイルの診断の表示名の接頭辞 (`languages/<file>.toml`)。
@@ -35,35 +35,36 @@ pub fn read_language_dir(
     fs: &dyn FileSystem,
     dir: &FsPath,
 ) -> (Vec<LanguageDef>, Vec<(String, Vec<Diagnostic>)>) {
-    let mut names: Vec<String> = match fs.list_dir_names(dir) {
-        Ok(n) => n,
-        Err(_) => return (Vec::new(), Vec::new()),
-    };
-    names.retain(|n| n.ends_with(".toml"));
+    let mut names = list_toml(fs, dir);
     names.sort();
     let mut defs = Vec::new();
     let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
     let mut read = 0usize;
-    for name in &names {
+    for (name, known) in &names {
         let path = dir.join(name);
         let shown = format!("{LANGUAGES_PREFIX}{name}");
-        let meta = match fs.metadata(&path) {
-            Ok(m) => m,
-            Err(e) => {
-                reports.push((
-                    shown,
-                    vec![whole(
-                        Severity::Error,
-                        DiagKind::Syntax {
-                            message: format!("{:?}", e.kind),
-                        },
-                        String::new(),
-                    )],
-                ));
-                continue;
-            }
+        // 列挙で種類と大きさが分かったファイルは、項目ごとの `stat` をしない (Windows。起動時の文書を開くのを待たせない)
+        let meta = match known {
+            Some(len) => (FileKind::File, *len),
+            None => match fs.metadata(&path) {
+                Ok(m) => (m.kind, m.len),
+                Err(e) => {
+                    reports.push((
+                        shown,
+                        vec![whole(
+                            Severity::Error,
+                            DiagKind::Syntax {
+                                message: format!("{:?}", e.kind),
+                            },
+                            String::new(),
+                        )],
+                    ));
+                    continue;
+                }
+            },
         };
-        if meta.kind != FileKind::File {
+        let (kind, len) = meta;
+        if kind != FileKind::File {
             continue;
         }
         if read == LANGUAGE_FILES_MAX {
@@ -78,7 +79,7 @@ pub fn read_language_dir(
             break;
         }
         read += 1;
-        if meta.len > LANGUAGE_FILE_MAX_BYTES {
+        if len > LANGUAGE_FILE_MAX_BYTES {
             reports.push((
                 shown,
                 vec![whole(
@@ -110,6 +111,39 @@ pub fn read_language_dir(
         }
     }
     (defs, reports)
+}
+
+/// 列挙の項目の上限 (`languages/` にほかのファイルがあっても、言語定義の上限の数より多く見る)。
+const LIST_MAX_ENTRIES: usize = 4_096;
+
+/// `dir` の `*.toml` の (名前, 列挙で分かった大きさ)。大きさは、列挙で通常のファイルとその大きさが分かったとき (Windows) だけ。
+/// ディレクトリ・FIFO などは除き、シンボリックリンクと大きさの分からないものは `None` (呼び側が `metadata` で辿る)。列挙を
+/// 実装していない Port は名前の一覧で代える。無ければ空。
+fn list_toml(fs: &dyn FileSystem, dir: &FsPath) -> Vec<(String, Option<u64>)> {
+    let toml = |n: &str| n.ends_with(".toml");
+    match fs.read_dir(dir, LIST_MAX_ENTRIES) {
+        Ok(listing) => listing
+            .entries
+            .into_iter()
+            .filter_map(|e| {
+                let name = e.name.to_str()?.to_owned();
+                let known = match e.kind {
+                    EntryKind::File => e.len,
+                    EntryKind::Symlink => None,
+                    EntryKind::Dir | EntryKind::Other => return None,
+                };
+                toml(&name).then_some((name, known))
+            })
+            .collect(),
+        Err(e) if e.kind == FsErrorKind::Unsupported => fs
+            .list_dir_names(dir)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|n| toml(n))
+            .map(|n| (n, None))
+            .collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 /// 1 ファイルを上限まで読み、UTF-8 の文字列にする。

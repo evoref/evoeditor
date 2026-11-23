@@ -345,7 +345,7 @@ impl EditorState {
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
             Pending::LanguagesRead { startup } => self.finish_languages_read(r, startup),
-            Pending::LanguagesPrecompile => {}
+            Pending::LanguagesPrecompile => self.finish_languages_precompile(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

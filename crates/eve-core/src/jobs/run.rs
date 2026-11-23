@@ -356,10 +356,10 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
-        JobKind::PrecompileLanguages => {
-            eve_config::precompile_builtin();
-            JobResult::LanguagesPrecompiled
-        }
+        JobKind::PrecompileLanguages { set } => JobResult::LanguagesPrecompiled {
+            reports: set.precompile(),
+            set: set.clone(),
+        },
         JobKind::ReadLanguages { dir, config } => {
             let (mut defs, mut reports) = match dir {
                 Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),

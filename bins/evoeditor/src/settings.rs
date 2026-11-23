@@ -138,6 +138,7 @@ pub(crate) fn load_languages(
     }
     let (set, built) = eve_config::LanguageSet::build(&defs);
     eve_config::merge_reports(&mut reports, built);
+    eve_config::merge_reports(&mut reports, set.precompile());
     (set, reports)
 }
 

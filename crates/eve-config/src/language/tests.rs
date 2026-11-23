@@ -81,6 +81,36 @@ fn 先頭行は名前で決まらないときだけ() {
 }
 
 #[test]
+fn 行頭に要る文字列は記号の前まで() {
+    assert_eq!(anchored_prefix(r"^#!.*\bpython[0-9.]*\b"), "#!");
+    assert_eq!(anchored_prefix("^abc"), "abc");
+    assert_eq!(anchored_prefix("^ab*c"), "a", "量指定の付いた文字は省ける");
+    assert_eq!(anchored_prefix("^ab?"), "a");
+    assert_eq!(anchored_prefix("^a{2}"), "");
+    assert_eq!(anchored_prefix("^(a|b)"), "");
+    assert_eq!(
+        anchored_prefix("(?i)^ab"),
+        "",
+        "フラグで始まれば当て方を変えない"
+    );
+    assert_eq!(anchored_prefix("ab"), "");
+    assert_eq!(anchored_prefix(r"^\#"), "");
+    // 前置きで外れる行は正規表現に当てない。当たる行は正規表現の結果
+    let (set, _) = LanguageSet::build(&defs("[[language]]\nname = \"x\"\nfirst_line = \"^@X\"\n"));
+    let d = |line: &str| {
+        set.detect(&DetectInput {
+            file_name: None,
+            rel_path: None,
+            first_line: Some(line),
+        })
+        .language
+        .map(Language::name)
+    };
+    assert_eq!(d("@X tmpl"), Some("x"));
+    assert_eq!(d("@x tmpl"), None);
+}
+
+#[test]
 fn glob_は斜線の有無で当てる所を変え_ルートの外には当てない() {
     let (set, _) = LanguageSet::build(&defs(
         "[[language]]\nname = \"ci\"\nfile_globs = [\".github/**/*.yml\"]\n\
@@ -247,7 +277,12 @@ fn 長さの上限と正規表現の誤り() {
             .count(),
         2
     );
-    let (_, reports) = LanguageSet::build(&d);
+    let (set, reports) = LanguageSet::build(&d);
+    assert!(
+        reports.is_empty(),
+        "重ねるときには正規表現を組まない: {reports:?}"
+    );
+    let reports = set.precompile();
     let (file, ds) = &reports[0];
     assert_eq!(file, "languages/a.toml");
     assert!(matches!(

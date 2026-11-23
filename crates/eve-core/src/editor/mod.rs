@@ -310,8 +310,6 @@ impl Editor {
                     .collect();
                 self.state.start_workspace_root(&args);
                 self.state.start_recovery_scan();
-                // 組込みの言語定義の正規表現は、起動時の文書を開くジョブの後ろで組む (07 §9.6 の段 2 の細目)
-                self.state.start_languages_precompile();
                 self.state.sync_tab_line();
             }
         }

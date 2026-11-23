@@ -235,19 +235,29 @@ impl EditorState {
             .insert(job, Pending::LanguagesRead { startup });
     }
 
-    /// 組込みの言語定義の `first_line` の正規表現を組むジョブを積む (起動時に 1 回。起動時のパスを開くジョブの後ろ)。言語定義の
-    /// 読込を積んだ起動だけ (積まない試験の起動のジョブを変えない)。
-    pub(crate) fn start_languages_precompile(&mut self) {
-        if !self.settings.languages_requested
-            || std::mem::replace(&mut self.settings.languages_precompiled, true)
-            || (self.io.config_sources.is_none() && self.settings.config_languages.is_empty())
-        {
+    /// 届いた定義の集まりの `first_line` の正規表現を組むジョブを積む (io。起動時は起動時のパスを開くジョブの後ろになる)。
+    fn start_languages_precompile(&mut self) {
+        let job = self.jobs.spawn(
+            None,
+            eve_view::Revision(0),
+            JobKind::PrecompileLanguages {
+                set: self.settings.languages.clone(),
+            },
+        );
+        self.io.pending.insert(job, Pending::LanguagesPrecompile);
+    }
+
+    /// 正規表現を組んだ結果: 組めなかった `first_line` の診断を出す (今の定義の集まりのものだけ)。
+    pub(crate) fn finish_languages_precompile(&mut self, r: JobResult) {
+        let JobResult::LanguagesPrecompiled { set, reports } = r else {
+            return;
+        };
+        if !std::sync::Arc::ptr_eq(&set, &self.settings.languages) {
             return;
         }
-        let job = self
-            .jobs
-            .spawn(None, eve_view::Revision(0), JobKind::PrecompileLanguages);
-        self.io.pending.insert(job, Pending::LanguagesPrecompile);
+        for (file, diags) in &reports {
+            self.report_config_more(file, diags);
+        }
     }
 
     /// 言語定義の読込の結果: 定義の集まりを差し替え、診断を出し、開いている文書の文書ごとの値を決め直す。起動時の読込なら、
@@ -272,6 +282,7 @@ impl EditorState {
             self.redetect_languages();
         }
         self.refresh_all_doc_settings();
+        self.start_languages_precompile();
     }
 
     /// 設定ファイルの言語定義を差し替える (起動時の Host と `config.reload`)。

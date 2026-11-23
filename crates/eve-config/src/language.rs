@@ -3,9 +3,10 @@
 //!
 //! 組込みの定義は静的な表 ([`BUILTIN_LANGUAGES`]。正本は 07 §9.6.1) で持ち、起動時に TOML を解析しない (LANG-1)。
 //! ユーザー層の定義 (`config.toml` の `[[language]]` と `languages/*.toml`) は読込 (`config.rs`) が [`LanguageDef`] にし、
-//! [`LanguageSet::build`] が組込みの表に重ねる (LANG-5)。`first_line` の正規表現は、組込みの定義はプロセスで 1 回だけ組んで
-//! 共有し ([`precompile_builtin`]。起動時は、起動時のパスを開くジョブの後ろのジョブで組む。それより先に要れば使うときに組む)、
-//! ユーザー層の定義は [`LanguageSet::build`] (io のジョブと `--check-config`) で組んで誤りを診断にする。
+//! [`LanguageSet::build`] が組込みの表に重ねる (LANG-5)。`first_line` の正規表現は重ねるときには組まず、
+//! [`LanguageSet::precompile`] (起動時のパスを開くジョブの後ろの io のジョブと `--check-config`) で組んで、組めない値を診断に
+//! する。それより先に判定で要れば、使うときに 1 回だけ組む (組込みの定義の正規表現はプロセスで共有する)。行頭に要る文字列で
+//! 始まらない行には正規表現を当てない (組まずに済む)。
 
 use std::sync::OnceLock;
 
@@ -370,28 +371,102 @@ pub fn precompile_builtin() {
 enum Compiled {
     /// 組込みの定義 (添字。共有の正規表現を使うときに組む)。
     Builtin(usize),
-    /// ユーザー層の定義 (重ねたときに組んだもの)。
-    User(Regex),
+    /// ユーザー層の定義 (使うときか [`LanguageSet::precompile`] で組む。組めなければ理由)。
+    User(OnceLock<Result<Regex, String>>),
 }
 
 /// `first_line` の正規表現。
 #[derive(Debug, Clone)]
 struct FirstLine {
     source: String,
+    /// 行頭に要る文字列 (`^#!.*` の `#!`)。これで始まらない行には正規表現を当てない (組まずに済む)。
+    prefix: String,
     layer: LanguageLayer,
     origin: LangOrigin,
     compiled: Compiled,
+    /// 下の層の値 (この正規表現を組めなかったときに使う、LANG-4 / FR-703)。
+    fallback: Option<Box<FirstLine>>,
 }
 
 impl FirstLine {
+    fn new(
+        source: &str,
+        layer: LanguageLayer,
+        origin: LangOrigin,
+        compiled: Compiled,
+    ) -> FirstLine {
+        FirstLine {
+            source: source.to_owned(),
+            prefix: anchored_prefix(source),
+            layer,
+            origin,
+            compiled,
+            fallback: None,
+        }
+    }
+
+    /// `line` に当たれば、当たった値 (この層か、組めなかったときの下の層)。行頭に要る文字列で始まらない行は、正規表現を
+    /// 組まずに外れとする (まだ組んでいない正規表現は、組めるとみなす)。
+    fn matching(&self, line: &str) -> Option<&FirstLine> {
+        let failed = match &self.compiled {
+            Compiled::User(cell) => cell.get().is_some_and(Result::is_err),
+            Compiled::Builtin(_) => false,
+        };
+        if !failed && !line.starts_with(&self.prefix) {
+            return None;
+        }
+        match self.regex() {
+            Some(r) => r.is_match(line).then_some(self),
+            None => self.fallback.as_deref().and_then(|f| f.matching(line)),
+        }
+    }
+
     fn regex(&self) -> Option<&Regex> {
         match &self.compiled {
             Compiled::Builtin(i) => BUILTIN_FIRST_LINE[*i]
                 .get_or_init(|| compile_first_line(&self.source).ok())
                 .as_ref(),
-            Compiled::User(r) => Some(r),
+            Compiled::User(cell) => cell
+                .get_or_init(|| compile_first_line(&self.source).map_err(|e| error_line(&e)))
+                .as_ref()
+                .ok(),
         }
     }
+
+    /// 正規表現を組み (下の層の値も)、組めなかったユーザー層の値の理由を `out` に足す。
+    fn precompile(&self, out: &mut Vec<(LangOrigin, String, String)>) {
+        let _ = self.regex();
+        if let Compiled::User(cell) = &self.compiled
+            && let Some(Err(reason)) = cell.get()
+        {
+            out.push((self.origin.clone(), self.source.clone(), reason.clone()));
+            if let Some(f) = &self.fallback {
+                f.precompile(out);
+            }
+        }
+    }
+}
+
+/// `regex` の説明の最後の行 (どこがどう誤りか)。
+fn error_line(e: &regex::Error) -> String {
+    let text = e.to_string();
+    text.lines().last().unwrap_or("").trim().to_owned()
+}
+
+/// `^` で始まる正規表現の、行頭に要る文字列 (`^#!.*\bpython` の `#!`)。`^` の後の、正規表現の記号でない文字の並び。
+/// 並びの直後が量指定 (`*`・`?`・`{`) なら最後の文字は省ける (要らない) ので含めない。`^` で始まらない (フラグ `(?i)` など)
+/// ときは空 (どの行も正規表現に当てる)。
+fn anchored_prefix(source: &str) -> String {
+    // 選択 (`^ab|cd`) があれば、行頭の並びが要るとは限らない
+    let Some(rest) = source.strip_prefix('^').filter(|_| !source.contains('|')) else {
+        return String::new();
+    };
+    let meta = |c: char| "\\.+*?()|[]{}^$".contains(c);
+    let mut out: Vec<char> = rest.chars().take_while(|&c| !meta(c)).collect();
+    if matches!(rest.chars().nth(out.len()), Some('*' | '?' | '{')) {
+        out.pop();
+    }
+    out.into_iter().collect()
 }
 
 fn compile_first_line(source: &str) -> Result<Regex, regex::Error> {
@@ -466,11 +541,13 @@ impl Language {
             file_types: pats(b.file_types),
             file_names: pats(b.file_names),
             file_globs: Vec::new(),
-            first_line: b.first_line.map(|s| FirstLine {
-                source: s.to_owned(),
-                layer: LanguageLayer::Builtin,
-                origin: LangOrigin::Builtin,
-                compiled: Compiled::Builtin(index),
+            first_line: b.first_line.map(|s| {
+                FirstLine::new(
+                    s,
+                    LanguageLayer::Builtin,
+                    LangOrigin::Builtin,
+                    Compiled::Builtin(index),
+                )
             }),
             indent_unit: b.indent_unit.map(|u| (u, LangOrigin::Builtin)),
             indent_width: None,
@@ -536,9 +613,9 @@ impl LanguageSet {
         }
     }
 
-    /// 組込みの定義に、ユーザー層の定義 `defs` を書いた順に重ねる (LANG-5)。ユーザー層の `first_line` の正規表現と
-    /// `file_globs` の glob をここで組み、組めないものは使わずに診断 (表示名ごと) にする (ジョブの中で呼び、主スレッドで
-    /// 組まない)。組込みの `first_line` は組まない ([`precompile_builtin`])。
+    /// 組込みの定義に、ユーザー層の定義 `defs` を書いた順に重ねる (LANG-5)。`file_globs` の glob はここで組み、資源の上限を
+    /// 超えるものは使わずに診断 (表示名ごと) にする。`first_line` の正規表現は組まない (組むのは [`LanguageSet::precompile`]
+    /// か、判定で使うとき。正規表現を組む時間で、起動時の文書を開くのを待たせない)。
     #[must_use]
     pub fn build(defs: &[LanguageDef]) -> (LanguageSet, Vec<(String, Vec<Diagnostic>)>) {
         let mut set = LanguageSet::builtin();
@@ -550,6 +627,39 @@ impl LanguageSet {
             }
         }
         (set, reports)
+    }
+
+    /// `first_line` の正規表現をすべて組み (組込みの定義の共有のものも)、組めないユーザー層の値の診断 (表示名ごと。
+    /// `msg.language.bad_first_line`) を返す。組めない値は使わず、下の層の値を使う (LANG-3 / LANG-4)。io のジョブ
+    /// (`PrecompileLanguages`) と `--check-config` で呼ぶ。
+    #[must_use]
+    pub fn precompile(&self) -> Vec<(String, Vec<Diagnostic>)> {
+        precompile_builtin();
+        let mut failed = Vec::new();
+        for l in &self.languages {
+            if let Some(f) = &l.first_line {
+                f.precompile(&mut failed);
+            }
+        }
+        let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
+        for (origin, source, reason) in failed {
+            if let LangOrigin::File {
+                source: file,
+                line,
+                column,
+            } = origin
+            {
+                let d = lang_diag(
+                    LanguageProblem::BadFirstLine { reason },
+                    "language.first_line",
+                    &source,
+                    line,
+                    column,
+                );
+                crate::merge_reports(&mut reports, [(file, vec![d])]);
+            }
+        }
+        reports
     }
 
     fn apply(&mut self, def: &LanguageDef) -> Vec<Diagnostic> {
@@ -610,27 +720,15 @@ impl LanguageSet {
             l.file_globs.extend(more);
         }
         if let Some(v) = &def.first_line {
-            match compile_first_line(&v.value) {
-                Ok(r) => {
-                    l.first_line = Some(FirstLine {
-                        source: v.value.clone(),
-                        layer: LanguageLayer::User,
-                        origin: at(v.line, v.column),
-                        compiled: Compiled::User(r),
-                    });
-                }
-                Err(e) => {
-                    let reason = e.to_string();
-                    let reason = reason.lines().last().unwrap_or("").trim().to_owned();
-                    diags.push(lang_diag(
-                        LanguageProblem::BadFirstLine { reason },
-                        "language.first_line",
-                        &v.value,
-                        v.line,
-                        v.column,
-                    ));
-                }
-            }
+            // 正規表現は組まずに置く (組むのは使うときか `precompile`)。組めなければ下の層の値を使う
+            let mut f = FirstLine::new(
+                &v.value,
+                LanguageLayer::User,
+                at(v.line, v.column),
+                Compiled::User(OnceLock::new()),
+            );
+            f.fallback = l.first_line.take().map(Box::new);
+            l.first_line = Some(f);
         }
         if let Some(v) = &def.indent_unit {
             l.indent_unit = Some((v.value, at(v.line, v.column)));
@@ -695,9 +793,9 @@ impl LanguageSet {
                 }
             }
             if let (Some(f), Some(line)) = (&l.first_line, input.first_line)
-                && f.regex().is_some_and(|r| r.is_match(line))
+                && let Some(hit) = f.matching(line)
             {
-                stages[3].push((0, f.layer, i, f.origin.clone()));
+                stages[3].push((0, hit.layer, i, hit.origin.clone()));
             }
         }
         for mut cands in stages {

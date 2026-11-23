@@ -72,16 +72,20 @@ pub enum JobKind {
     /// 言語定義を読んで重ねる (07 §9.6 の LANG-2、02 §9.3 の `ReadLanguages`)。起動時は、起動時のパスを開くジョブより前に
     /// 積む (`io` は直列なので、起動時の文書は定義が届いた後に開き終わる)。`config.reload` でも積む。`dir` の
     /// `*.toml` を名前の順に読み、`config` (設定ファイルの `[[language]]`) の後に重ね、ユーザー層の `first_line` の正規表現を
-    /// ここで組む (主スレッドで組まない。組込みの正規表現は `PrecompileLanguages`)。結果は `JobResult::LanguagesRead`。
+    /// 組まない (組むのは `PrecompileLanguages`。正規表現を組む時間で起動時の文書を開くのを待たせない)。結果は
+    /// `JobResult::LanguagesRead`。
     ReadLanguages {
         /// `<config_dir>/languages`。`None` は読まない (`--no-config`)。
         dir: Option<FsPath>,
         /// 設定ファイルの `[[language]]` の定義 (重ねる順)。
         config: Vec<eve_config::LanguageDef>,
     },
-    /// 組込みの言語定義の `first_line` の正規表現を組んでおく (07 §9.6 の段 2 の細目)。起動時に、起動時のパスを開くジョブの
-    /// 後ろに 1 回積む (`ReadLanguages` の後ろに置くと最初の文書の読込を遅らせる)。結果は `JobResult::LanguagesPrecompiled`。
-    PrecompileLanguages,
+    /// 言語定義の `first_line` の正規表現を組む (07 §9.6 の段 2 の細目)。`ReadLanguages` の結果が届いたときに積む (起動時は
+    /// 起動時のパスを開くジョブの後ろになる)。結果は `JobResult::LanguagesPrecompiled`。
+    PrecompileLanguages {
+        /// 組む定義の集まり (主スレッドと共有する。組んだ正規表現はそのまま判定に使う)。
+        set: std::sync::Arc<eve_config::LanguageSet>,
+    },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata {
         /// 調べるパス。
