@@ -152,11 +152,41 @@ pub(crate) fn fs_class(path: &Path) -> FsClass {
     if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
         return FsClass::UNKNOWN;
     }
-    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
-    match u32::try_from(st.f_type & 0xFFFF_FFFF) {
-        Ok(t) => classify(t),
-        Err(_) => FsClass::UNKNOWN,
+    classify(f_type_bits(&st))
+}
+
+/// `path` のある FS の `statfs` の `f_type` (下位 32 bit。シンボリックリンクは辿った先の FS)。ファイル監視の FS の判定
+/// (05 §12.2 の 4) に使う。
+///
+/// # Errors
+///
+/// `statfs` の失敗 (無い・権限が無いなど) と、パスが NUL を含むとき。
+#[cfg(target_os = "linux")]
+pub(crate) fn statfs_type(path: &Path) -> io::Result<u32> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+    // SAFETY: ゼロ初期化した `statfs` (全フィールドが整数) に書かせる。
+    let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: NUL 終端のパスと有効な書込先。
+    if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
+        return Err(io::Error::last_os_error());
     }
+    Ok(f_type_bits(&st))
+}
+
+/// `statfs` の `f_type` の下位 32 bit (`linux/magic.h` の値と比べる形)。`f_type` の型は libc と target ごとに違い
+/// (glibc は符号付きで 64 bit では `i64`・32 bit では `i32`、musl は符号無し、macOS は `u32`)、`0x9123683E` のような値は
+/// 符号付きの型では負になる。`as` でビットをそのまま下位 32 bit にする (`try_from` は負の値で失敗し、`& 0xFFFF_FFFF` は
+/// 32 bit の型で桁あふれのリテラルになる)。
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::unnecessary_cast,
+    reason = "f_type の型が target ごとに違い、どの lint が出るかも target で変わる (expect にすると出ない target で警告になる)"
+)]
+pub(crate) fn f_type_bits(st: &libc::statfs) -> u32 {
+    st.f_type as u32
 }
 
 /// Linux 以外の Unix: 判定しない (`Unknown`。識別は信頼しない)。macOS へ移すときは `statfs` の `f_fstypename` で見分ける。

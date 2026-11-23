@@ -53,6 +53,12 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+# ファイル監視 (FR-117、05 §12。v0.5 の M33 の段 7)。版の決め方は 02 §13.7 (9.0 の安定版)。`default-features = false` で
+# macOS の backend を入れない。監視するのは Windows と Linux だけ (macOS は出荷する版で決める、05 §12.2 の 13。
+# backend の無い OS で notify の `RecommendedWatcher` がポーリングにならないよう、その OS には依存そのものを置かない)
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+notify = { version = "9.0.0", default-features = false }
+
 # Unix の API (xattr・renameat2・access)。unsafe は Unix 専用のモジュール `unix_fs` に閉じる (R5)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.191"

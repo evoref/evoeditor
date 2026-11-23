@@ -70,6 +70,7 @@ pub use io::replacing::{ReplacingCount, ReplacingGuard};
 pub use io::rescue::{RescueError, RescueOutcome, RescueReason, RescueWriter};
 pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
+pub use io::watch::{FileWatcher, FsEvent, FsEventKind, WatchError, WatchId};
 pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
     JobRequest, JobResult, JobSpawner, JobStep, KnownFileId, MetaPurpose, OpenNotes, Ports,

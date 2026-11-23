@@ -99,8 +99,7 @@ pub(crate) fn fs_type(f: &File) -> io::Result<u32> {
     if unsafe { libc::fstatfs(f.as_raw_fd(), &raw mut st) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
-    u32::try_from(st.f_type & 0xFFFF_FFFF).map_err(|_| io::Error::other("f_type"))
+    Ok(super::f_type_bits(&st))
 }
 
 /// uid のアカウントの名前 (`getpwuid_r`)。引けなければ `None`。

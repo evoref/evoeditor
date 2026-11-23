@@ -1,6 +1,6 @@
 //! ヘッドレス駆動ハーネス (Harness)、偽 Port (MemFs・ManualClock・ManualJobSpawner)、HeadlessFrontend (docs/02 §4.1、docs/09 §3.4)。
 //!
-//! 現在は偽 Port (`ManualClock` / `FixedPaths` / `MemFs` / `ManualJobSpawner`)、`Harness`、`HeadlessFrontend`、ASCII の Frame
+//! 現在は偽 Port (`ManualClock` / `FixedPaths` / `MemFs` / `ManualJobSpawner` / `FakeWatcher`)、`Harness`、`HeadlessFrontend`、ASCII の Frame
 //! がある。
 
 #![forbid(unsafe_code)]
@@ -20,6 +20,7 @@ mod paths;
 pub mod scenario;
 mod stdin;
 mod virtual_screen;
+mod watcher;
 
 pub use ascii::{AsciiOptions, render_ascii, secondary_cursors, tab_line_text};
 pub use clock::ManualClock;
@@ -58,3 +59,4 @@ pub use memfs::{BytesSource, FsOp, MEMFS_STATE_DIR, MemFs, SourceFailure, WriteS
 pub use paths::FixedPaths;
 pub use stdin::{FakeStdin, StdinStep};
 pub use virtual_screen::{Attr, VirtualScreen, WidthConfig};
+pub use watcher::{FakeWatcher, WatchRequest};

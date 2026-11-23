@@ -215,7 +215,6 @@ mod tests {
             "native-tls",
             "rustls",
             "socket2",
-            "mio",
             "tokio",
             "tungstenite",
             "h2",
@@ -230,6 +229,9 @@ mod tests {
                 found.push(format!("依存 {b}"));
             }
         }
+        // (1b) mio はファイルの知らせ (notify の Linux の backend が inotify の fd を待つ) にだけ使い、ソケットの型を持つ
+        // `net` の feature が有効でないなら許す (09 §3.6 の「無通信」、v0.5 の M33 の段 7)。全 target の resolve で見る
+        found.extend(mio_findings(&root));
         // (2) windows-sys のネットワークの feature を使わない
         for dir in ["crates", "bins"] {
             let Ok(rd) = std::fs::read_dir(root.join(dir)) else {
@@ -275,6 +277,87 @@ mod tests {
             }
         }
         assert!(found.is_empty(), "ネットワーク通信の可能性: {found:?}");
+    }
+
+    /// `cargo metadata` の resolve (全 target の和) の、`mio` の項目ごとの有効な feature。features の欄が読めなければ
+    /// 落ちる (誤って空のまま通さない)。
+    fn mio_resolve_features(root: &std::path::Path) -> Vec<Vec<String>> {
+        let out = std::process::Command::new(
+            std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()),
+        )
+        .args(["metadata", "--format-version", "1", "--locked"])
+        .current_dir(root)
+        .output()
+        .expect("cargo metadata を起動できる");
+        assert!(
+            out.status.success(),
+            "cargo metadata が失敗した: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let meta: serde_json::Value =
+            serde_json::from_slice(&out.stdout).expect("cargo metadata の JSON");
+        let packages = meta["packages"].as_array().expect("packages");
+        let nodes = meta["resolve"]["nodes"].as_array().expect("resolve.nodes");
+        nodes
+            .iter()
+            .filter(|node| {
+                let id = node["id"].as_str().expect("resolve の項目の id");
+                packages
+                    .iter()
+                    .any(|p| p["id"].as_str() == Some(id) && p["name"].as_str() == Some("mio"))
+            })
+            .map(|node| {
+                node["features"]
+                    .as_array()
+                    .expect("resolve の mio の features")
+                    .iter()
+                    .map(|f| f.as_str().expect("feature の名前").to_owned())
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// mio の判定 (AC-NFR-501-1 の (1b))。`Cargo.lock` に mio があるなら、resolve に項目が 1 つ以上あり、どの項目の
+    /// features も `os-poll` を含み (読めている証拠。notify が使う)、`net` を含まない。外れたら、その知らせ。
+    fn mio_findings(root: &std::path::Path) -> Vec<String> {
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect("Cargo.lock");
+        if !lock.contains("name = \"mio\"") {
+            return Vec::new();
+        }
+        let items = mio_resolve_features(root);
+        let mut found = Vec::new();
+        if items.is_empty() {
+            found.push(
+                "Cargo.lock に mio があるのに resolve に項目が無い (判定できない)".to_owned(),
+            );
+        }
+        for f in &items {
+            if !f.iter().any(|x| x == "os-poll") {
+                found.push(format!("mio の features を読めていない ({f:?})"));
+            }
+            if f.iter().any(|x| x == "net") {
+                found.push(format!("依存 mio の net の feature ({f:?})"));
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn mio_の_net_の判定は_feature_を見る() {
+        // 判定の元 (resolve) に mio の項目があり、features を読めていて (os-poll を含む)、net を含まない
+        let root = crate::util::workspace_root();
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect("Cargo.lock");
+        assert!(
+            lock.contains("name = \"mio\""),
+            "mio が依存に無くなったら (1b) の検査を見直す"
+        );
+        let items = mio_resolve_features(&root);
+        assert!(!items.is_empty(), "resolve に mio の項目が無い");
+        for f in &items {
+            assert!(f.iter().any(|x| x == "os-poll"), "{f:?}");
+            assert!(!f.iter().any(|x| x == "net"), "{f:?}");
+        }
+        assert_eq!(mio_findings(&root), Vec::<String>::new());
     }
 
     // verifies: AC-NFR-502-1
