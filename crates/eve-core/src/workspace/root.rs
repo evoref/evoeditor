@@ -326,9 +326,9 @@ impl EditorState {
         // 判定し直す (起動時に開いた文書と後で開いた文書で言語が変わらない、07 §9.6 の LANG-7)
         if self.workspace.current.is_some() {
             self.redetect_languages();
-            // ワークスペース層を読む (07 §12.5 の WSC-1)。下の層はユーザー層
-            let lower = self.current_user_layer().config;
-            let _ = self.start_workspace_config_read(&lower, None);
+            // ワークスペース層を読む (07 §12.5 の WSC-1)。逃げ道はユーザー層と `--set` の値 (ワークスペース層は書けない)
+            let safe_dirs = self.settings.config.safe_directories.clone();
+            let _ = self.start_workspace_config_read(&safe_dirs, None);
         }
         // ファインダ: 待っていれば走査を始め、`DIR` で決まったら開く (03 §12.7.1、07 §18.2)
         if let Some(source) = self.workspace.current.as_ref().map(Workspace::source) {

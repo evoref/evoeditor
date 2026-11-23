@@ -199,6 +199,25 @@ impl EditorState {
         }
     }
 
+    /// 除外の設定 (`workspace.exclude` など) が `before` から変わったら、ファインダの一覧を手放して走査をやり直す (ワークスペース
+    /// 層が起動の後に届いたときと `config.reload`。07 §12.5 の WSC-5)。ファインダを開いていれば、その場で走査を始める。
+    pub(crate) fn finder_on_exclude_changed(&mut self, before: &ExcludeConfig) {
+        if self.exclude_config() == *before {
+            return;
+        }
+        let open = matches!(self.ui.overlay, Some(Overlay::Finder(_)));
+        let held = !self.workspace.finder.chunks.is_empty() || self.workspace.finder.scan.is_some();
+        if !held {
+            return;
+        }
+        self.finder_release_list();
+        if open && self.workspace().is_some() {
+            self.finder_start_scan();
+            self.finder_rematch();
+            self.mark_dirty_render();
+        }
+    }
+
     /// `workspace.open_file`: ファインダを開く (03 §12.7.4)。`query` があれば入力欄に入れる。ルートが決まっていれば走査を
     /// 始め (走っていればそのまま使う)、今の一覧で照合する。決まる前なら「調べています」を出し、決まった時点で始める。
     pub(crate) fn open_finder(&mut self, query: Option<String>) -> CommandResult {

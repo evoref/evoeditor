@@ -552,7 +552,7 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::ThemeRead
         | Pending::LanguagesRead { .. }
         | Pending::WorkspaceConfig { .. }
-        | Pending::LanguagesPrecompile
+        | Pending::LanguagesPrecompile { .. }
         | Pending::RecoveryScan
         | Pending::LastVersion
         | Pending::WorkspaceRoot

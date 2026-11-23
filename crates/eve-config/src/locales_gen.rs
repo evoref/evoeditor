@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1038 件)。
+/// `locales/en.toml` の文言 (1041 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -428,6 +428,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.config.locale_unknown_key.text"), B("There is no text key named {item}")),
     (B("msg.config.locale_unreadable.hint"), B("Check that it is a readable file")),
     (B("msg.config.locale_unreadable.text"), B("This language file is not used because it cannot be read: {reason}")),
+    (B("msg.config.more.hint"), B("Only the first 100 are shown. Fix them and reload")),
+    (B("msg.config.more.text"), B("This file has {count} more problems")),
     (B("msg.config.multi_cursor_always.hint"), B("To turn them off, set the keys of the add commands to \"none\" in keymap.toml")),
     (B("msg.config.multi_cursor_always.text"), B("editor.multi_cursor is not supported; multiple cursors are always available")),
     (B("msg.config.out_of_range.hint"), B("Specify a value in {range}. This item uses {default}")),
@@ -1036,6 +1038,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace.key_reason.args"), B("it has arguments")),
     (B("ui.workspace.key_reason.bound"), B("it changes an existing binding")),
     (B("ui.workspace.key_reason.command"), B("the command cannot be bound from a workspace")),
+    (B("ui.workspace.key_reason.dialog"), B("it is a key in a confirmation dialog")),
     (B("ui.workspace.key_reason.exec"), B("it runs an external command")),
     (B("ui.workspace.key_reason.none"), B("it removes a binding")),
     (B("ui.workspace.key_reason.shadows"), B("it disables an existing binding")),
@@ -1051,7 +1054,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1038 件)。
+/// `locales/ja.toml` の文言 (1041 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1471,6 +1474,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.config.locale_unknown_key.text"), B("{item} という文言のキーはありません")),
     (B("msg.config.locale_unreadable.hint"), B("読める通常のファイルか確かめてください")),
     (B("msg.config.locale_unreadable.text"), B("この言語ファイルを読めないため使っていません: {reason}")),
+    (B("msg.config.more.hint"), B("最初の 100 件だけを示しています。直してから読み直してください")),
+    (B("msg.config.more.text"), B("このファイルには、ほかに {count} 件の問題があります")),
     (B("msg.config.multi_cursor_always.hint"), B("使わないときは keymap.toml で足す操作のキーを \"none\" にしてください")),
     (B("msg.config.multi_cursor_always.text"), B("editor.multi_cursor は使えません。複数カーソルは常に有効です")),
     (B("msg.config.out_of_range.hint"), B("{range} で指定してください。この項目は {default} を使います")),
@@ -2079,6 +2084,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.workspace.key_reason.args"), B("引数を持つため")),
     (B("ui.workspace.key_reason.bound"), B("既にある割当を変えるため")),
     (B("ui.workspace.key_reason.command"), B("ワークスペースからは割り当てられないコマンドのため")),
+    (B("ui.workspace.key_reason.dialog"), B("確認のダイアログのキーのため")),
     (B("ui.workspace.key_reason.exec"), B("外部コマンドのため")),
     (B("ui.workspace.key_reason.none"), B("割当の解除のため")),
     (B("ui.workspace.key_reason.shadows"), B("既にある割当を使えなくするため")),

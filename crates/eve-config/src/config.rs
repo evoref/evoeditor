@@ -83,6 +83,12 @@ pub enum DiagKind {
     /// ワークスペース層 (`.eve/config.toml`・`.eve/keymap.toml`) で使わなかった項目・割当と、読まなかったファイル
     /// (07 §12.5 の WSC-4、§7.4 の WKEY-2、§12.1 の OWN-7)。
     Workspace(crate::workspace::WorkspaceProblem),
+    /// 1 つのファイルの診断が上限 ([`CONFIG_MAX_DIAGNOSTICS`](crate::CONFIG_MAX_DIAGNOSTICS)) を超えた: 超えた分は残さず、
+    /// この 1 件にまとめる (警告。`msg.config.more`)。要約と `--check-config` の件数は `count` 件と数える。
+    More {
+        /// 省いた件数。
+        count: usize,
+    },
 }
 
 /// 配列の要素の誤りの種類 (07 §5.9)。
@@ -96,7 +102,8 @@ pub enum ListItemProblem {
     Relative,
     /// `*` を含む (`workspace.safe_directories`。パターンは書けない)。
     Wildcard,
-    /// ファイルシステムのルート・ドライブの直下・ホームディレクトリそのもの (`workspace.safe_directories`。警告して使う)。
+    /// 広すぎる安全な場所 (`workspace.safe_directories`。警告して使う): ファイルシステムのルート・ドライブの直下・UNC の共有の
+    /// 直下は読むときにここで見つける。ホームディレクトリそのものは、環境を知る eve-core がワークスペース層を読む前に足す。
     TooBroad,
 }
 
@@ -839,6 +846,9 @@ pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> 
         conditions,
         apply: true,
         condition: None,
+        lines: crate::position::LineIndex::new(text),
+        dropped: 0,
+        stored: false,
     };
     // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
     if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
@@ -875,11 +885,12 @@ pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> 
     active.sort_by_key(|(c, _)| *c);
     for (c, table) in active {
         // 診断は検証のときに積んだので、重ねるときの分は捨てる
-        let seen = cx.out.diagnostics.len();
+        let (seen, dropped) = (cx.out.diagnostics.len(), cx.dropped);
         cx.scoped(true, Some(c), |cx| cx.under_condition(c.name(), table));
         cx.out.diagnostics.truncate(seen);
+        cx.dropped = dropped;
     }
-    cx.out
+    cx.finish()
 }
 
 struct Cx<'a> {
@@ -891,23 +902,37 @@ struct Cx<'a> {
     apply: bool,
     /// 読んでいるセクションの条件 (条件付きセクションの中のとき)。診断と由来に記録する。
     condition: Option<crate::Condition>,
+    /// 行の始まりの表 (位置を引く)。
+    lines: crate::position::LineIndex<'a>,
+    /// 上限を超えて残さなかった診断の数。
+    dropped: usize,
+    /// 直前の診断を残したか (書かれた値を記録する先)。
+    stored: bool,
 }
 
 impl Cx<'_> {
     /// バイト位置 → (行, 桁)。どちらも 1 始まり、桁は文字数。
     fn pos(&self, offset: usize) -> (u32, u32) {
-        let end = offset.min(self.text.len());
-        let head = self.text.get(..end).unwrap_or("");
-        let line = head.matches('\n').count() + 1;
-        let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-        // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
-        (
-            u32::try_from(line).unwrap_or(u32::MAX),
-            u32::try_from(col).unwrap_or(u32::MAX),
-        )
+        self.lines.pos(offset)
+    }
+
+    /// 結果: 上限を超えた診断があれば「ほか N 件」を足す。
+    fn finish(mut self) -> Loaded {
+        if self.dropped > 0 {
+            self.out
+                .diagnostics
+                .push(crate::position::more(self.dropped));
+        }
+        self.out
     }
 
     fn diag(&mut self, severity: Severity, kind: DiagKind, key: String, at: usize) {
+        // 上限を超えた分は位置も引かずに数えるだけ (診断の多いファイルで io のジョブを止めない)
+        self.stored = self.out.diagnostics.len() < crate::CONFIG_MAX_DIAGNOSTICS;
+        if !self.stored {
+            self.dropped += 1;
+            return;
+        }
         let (line, column) = self.pos(at);
         self.out.diagnostics.push(Diagnostic {
             severity,
@@ -1176,6 +1201,9 @@ impl Cx<'_> {
             DeValue::Boolean(b) => b.to_string(),
             other => other.type_str().to_owned(),
         };
+        if !self.stored {
+            return;
+        }
         if let Some(d) = self.out.diagnostics.last_mut() {
             d.value = text;
         }
@@ -1369,19 +1397,19 @@ impl Cx<'_> {
         Some(out)
     }
 
-    /// パスの形の規則に使う OS (07 §3.4 の COND-4): 条件の無い表はこの実行ファイルの OS、`os.*` のセクションはその OS
-    /// (`os.unix` は Unix)、OS の決まらないセクション (`frontend.*`・`env.*`) は `None` (形を確かめない)。
+    /// パスの形の規則に使う OS (07 §3.4 の COND-4): `os.*` のセクションはその OS (`os.unix` は Unix)、条件の無い表と OS の
+    /// 決まらないセクション (`frontend.*`・`env.*`) は、この実行ファイルの OS (真になるのは今の OS だけなので)。対象の 3 つの
+    /// OS でない実行ファイルでは `None` (形を確かめない)。
     fn path_rules(&self) -> Option<PathRules> {
         use crate::Condition as K;
         match self.condition {
-            None => match self.conditions.os {
+            Some(K::OsWindows) => Some(PathRules::Windows),
+            Some(K::OsUnix | K::OsMacos | K::OsLinux) => Some(PathRules::Unix),
+            _ => match self.conditions.os {
                 Some(crate::Os::Windows) => Some(PathRules::Windows),
                 Some(_) => Some(PathRules::Unix),
                 None => None,
             },
-            Some(K::OsWindows) => Some(PathRules::Windows),
-            Some(K::OsUnix | K::OsMacos | K::OsLinux) => Some(PathRules::Unix),
-            Some(_) => None,
         }
     }
 

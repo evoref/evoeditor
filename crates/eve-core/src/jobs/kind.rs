@@ -89,8 +89,6 @@ pub enum JobKind {
     ReadWorkspaceConfig {
         /// ワークスペースのルート。
         root: FsPath,
-        /// ユーザー層の値 (「方向のみ」の比較の下の層、07 §12.3)。
-        lower: std::sync::Arc<eve_config::Config>,
         /// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。
         conditions: eve_config::Conditions,
         /// `workspace.safe_directories` (07 §12.1 の OWN-5)。
@@ -101,6 +99,10 @@ pub enum JobKind {
     PrecompileLanguages {
         /// 組む定義の集まり (主スレッドと共有する。組んだ正規表現はそのまま判定に使う)。
         set: std::sync::Arc<eve_config::LanguageSet>,
+        /// ワークスペース層の定義も重ねた集まり (あれば。ルートの下の文書の判定に使う。主スレッドで組まない)。
+        workspace: Option<std::sync::Arc<eve_config::LanguageSet>>,
+        /// ワークスペース層のファイルの表示名 (`workspace` の診断はこのファイルの分だけ返す。ユーザー層の分は `set` と同じ)。
+        workspace_files: Vec<String>,
     },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata {

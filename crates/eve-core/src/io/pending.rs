@@ -26,9 +26,9 @@ pub(crate) enum Pending {
         reload: Option<Box<crate::io::config_reload::ReloadPlan>>,
     },
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
-    LanguagesRead { startup: bool },
+    LanguagesRead { startup: bool, workspace_only: bool },
     /// 言語定義の `first_line` の正規表現を組むジョブ (結果の組めない値を警告する、07 §9.6 の段 2 の細目)。
-    LanguagesPrecompile,
+    LanguagesPrecompile { workspace_only: bool },
     Open {
         doc: DocumentId,
         view: ViewId,
@@ -186,7 +186,7 @@ impl EditorState {
                 | Pending::ThemeRead
                 | Pending::LanguagesRead { .. }
                 | Pending::WorkspaceConfig { .. }
-                | Pending::LanguagesPrecompile
+                | Pending::LanguagesPrecompile { .. }
                 | Pending::RecoveryScan
                 | Pending::LastVersion
                 | Pending::WorkspaceRoot
@@ -349,11 +349,16 @@ impl EditorState {
             }
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
-            Pending::LanguagesRead { startup } => self.finish_languages_read(r, startup),
+            Pending::LanguagesRead {
+                startup,
+                workspace_only,
+            } => self.finish_languages_read(r, startup, workspace_only),
             Pending::WorkspaceConfig { reload } => {
                 self.finish_workspace_config(r, reload.map(|p| *p));
             }
-            Pending::LanguagesPrecompile => self.finish_languages_precompile(r),
+            Pending::LanguagesPrecompile { workspace_only } => {
+                self.finish_languages_precompile(r, workspace_only);
+            }
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

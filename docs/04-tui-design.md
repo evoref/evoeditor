@@ -2011,6 +2011,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.workspace.key_reason.none` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (e) `"none"` の割当) | 割当の解除のため |
 | `ui.workspace.key_reason.exec` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (f) `exec` のコマンド) | 外部コマンドのため |
 | `ui.workspace.key_reason.command` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (g) Motion・Ui・Edit でないコマンドと `app.*` (M33 の段 5 で足した)) | ワークスペースからは割り当てられないコマンドのため |
+| `ui.workspace.key_reason.dialog` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (h)。確認のダイアログ (`dialog`) への割当。M33 の段 5 のレビューで足した) | 確認のダイアログのキーのため |
 | `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
 | `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 
@@ -2059,6 +2060,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.multi_cursor_always` (v0.5) | 設定の診断 (情報)。設定に `editor.multi_cursor` を書いた (公開しない。複数カーソルは常に有効、07 §5.1。値は使わない。M32 の段 3) | editor.multi_cursor は使えません。複数カーソルは常に有効です / 使わないときは keymap.toml で足す操作のキーを "none" にしてください |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
 | `msg.config.invalid_value_no_default` | 列挙値不正のうち、既定値を持たない項目 (テーマファイルの色 `ui.selection.fg = "nope"` など)。`msg.config.invalid_value` の `{default}` が空になる場面の代わりに出す。該当の値は使わない | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は使いません |
+| `msg.config.more` (v0.5) | 1 つの設定ファイル・`keymap.toml`・ワークスペース層のファイルの診断が 100 件を超えた (07 §4.3。警告。`{count}` は省いた件数。要約と `--check-config` の件数は N 件と数える。M33 の段 5 のレビューで足した) | このファイルには、ほかに {count} 件の問題があります / 最初の 100 件だけを示しています。直してから読み直してください |
 | `msg.config.invalid_item` (v0.5) | 配列の要素の誤り (`workspace.root_markers` の名前でない要素・`workspace.safe_directories` の相対パスと `*`・空の要素、07 §5.9。警告。その要素を使わない。`{reason}` は `ui.config.item_reason.*`。M33 の段 5) | {item} の要素 {value} は使えません ({reason}) / この要素は使いません |
 | `msg.config.broad_safe_directory` (v0.5) | `workspace.safe_directories` にファイルシステムのルート・ドライブの直下・UNC の共有の直下を書いた (07 §12.1 の OWN-5。警告。使う) | {item} の {value} は広すぎます / その下のすべてで所有者の検査を省きます。リポジトリのフォルダを書いてください |
 | `ui.config.item_reason.empty` (v0.5) | `msg.config.invalid_item` の `{reason}` (空の要素) | 空です |

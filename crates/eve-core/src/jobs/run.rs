@@ -356,10 +356,26 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
-        JobKind::PrecompileLanguages { set } => JobResult::LanguagesPrecompiled {
-            reports: set.precompile(),
-            set: set.clone(),
-        },
+        JobKind::PrecompileLanguages {
+            set,
+            workspace,
+            workspace_files,
+        } => {
+            let mut reports = set.precompile();
+            if let Some(ws) = workspace {
+                // ワークスペース層の集まりにはユーザー層の定義も入っているので、診断はワークスペース層のファイルの分だけ
+                let more = ws
+                    .precompile()
+                    .into_iter()
+                    .filter(|(f, _)| workspace_files.contains(f));
+                eve_config::merge_reports(&mut reports, more);
+            }
+            JobResult::LanguagesPrecompiled {
+                reports,
+                set: set.clone(),
+                workspace: workspace.clone(),
+            }
+        }
         JobKind::ReadLanguages {
             dir,
             config,
@@ -392,13 +408,11 @@ pub fn run_job(
         }
         JobKind::ReadWorkspaceConfig {
             root,
-            lower,
             conditions,
             safe_dirs,
         } => JobResult::WorkspaceConfigRead(crate::io::workspace_config::read_workspace_config(
             &*ports.fs,
             root,
-            lower,
             *conditions,
             safe_dirs,
         )),

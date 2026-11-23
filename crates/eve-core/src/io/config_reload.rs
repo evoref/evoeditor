@@ -300,11 +300,12 @@ impl EditorState {
         let plan = ReloadPlan { resolved, keymap };
         // ワークスペース層も所有者の検査を掛け直して読み直す (07 §12.5 の WSC-1)。ユーザー層が誤りで前の設定を保つときは
         // 読み直さない
+        // 所有者の検査の逃げ道は、読み直したユーザー層と `--set` の値で決める (前の設定の値を使わない)
         let plan = if plan.resolved.has_error {
             Some(plan)
         } else {
-            let lower = plan.resolved.user.config.clone();
-            self.start_workspace_config_read(&lower, Some(plan))
+            let safe_dirs = plan.resolved.config.safe_directories.clone();
+            self.start_workspace_config_read(&safe_dirs, Some(plan))
         };
         if let Some(plan) = plan {
             self.apply_config_reload(plan);
@@ -362,6 +363,7 @@ impl EditorState {
                 &src.sets,
                 src.conditions,
             );
+            self.report_workspace_config(&composed.workspace_diagnostics);
             resolved.config = composed.config;
             resolved.origins = composed.origins;
             changed = eve_config::changed_keys(self.config(), &resolved.config);
@@ -369,8 +371,10 @@ impl EditorState {
             self.settings.user_layer = Some(resolved.user.clone());
             self.settings.config_origins = resolved.origins;
             self.set_config_languages(resolved.languages);
+            let exclude_before = self.exclude_config();
             self.apply_reloaded_config(resolved.config);
             self.refresh_all_doc_settings();
+            self.finder_on_exclude_changed(&exclude_before);
             // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)

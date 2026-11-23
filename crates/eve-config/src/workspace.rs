@@ -155,6 +155,8 @@ pub enum KeyRejectReason {
     Exec,
     /// (g) 許可リストの外のコマンド (kind が File のコマンドと `app.*`)。
     Command,
+    /// (h) 確認のダイアログ (`dialog` コンテキスト) への割当 (保存・破棄などの選択を、知らないキーで確定させない)。
+    Dialog,
 }
 
 impl KeyRejectReason {
@@ -169,6 +171,7 @@ impl KeyRejectReason {
             KeyRejectReason::None => "none",
             KeyRejectReason::Exec => "exec",
             KeyRejectReason::Command => "command",
+            KeyRejectReason::Dialog => "dialog",
         }
     }
 }
@@ -233,24 +236,87 @@ impl WorkspaceProblem {
     }
 }
 
-/// ワークスペース層 (`.eve/config.toml`) を読んで分類した結果 (07 §12.5 の WSC-2)。
+/// ワークスペース層 (`.eve/config.toml`) を読んだ結果 (07 §12.5 の WSC-2)。解析・条件の解決・検証まで済ませ、書かれた値と
+/// 書いた所を全部持つ。分類 (07 §12.3) は下の層と比べる表の操作だけなので、重ねるたびに今の下の層で
+/// [`WorkspaceLayer::classify`] する (ユーザー層を読み直した後に、古いユーザー層と比べた結果を使わない)。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkspaceLayer {
-    /// 使った (安全な) 項目の値。`applied` に無いキーの値は意味を持たない。`workspace.exclude` はワークスペース層の行だけ。
+    /// 書かれた値 (既定値に重ねたもの。`workspace.exclude` はワークスペース層の行だけ)。`written` に無いキーの値は意味を
+    /// 持たない。
     config: Config,
-    /// 使った公開キーと、書いた所 (キーごとに勝った 1 つ。書いた順)。
-    pub applied: Vec<Written>,
+    /// 値を使った公開キーと書いた所 (キーごとに勝った 1 つ。最初に書いた順)。
+    written: Vec<Written>,
     /// `[[language]]` の定義 (書いた順。`source` は空で、呼ぶ側がファイルの表示名を入れる)。
     pub languages: Vec<LanguageDef>,
-    /// 診断 (読込の診断と、使わなかった項目の診断。書いた所の順)。
+    /// 読込の診断 (構文・未知のキー・型・範囲・未対応など。書いた所の順)。
+    load_diagnostics: Vec<Diagnostic>,
+}
+
+/// 下の層と比べて分類した結果 ([`WorkspaceLayer::classify`])。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Classified {
+    /// 使う (安全な) 項目と書いた所。
+    pub applied: Vec<Written>,
+    /// 読込の診断と、使わなかった項目の診断 (書いた所の順。位置の無い診断は先頭)。
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl WorkspaceLayer {
-    /// 安全な項目を `base` に重ねる (層 L3、07 §12.5 の WSC-3)。`workspace.exclude` はワークスペース層の行を下の層の行の
-    /// **前** に足す (`!` の行がユーザー層・既定の除外を戻さない、07 §12.3)。
-    pub fn apply_to(&self, base: &mut Config) {
-        for w in &self.applied {
+    /// 書かれた項目を、下の層 (ユーザー層。無ければ既定値) の値 `lower` と比べて分類する (07 §12.3)。
+    #[must_use]
+    pub fn classify(&self, lower: &Config) -> Classified {
+        let mut out = Classified {
+            applied: Vec::new(),
+            diagnostics: self.load_diagnostics.clone(),
+        };
+        if self.has_error() {
+            return out;
+        }
+        let values = declared_values(&self.config);
+        for w in &self.written {
+            let class =
+                classify_key(w.key, &self.config, lower).unwrap_or(WorkspaceClass::Dangerous);
+            let problem = match class {
+                WorkspaceClass::Safe => {
+                    out.applied.push(w.clone());
+                    continue;
+                }
+                WorkspaceClass::SemiSafe => WorkspaceProblem::Pending,
+                WorkspaceClass::Dangerous => WorkspaceProblem::PendingUnsafe,
+                WorkspaceClass::AlwaysIgnored => WorkspaceProblem::Ignored,
+                WorkspaceClass::NoEffect => WorkspaceProblem::NoEffect,
+            };
+            let severity = if class == WorkspaceClass::AlwaysIgnored {
+                Severity::Warning
+            } else {
+                Severity::Info
+            };
+            let value = values
+                .iter()
+                .find(|(k, _)| *k == w.key)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
+            out.diagnostics.push(Diagnostic {
+                severity,
+                kind: DiagKind::Workspace(problem),
+                key: w.key.to_owned(),
+                value,
+                line: w.line,
+                column: w.column,
+                condition: w.condition,
+            });
+        }
+        // 「ほか N 件」は最後に置く
+        out.diagnostics
+            .sort_by_key(|d| (matches!(d.kind, DiagKind::More { .. }), d.line, d.column));
+        out
+    }
+
+    /// 使う項目 `applied` ([`WorkspaceLayer::classify`] の結果) を `base` に重ねる (層 L3、07 §12.5 の WSC-3)。
+    /// `workspace.exclude` はワークスペース層の行を下の層の行の **前** に足す (`!` の行がユーザー層・既定の除外を戻さない、
+    /// 07 §12.3)。
+    pub fn apply_to(&self, base: &mut Config, applied: &[Written]) {
+        for w in applied {
             if w.key == "workspace.exclude" {
                 let mut lines = self.config.exclude.clone();
                 lines.append(&mut base.exclude);
@@ -261,81 +327,51 @@ impl WorkspaceLayer {
         }
     }
 
-    /// エラー (構文エラー・書ける構造の上限) があり、ファイル全体を使わなかったか。
+    /// エラー (構文エラー・書ける構造の上限) があり、ファイル全体を使わないか。
     #[must_use]
     pub fn has_error(&self) -> bool {
-        self.diagnostics
+        self.load_diagnostics
             .iter()
             .any(|d| d.severity == Severity::Error)
     }
 }
 
-/// ワークスペース層の本文を読み、項目を分類する (07 §12.3 / §12.5)。`lower` は下の層 (ユーザー層。無ければ既定値) の値で、
-/// 「方向のみ」の比較に使う。条件付きセクションは `conditions` で解く (07 §3.4 の COND-1)。構文エラーのファイルは何も使わない。
+/// ワークスペース層の本文を読む (07 §12.5 の WSC-2)。条件付きセクションは `conditions` で解く (07 §3.4 の COND-1)。
+/// 構文エラーのファイルは何も使わない。分類は重ねるときに [`WorkspaceLayer::classify`] で行う。
 #[must_use]
-pub fn load_workspace_str(
-    text: &str,
-    conditions: crate::Conditions,
-    lower: &Config,
-) -> WorkspaceLayer {
+pub fn load_workspace_str(text: &str, conditions: crate::Conditions) -> WorkspaceLayer {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     // `workspace.exclude` は下の層に足すので、ワークスペース層の行だけを集める (`workspace.exclude = [...]` も置換しない)
-    let mut base = lower.clone();
-    base.exclude = Vec::new();
+    let base = Config {
+        exclude: Vec::new(),
+        ..Config::default()
+    };
     let loaded = load_str_for(base, text, conditions);
     let mut out = WorkspaceLayer {
         config: loaded.config,
-        applied: Vec::new(),
+        written: Vec::new(),
         languages: loaded.languages,
-        diagnostics: loaded.diagnostics,
+        // `workspace.safe_directories` はワークスペース層では使わない (常に無視の警告を 1 件出す) ので、要素の診断
+        // (広すぎる場所の「検査を省きます」など) は出さない
+        load_diagnostics: loaded
+            .diagnostics
+            .into_iter()
+            .filter(|d| {
+                !(d.key == "workspace.safe_directories" && matches!(d.kind, DiagKind::ListItem(_)))
+            })
+            .collect(),
     };
     if out.has_error() {
         out.languages.clear();
         return out;
     }
     // キーごとに勝った (最後に重ねた) 書いた所。並びは最初に書いた順
-    let mut last: Vec<Written> = Vec::new();
     for w in loaded.written {
-        match last.iter_mut().find(|l| l.key == w.key) {
+        match out.written.iter_mut().find(|l| l.key == w.key) {
             Some(l) => *l = w,
-            None => last.push(w),
+            None => out.written.push(w),
         }
     }
-    let values = declared_values(&out.config);
-    for w in last {
-        let class = classify_key(w.key, &out.config, lower).unwrap_or(WorkspaceClass::Dangerous);
-        let problem = match class {
-            WorkspaceClass::Safe => {
-                out.applied.push(w);
-                continue;
-            }
-            WorkspaceClass::SemiSafe => WorkspaceProblem::Pending,
-            WorkspaceClass::Dangerous => WorkspaceProblem::PendingUnsafe,
-            WorkspaceClass::AlwaysIgnored => WorkspaceProblem::Ignored,
-            WorkspaceClass::NoEffect => WorkspaceProblem::NoEffect,
-        };
-        let severity = if class == WorkspaceClass::AlwaysIgnored {
-            Severity::Warning
-        } else {
-            Severity::Info
-        };
-        let value = values
-            .iter()
-            .find(|(k, _)| *k == w.key)
-            .map(|(_, v)| v.clone())
-            .unwrap_or_default();
-        out.diagnostics.push(Diagnostic {
-            severity,
-            kind: DiagKind::Workspace(problem),
-            key: w.key.to_owned(),
-            value,
-            line: w.line,
-            column: w.column,
-            condition: w.condition,
-        });
-    }
-    // 読込の診断と分類の診断を、書いた所の順に並べる (位置の無い診断は先頭)
-    out.diagnostics.sort_by_key(|d| (d.line, d.column));
     out
 }
 

@@ -657,6 +657,10 @@ text = "条件付きセクションの中に {item} は書けません"
 hint = 'OS ごとの割当は when = "os == \"windows\"" のように書いてください。このセクションは使いません'
 text = "keymap.toml では条件付きセクション ({item}) を使えません"
 
+[msg.config.more]
+hint = "最初の 100 件だけを示しています。直してから読み直してください"
+text = "このファイルには、ほかに {count} 件の問題があります"
+
 [msg.config.invalid_item]
 hint = "この要素は使いません"
 text = "{item} の要素 {value} は使えません ({reason})"
@@ -1671,6 +1675,7 @@ args = "引数を持つため"
 none = "割当の解除のため"
 exec = "外部コマンドのため"
 command = "ワークスペースからは割り当てられないコマンドのため"
+dialog = "確認のダイアログのキーのため"
 
 [ui.workspace_search]
 title = "ワークスペースを検索 {toggles}"

@@ -25,6 +25,8 @@ struct Setup<'a> {
     keymap: Option<&'a str>,
     sets: &'a [&'a str],
     no_workspace_config: bool,
+    /// 起動の前にファインダを開く (ルートとワークスペース層が届く前)。
+    finder: bool,
     /// 起動の前に偽 FS に手を加える。
     before: Option<&'a dyn Fn(&Harness)>,
     files: &'a [&'a str],
@@ -103,6 +105,9 @@ fn start(s: &Setup<'_>) -> Harness {
     let initial: Vec<InitialFile> = files.iter().map(|f| InitialFile::path(*f)).collect();
     h.editor.open_initial_files(&initial, false, None);
     h.started();
+    if s.finder {
+        h.cmd("workspace.open_file");
+    }
     h.run_jobs();
     h
 }
@@ -311,11 +316,26 @@ fn 準安全と危険と常に無視と効かないは使わず_項目ごとに�
 // verifies: AC-NFR-502-1
 #[test]
 fn ワークスペース設定の外部コマンドは使われず_コピーと保存でプロセスを起動しない() {
+    // 記録する偽のコマンド: 実行されると、実際の一時ディレクトリの印のファイルに 1 行足す (07 §12.6.1)
+    // (実行の有無を見るので、偽 FS ではなく実際の一時ディレクトリ。名前はプロセスごとに違う)
+    let marker = std::env::temp_dir().join(format!("eve-nfr502-{}", std::process::id()));
+    assert!(
+        !marker.exists(),
+        "前の実行の印が残っている: {}",
+        marker.display()
+    );
+    let m = marker.display().to_string();
+    let cmd = if cfg!(windows) {
+        format!("['cmd', '/C', 'echo x>>{m}']")
+    } else {
+        format!("['sh', '-c', 'echo x >> {m}']")
+    };
+    let ws = format!(
+        "[clipboard]\nprovider = \"command\"\ncommand.copy = {cmd}\ncommand.paste = {cmd}\n\
+         [formatter.x]\ncommand = {cmd}\n[language-server.y]\ncommand = {cmd}\n"
+    );
     let mut h = start(&Setup {
-        ws: Some(
-            "[clipboard]\nprovider = \"command\"\ncommand.copy = [\"sh\", \"-c\", \"touch /tmp/pwned\"]\n\
-             [formatter.x]\ncommand = \"rm\"\n[language-server.y]\ncommand = \"evil\"\n",
-        ),
+        ws: Some(&ws),
         ..Setup::default()
     });
     let d = diagnostics(&mut h);
@@ -331,29 +351,35 @@ fn ワークスペース設定の外部コマンドは使われず_コピーと�
             "{item}: {d:?}"
         );
     }
-    // コピーは Effect (frontend のクリップボード) だけで、保存はファイルの書込だけ。core にはプロセスを起動する経路が無い
+    // コピー・貼り付け・保存。コピーは frontend のクリップボード (Effect) だけで、保存はファイルの書込だけ
     h.keys("shift+end");
     h.cmd("clipboard.copy");
     h.keys("end");
+    h.cmd("clipboard.paste");
     h.text("x");
     h.cmd("file.save");
     h.run_jobs();
-    assert_eq!(
-        h.fs.read(IN_ROOT).as_deref(),
-        Some(
-            &b"textx
-"[..]
-        )
+    assert!(
+        h.fs.read(IN_ROOT).is_some_and(|b| b.ends_with(b"x\n")),
+        "{:?}",
+        h.fs.read(IN_ROOT)
     );
     assert!(
         h.effects().iter().all(|e| matches!(
             e,
-            eve_view::Effect::SetClipboard { .. } | eve_view::Effect::SetMouseCapture { .. }
+            eve_view::Effect::SetClipboard { .. }
+                | eve_view::Effect::RequestClipboard { .. }
+                | eve_view::Effect::SetMouseCapture { .. }
         )),
         "{:?}",
         h.effects()
     );
-    assert!(!h.fs.exists("/tmp/pwned"));
+    // 偽のコマンドの実行は 0 回
+    assert!(
+        !marker.exists(),
+        "コマンドが実行された: {}",
+        marker.display()
+    );
 }
 
 // ---- AC-3: 所有者の検査 ----
@@ -498,4 +524,267 @@ fn 未対応の置き場所は情報診断を_1_件ずつ出す() {
             "{item}: {d:?}"
         );
     }
+}
+
+// ---- レビューで直した点 (M33 の段 5 のレビュー) ----
+
+/// ユーザーの設定ファイルを書き換えて `config.reload` する。
+fn workspace_commands(h: &Harness) -> Vec<String> {
+    h.editor
+        .keymap()
+        .listed_bindings()
+        .into_iter()
+        .filter(|(layer, _)| *layer == "workspace")
+        .map(|(_, b)| b.command.as_str().to_owned())
+        .collect()
+}
+
+fn reload_with_user(h: &mut Harness, user: &str) {
+    h.fs.set_file(&FsPath::new(CONFIG), user.as_bytes());
+    h.cmd("config.reload");
+    h.run_jobs();
+}
+
+fn tab_width(h: &Harness) -> u8 {
+    h.editor.state().config().tab_width
+}
+
+// verifies: AC-FR-705-3
+#[test]
+fn config_reload_で足した安全な場所と外した安全な場所は_1_回目から効く() {
+    let before = |h: &Harness| {
+        h.fs.set_owner_verdict(
+            "/w/repo/.eve",
+            Some(OwnerVerdict::Unknown {
+                fs: "exFAT".to_owned(),
+            }),
+        );
+    };
+    let mut h = start(&Setup {
+        ws: Some("[editor]\ntab_width = 2\n"),
+        before: Some(&before),
+        ..Setup::default()
+    });
+    assert_eq!(tab_width(&h), 4);
+    // 足した: 読み直したユーザー層の値で、その回の読込から検査を省く
+    reload_with_user(&mut h, "[workspace]\nsafe_directories = [\"/w/repo\"]\n");
+    assert_eq!(tab_width(&h), 2);
+    // 外した: その回から読まない
+    reload_with_user(&mut h, "");
+    assert_eq!(tab_width(&h), 4);
+}
+
+// verifies: AC-FR-705-2
+#[test]
+fn 一時の失敗で保った層も_読み直したユーザー層と比べて分類し直す() {
+    let mut h = start(&Setup {
+        user: "[file]\nhuge_file_warn_bytes = 209715200\n",
+        ws: Some("[file]\nhuge_file_warn_bytes = 104857600\n"),
+        ..Setup::default()
+    });
+    assert_eq!(h.editor.state().config().huge_file_warn_bytes, 100 << 20);
+    // ユーザー層が閾値を下げた。ワークスペース層は一時の失敗で前のまま: 大きくする向きになったので使わない
+    h.fs.fail_next(FsOp::ReadChecked, FsErrorKind::Busy);
+    reload_with_user(&mut h, "[file]\nhuge_file_warn_bytes = 10485760\n");
+    assert_eq!(h.editor.state().config().huge_file_warn_bytes, 10 << 20);
+    let d = diagnostics(&mut h);
+    assert!(
+        d.iter()
+            .any(|(t, f)| t.contains("file.huge_file_warn_bytes") && *f == ws_file(2)),
+        "{d:?}"
+    );
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn config_reload_で壊れたワークスペース設定は前の層を保ち_無くなったら外す() {
+    let mut h = start(&Setup {
+        ws: Some("[editor]\ntab_width = 2\n"),
+        keymap: Some("[keys.editor]\n\"ctrl+alt+shift+f12\" = \"cursor.move_down\"\n"),
+        ..Setup::default()
+    });
+    assert_eq!(tab_width(&h), 2);
+    h.fs.set_file(&FsPath::new(WS_CONFIG), b"[editor\ntab_width = 3\n");
+    h.fs.set_file(&FsPath::new(WS_KEYMAP), b"[keys.editor\n");
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(tab_width(&h), 2, "前の層を保つ");
+    let kept = h
+        .messages()
+        .iter()
+        .filter(|m| *m == "msg.config.reload_kept")
+        .count();
+    assert_eq!(kept, 2, "{:?}", h.messages());
+    let d = diagnostics(&mut h);
+    assert!(
+        d.iter().any(|(_, f)| f.starts_with(&eve("config.toml"))),
+        "{d:?}"
+    );
+    // キーの割当も保つ (ヘルプのキーの一覧に残る)
+    assert!(
+        workspace_commands(&h).contains(&"cursor.move_down".to_owned()),
+        "{:?}",
+        workspace_commands(&h)
+    );
+    // ファイルが無くなったら外す
+    h.fs.remove(&FsPath::new(WS_CONFIG));
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(tab_width(&h), 4);
+}
+
+// verifies: AC-FR-705-2
+#[test]
+fn 一時の失敗では層と一緒に診断の一覧も保つ() {
+    let mut h = start(&Setup {
+        ws: Some("[theme]\nname = \"x\"\n"),
+        ..Setup::default()
+    });
+    let before = diagnostics(&mut h);
+    assert!(
+        before.iter().any(|(t, _)| t.contains("theme.name")),
+        "{before:?}"
+    );
+    h.fs.fail_next(FsOp::ReadChecked, FsErrorKind::Busy);
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(diagnostics(&mut h), before);
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn キーの割当の上限は書いた位置の順で数える() {
+    // 表のキーの順 (名前の順) では後に来るキーを先に書き、上限の 1,000 件の内に入れる
+    let mut text = String::from("[keys.editor]\n\"ctrl+alt+shift+f12\" = \"cursor.move_down\"\n");
+    for i in 0..1_000 {
+        text.push_str(&format!("\"ctrl+alt+shift+a {i}\" = \"cursor.move_up\"\n"));
+    }
+    let mut h = start(&Setup {
+        keymap: Some(&text),
+        ..Setup::default()
+    });
+    let d = list(&mut h, "config.show_diagnostics", "1000");
+    let keymap = eve("keymap.toml");
+    // 1,001 件目 (位置の順で最後の行) で上限の警告
+    assert!(
+        d.iter()
+            .any(|(t, f)| t.contains("1000") && *f == format!("{keymap}:1002")),
+        "{:?}",
+        d.iter()
+            .filter(|(t, _)| t.contains("1000"))
+            .collect::<Vec<_>>()
+    );
+    // 最初に書いた割当は使う
+    assert!(
+        workspace_commands(&h).contains(&"cursor.move_down".to_owned()),
+        "{:?}",
+        workspace_commands(&h)
+    );
+}
+
+// verifies: AC-FR-704-2
+#[test]
+fn 起動時に届いたワークスペース層の言語定義で_設定ファイルの言語の診断が_2_重にならない() {
+    let mut h = start(&Setup {
+        user: "[[language]]\nname = \"bar\"\nfirst_line = \"(\"\n",
+        ws: Some("[[language]]\nname = \"foo\"\nfile_types = [\"foo\"]\n"),
+        ..Setup::default()
+    });
+    let d = list(&mut h, "config.show_diagnostics", "first_line");
+    let n = d
+        .iter()
+        .filter(|(_, f)| f.starts_with("config.toml"))
+        .count();
+    assert_eq!(n, 1, "{d:?}");
+}
+
+// verifies: AC-FR-704-2
+#[test]
+fn ワークスペース層の先頭行の正規表現は_io_のジョブで組み_組めなければファイルの名前で知らせる() {
+    let mut h = start(&Setup {
+        ws: Some("[[language]]\nname = \"foo\"\nfirst_line = \"(\"\n"),
+        ..Setup::default()
+    });
+    // 文書の判定に使う前に (この文書は foo に当たらない)、io のジョブで組んで、組めない値を知らせている
+    let d = list(&mut h, "config.show_diagnostics", "first_line");
+    assert!(
+        d.iter()
+            .any(|(t, f)| t.contains("first_line") && *f == ws_file(3)),
+        "{d:?}"
+    );
+}
+
+// verifies: AC-FR-705-3
+#[test]
+fn ホームディレクトリそのものを安全な場所に書くと広すぎると知らせる() {
+    let mut h = start(&Setup {
+        user: &format!(
+            "[workspace]\nsafe_directories = [\"{}\"]\n",
+            eve_testkit::FIXED_HOME
+        ),
+        ..Setup::default()
+    });
+    let d = diagnostics(&mut h);
+    assert!(
+        d.iter()
+            .any(|(t, f)| t.contains("広すぎます") && f == "config.toml:2"),
+        "{d:?}"
+    );
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn 無題の文書と新しいファイルに_届いた後でワークスペース層の改行を当てる() {
+    let mut h = start(&Setup {
+        ws: Some("[file]\ndefault_line_ending = \"crlf\"\n"),
+        files: &["/w/repo/new.txt"],
+        ..Setup::default()
+    });
+    h.keys("x");
+    h.keys("enter");
+    h.cmd("file.save");
+    h.run_jobs();
+    assert_eq!(h.fs.read("/w/repo/new.txt").as_deref(), Some(&b"x\r\n"[..]));
+    // 無題の文書 (ルートの外でもパスが無いので (6) の段が効く)
+    h.cmd("file.new");
+    h.keys("y");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "y\r\n");
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn 起動直後のファインダの走査は_届いたワークスペース層の除外でやり直す() {
+    let before = |h: &Harness| {
+        h.fs.add_file("/w/repo/keep.txt", b"");
+        h.fs.add_file("/w/repo/skip.log", b"");
+    };
+    let h = start(&Setup {
+        ws: Some("[workspace]\nexclude = [\"*.log\"]\n"),
+        before: Some(&before),
+        finder: true,
+        ..Setup::default()
+    });
+    let (_, _, rows, _) = h
+        .editor
+        .state()
+        .finder_rows()
+        .expect("ファインダが開いている");
+    assert!(rows.iter().any(|r| r.contains("keep.txt")), "{rows:?}");
+    assert!(!rows.iter().any(|r| r.contains("skip.log")), "{rows:?}");
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn ワークスペース層のキーの割当は確認のダイアログに足せない() {
+    let mut h = start(&Setup {
+        keymap: Some("[keys.dialog]\n\"pagedown\" = \"ui.confirm\"\n"),
+        ..Setup::default()
+    });
+    let d = diagnostics(&mut h);
+    assert!(
+        d.iter()
+            .any(|(t, _)| t.contains("pagedown") && t.contains("確認のダイアログ")),
+        "{d:?}"
+    );
 }

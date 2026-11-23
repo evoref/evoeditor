@@ -261,11 +261,13 @@ pub struct Composed {
     pub ui_locale_at: Option<(KeyOrigin, String)>,
     /// `--set` の診断 (書いた順)。
     pub set_diagnostics: Vec<Diagnostic>,
+    /// ワークスペース層の診断 (読込の診断と、ユーザー層と比べて使わなかった項目の診断。ワークスペース層が無ければ空)。
+    pub workspace_diagnostics: Vec<Diagnostic>,
 }
 
-/// ユーザー層 `user` に、ワークスペース層 (`workspace` の (表示名, 層)。安全な項目だけ、07 §12.5 の WSC-3) と
-/// コマンドライン層 (`sets`) をこの順に重ねる (07 §3.1 の L2 → L3 → L4)。`config.reload` とワークスペース層が届いたときに、
-/// 設定ファイルを読み直さずに重ね直すのに使う。
+/// ユーザー層 `user` に、ワークスペース層 (`workspace` の (表示名, 層)。ユーザー層の値と比べて分類した安全な項目だけ、
+/// 07 §12.3 / §12.5 の WSC-3) とコマンドライン層 (`sets`) をこの順に重ねる (07 §3.1 の L2 → L3 → L4)。`config.reload` と
+/// ワークスペース層が届いたときに、設定ファイルを読み直さずに重ね直すのに使う。分類は重ねるたびに今の `user` で行う。
 #[must_use]
 pub fn compose(
     user: &UserLayer,
@@ -277,9 +279,12 @@ pub fn compose(
     let mut origins = user.origins.clone();
     let mut theme_name_at = user.theme_name_at.clone();
     let mut ui_locale_at = user.ui_locale_at.clone();
+    let mut workspace_diagnostics = Vec::new();
     if let Some((source, ws)) = workspace {
-        ws.apply_to(&mut config);
-        for w in &ws.applied {
+        let classified = ws.classify(&user.config);
+        ws.apply_to(&mut config, &classified.applied);
+        workspace_diagnostics = classified.diagnostics;
+        for w in &classified.applied {
             origins.set(
                 w.key,
                 Origin::Workspace {
@@ -323,6 +328,7 @@ pub fn compose(
         theme_name_at,
         ui_locale_at,
         set_diagnostics,
+        workspace_diagnostics,
     }
 }
 

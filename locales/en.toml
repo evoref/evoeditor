@@ -659,6 +659,10 @@ text = "{item} cannot be written in a conditional section"
 hint = 'Use when = "os == \"windows\"" for OS-specific bindings. This section is not used'
 text = "Conditional sections ({item}) are not supported in keymap.toml"
 
+[msg.config.more]
+hint = "Only the first 100 are shown. Fix them and reload"
+text = "This file has {count} more problems"
+
 [msg.config.invalid_item]
 hint = "This item is not used"
 text = "The item {value} of {item} is invalid ({reason})"
@@ -1673,6 +1677,7 @@ args = "it has arguments"
 none = "it removes a binding"
 exec = "it runs an external command"
 command = "the command cannot be bound from a workspace"
+dialog = "it is a key in a confirmation dialog"
 
 [ui.workspace_search]
 title = "Search Workspace {toggles}"

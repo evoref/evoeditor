@@ -7,24 +7,45 @@ use crate::{
 };
 use proptest::prelude::*;
 
-fn ws(text: &str, lower: &Config) -> WorkspaceLayer {
-    load_workspace_str(text, Conditions::default(), lower)
+/// 読んで、下の層 `lower` と比べて分類した結果。
+struct Layered {
+    layer: WorkspaceLayer,
+    applied: Vec<Written>,
+    diagnostics: Vec<Diagnostic>,
+    languages: Vec<LanguageDef>,
 }
 
-fn problems(l: &WorkspaceLayer) -> Vec<(String, DiagKind)> {
+impl Layered {
+    fn has_error(&self) -> bool {
+        self.layer.has_error()
+    }
+}
+
+fn ws(text: &str, lower: &Config) -> Layered {
+    let layer = load_workspace_str(text, Conditions::default());
+    let c = layer.classify(lower);
+    Layered {
+        languages: layer.languages.clone(),
+        layer,
+        applied: c.applied,
+        diagnostics: c.diagnostics,
+    }
+}
+
+fn problems(l: &Layered) -> Vec<(String, DiagKind)> {
     l.diagnostics
         .iter()
         .map(|d| (d.key.clone(), d.kind.clone()))
         .collect()
 }
 
-fn applied(l: &WorkspaceLayer) -> Vec<&'static str> {
+fn applied(l: &Layered) -> Vec<&'static str> {
     l.applied.iter().map(|w| w.key).collect()
 }
 
-fn layered(l: &WorkspaceLayer, lower: &Config) -> Config {
+fn layered(l: &Layered, lower: &Config) -> Config {
     let mut c = lower.clone();
-    l.apply_to(&mut c);
+    l.layer.apply_to(&mut c, &l.applied);
     c
 }
 
@@ -76,22 +97,14 @@ fn 常に無視と効かないの項目は使わずに知らせる() {
         .iter()
         .map(|d| (d.key.clone(), d.severity))
         .collect();
-    let safe = if cfg!(windows) {
-        // Windows では `/tmp` は絶対パスでない (要素の警告) が、キーとしては常に無視
-        vec![
-            ("workspace.safe_directories".to_owned(), Severity::Warning),
-            ("workspace.safe_directories".to_owned(), Severity::Warning),
-        ]
-    } else {
-        vec![("workspace.safe_directories".to_owned(), Severity::Warning)]
-    };
-    let mut want = safe;
-    want.extend([
+    // 安全な場所は要素の診断を出さず (Windows では `/tmp` は絶対パスでない)、常に無視の 1 件だけ
+    let want = [
+        ("workspace.safe_directories".to_owned(), Severity::Warning),
         ("workspace.root_markers".to_owned(), Severity::Info),
         ("view.ambiguous_width".to_owned(), Severity::Info),
         ("ui.locale".to_owned(), Severity::Info),
         ("theme.color_mode".to_owned(), Severity::Info),
-    ]);
+    ];
     assert_eq!(kinds, want);
     assert!(
         l.diagnostics
@@ -229,7 +242,7 @@ fn 目印と安全な場所の要素を確かめる() {
         ]
     );
     assert_eq!(l.diagnostics[0].value, "a/b");
-    // 安全な場所: 絶対パスの形は条件の OS の規則で確かめる (COND-4)。OS の決まらないセクションは形を確かめない
+    // 安全な場所: 絶対パスの形は条件の OS の規則で確かめる (COND-4)。OS の決まらないセクションは今の OS の規則
     let src = "[os.windows.workspace]\nsafe_directories = [\"C:\\\\src\", \"/mnt/c\", \"D:\\\\\", \"*\"]\n\
                [os.linux.workspace]\nsafe_directories = [\"/mnt/c/src\", \"C:\\\\src\", \"/\", \"~/x\"]\n\
                [env.wsl.workspace]\nsafe_directories = [\"anything\"]\n";
@@ -242,10 +255,16 @@ fn 目印と安全な場所の要素を確かめる() {
             other => panic!("{other:?}"),
         })
         .collect();
-    // 並びは表の中の名前の順 (`linux` が `windows` の前)
+    // 並びは表の中の名前の順 (`env` が `os` の前、`linux` が `windows` の前)。OS の決まらない `env.*` のセクションは、今の
+    // OS の規則で確かめる
     assert_eq!(
         got,
         [
+            (
+                Some("env.wsl"),
+                ListItemProblem::Relative,
+                "anything".to_owned()
+            ),
             (
                 Some("os.linux"),
                 ListItemProblem::Relative,
@@ -375,7 +394,7 @@ fn 重ねる順はユーザー層_ワークスペース層_set() {
     let l = ws("[editor]\ntab_width = 2\nindent_width = 3\n", &user.config);
     let c = compose(
         &user,
-        Some(("/w/.eve/config.toml", &l)),
+        Some(("/w/.eve/config.toml", &l.layer)),
         &["editor.indent_width=6".to_owned()],
         Conditions::default(),
     );
@@ -448,8 +467,9 @@ proptest! {
         if let Some(v) = s.ws_lang {
             wtext.push_str(&format!("[[language]]\nname = \"rust\"\nindent = {{ width = {v} }}\n"));
         }
-        let layer = ws(&wtext, &r.user.config);
-        prop_assert!(layer.diagnostics.is_empty(), "{:?}", layer.diagnostics);
+        let layered = ws(&wtext, &r.user.config);
+        prop_assert!(layered.diagnostics.is_empty(), "{:?}", layered.diagnostics);
+        let layer = layered.layer;
         let sets: Vec<String> = s.set.iter().map(|v| format!("editor.indent_width={v}")).collect();
         let c = compose(&r.user, Some(("ws", &layer)), &sets, Conditions::default());
         let mut wdefs = layer.languages.clone();
@@ -477,4 +497,105 @@ proptest! {
         // 字下げの単位は組込みの `rust` が持たないので層の値のまま
         prop_assert_eq!(v.indent_unit.value, IndentUnit::Space);
     }
+}
+
+// verifies: AC-FR-705-2
+#[test]
+fn 分類は重ねるたびに今のユーザー層と比べる() {
+    // 一度読んだ層を、ユーザー層を替えて重ね直す (config.reload でワークスペース層が一時の失敗のとき)
+    let layer = load_workspace_str(
+        "[file]\nhuge_file_warn_bytes = 104857600\nreload_on_external_change = \"auto_if_unmodified\"\n",
+        Conditions::default(),
+    );
+    let big = Config {
+        huge_file_warn_bytes: 200 << 20,
+        reload_on_external_change: ExternalChangePolicy::AutoIfUnmodified,
+        ..Config::default()
+    };
+    let keys = |lower: &Config| -> Vec<&'static str> {
+        layer
+            .classify(lower)
+            .applied
+            .iter()
+            .map(|w| w.key)
+            .collect()
+    };
+    assert_eq!(
+        keys(&big),
+        [
+            "file.huge_file_warn_bytes",
+            "file.reload_on_external_change"
+        ]
+    );
+    // ユーザー層が閾値を下げ、`ask` にした: 大きくする向きと緩める向きは使わない
+    let small = Config {
+        huge_file_warn_bytes: 10 << 20,
+        reload_on_external_change: ExternalChangePolicy::Ask,
+        ..Config::default()
+    };
+    assert!(keys(&small).is_empty(), "{:?}", keys(&small));
+    let user = UserLayer {
+        config: small.clone(),
+        ..UserLayer::default()
+    };
+    let c = compose(&user, Some(("ws", &layer)), &[], Conditions::default());
+    assert_eq!(c.config.huge_file_warn_bytes, 10 << 20);
+    assert_eq!(
+        c.config.reload_on_external_change,
+        ExternalChangePolicy::Ask
+    );
+    assert_eq!(
+        c.workspace_diagnostics.len(),
+        2,
+        "{:?}",
+        c.workspace_diagnostics
+    );
+}
+
+#[test]
+fn ワークスペース層の安全な場所は要素の診断を出さない() {
+    let l = ws(
+        r#"[workspace]
+safe_directories = ["/", "rel", 'C:\']
+"#,
+        &Config::default(),
+    );
+    assert_eq!(
+        problems(&l),
+        [(
+            "workspace.safe_directories".to_owned(),
+            DiagKind::Workspace(WorkspaceProblem::Ignored)
+        )]
+    );
+}
+
+#[test]
+fn 診断は_1_つのファイルで上限までにして_ほか_n_件にまとめる() {
+    // 256 KiB 近い配列の要素がどれも誤り: 上限の数だけ位置を引き、残りは数える (io のジョブを止めない)
+    let items = vec!["1"; 60_000].join(", ");
+    let text = format!("workspace.root_markers = [{items}]\n");
+    let started = std::time::Instant::now();
+    let l = load_str(&text);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(l.diagnostics.len(), crate::CONFIG_MAX_DIAGNOSTICS + 1);
+    assert_eq!(
+        l.diagnostics.last().map(|d| d.kind.clone()),
+        Some(DiagKind::More {
+            count: 60_000 - crate::CONFIG_MAX_DIAGNOSTICS
+        })
+    );
+    // 残した診断は書いた位置を持つ
+    assert_eq!((l.diagnostics[0].line, l.diagnostics[0].column), (1, 27));
+    // keymap.toml も同じ上限
+    let keys: String = (0..300).map(|i| format!("\"k{i}\" = 1\n")).collect();
+    let k = crate::load_keymap_str(&format!("[keys.editor]\n{keys}"));
+    assert_eq!(k.diagnostics.len(), crate::CONFIG_MAX_DIAGNOSTICS + 1);
+    assert!(matches!(
+        k.diagnostics.last().map(|d| &d.kind),
+        Some(DiagKind::More { count: 200 })
+    ));
 }

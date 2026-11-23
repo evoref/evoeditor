@@ -180,6 +180,8 @@ pub enum JobResult {
     LanguagesPrecompiled {
         /// 組んだ定義の集まり (古い結果を見分ける)。
         set: std::sync::Arc<eve_config::LanguageSet>,
+        /// 組んだワークスペース層の集まり (古い結果を見分ける)。
+        workspace: Option<std::sync::Arc<eve_config::LanguageSet>>,
         /// 組めなかった `first_line` の診断 (表示名ごと)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
     },

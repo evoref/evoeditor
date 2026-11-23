@@ -20,6 +20,7 @@ mod layers;
 mod locale;
 mod locale_file;
 mod locales_gen;
+mod position;
 pub mod reserved;
 mod sanitize;
 pub mod theme;
@@ -54,9 +55,10 @@ pub use locale_file::{
     LOCALE_MAX_MARKS, LOCALE_MAX_TEXT_CHARS, LOCALE_RESERVED_PREFIXES, LocaleFile, LocaleProblem,
     PlaceholderIssue, TextCheck, check_text, hint_width, load_locale_file,
 };
+pub use position::CONFIG_MAX_DIAGNOSTICS;
 pub use sanitize::{UNTRUSTED_MAX_CHARS, escape_untrusted, sanitize_untrusted};
 pub use toml_scan::{StructureProblem, TOML_MAX_KEY_DEPTH, TOML_MAX_NESTING};
 pub use workspace::{
-    KeyRejectReason, WorkspaceClass, WorkspaceLayer, WorkspacePolicy, WorkspaceProblem,
+    Classified, KeyRejectReason, WorkspaceClass, WorkspaceLayer, WorkspacePolicy, WorkspaceProblem,
     load_workspace_str,
 };

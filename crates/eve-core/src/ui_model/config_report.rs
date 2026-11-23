@@ -557,6 +557,11 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             group = "language";
             p.message_name()
         }
+        // 1 つのファイルの診断の上限を超えた分 (07 §4.3)
+        DiagKind::More { count } => {
+            args.push(("count", count.to_string()));
+            "more"
+        }
         // 配列の要素の誤り (07 §5.9)。広すぎる安全な場所は使うので、別の文言 (07 §12.1 の OWN-5)
         DiagKind::ListItem(p) => {
             if *p == eve_config::ListItemProblem::TooBroad {
@@ -728,6 +733,7 @@ pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
         DiagKind::ListItem(eve_config::ListItemProblem::TooBroad) => "broad_safe_directory",
         DiagKind::ListItem(_) => "invalid_item",
         DiagKind::Workspace(p) => p.message_name(),
+        DiagKind::More { .. } => "more",
     }
 }
 
@@ -736,7 +742,8 @@ pub fn problem_count(diags: &[&Diagnostic]) -> usize {
     diags
         .iter()
         .map(|d| match &d.kind {
-            DiagKind::Locale(eve_config::LocaleProblem::More { count }) => *count,
+            DiagKind::Locale(eve_config::LocaleProblem::More { count })
+            | DiagKind::More { count } => *count,
             _ => 1,
         })
         .sum()

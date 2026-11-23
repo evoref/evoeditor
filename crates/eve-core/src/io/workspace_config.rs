@@ -2,21 +2,22 @@
 //!
 //! - **ジョブ** (`io`): `<root>/.eve/config.toml` と `<root>/.eve/keymap.toml` を所有者の検査つきの読込
 //!   (`FileSystem::read_checked`。`.eve` から先のリンクを辿らない) で 256 KiB まで読み、解析・条件付きセクションの解決・
-//!   検証・分類 (07 §12.3) までをジョブの中で行う (WSC-2。他人のリポジトリの大きな・入れ子の深いファイルの解析で入力を
-//!   止めない)。`.eve/languages/`・`.eve/themes/`・`.eve/queries/` は、あれば「このバージョンでは未対応」の情報診断だけ。
-//! - **主スレッド**: 届いた層を、ユーザー層の上・コマンドライン層の下に重ね直す (WSC-3)。読み直しは `config.reload` と同じ
+//!   検証までをジョブの中で行う (WSC-2。他人のリポジトリの大きな・入れ子の深いファイルの解析で入力を止めない)。
+//!   `.eve/languages/`・`.eve/themes/`・`.eve/queries/` は、あれば「このバージョンでは未対応」の情報診断だけ。
+//! - **主スレッド**: 届いた層を、今のユーザー層と比べて分類し (07 §12.3。表の比較だけ)、ユーザー層の上・コマンドライン層の
+//!   下に重ね直す (WSC-3)。ユーザー層を読み直したときも、そのユーザー層で分類し直す。読み直しは `config.reload` と同じ
 //!   経路 (ユーザー層を読み直した後にこのジョブを積み、届いてから全体を差し替えて要約を 1 回出す)。
 //!
 //! 所有者の検査で読まなかったファイルは、ファイルごとに 1 件の警告 (OWN-7)。一時の失敗 (`Busy`) は診断を出さず、前に読んだ
-//! 層をそのまま使う (次の読込で読み直す)。
+//! 層とその診断をそのまま使う (次の読込で読み直す)。`config.reload` で構文エラー・読めないファイルは、前に読んだ層を保って
+//! `msg.config.reload_kept` を出す (07 §6 の規則 1)。
 //!
-//! spec: 07 §12.5, 07 §12.1, 07 §12.3, 07 §7.4
+//! spec: 07 §12.5, 07 §12.1, 07 §12.3, 07 §7.4, 07 §6
 
 use std::sync::Arc;
 
-use eve_config::{
-    Config, DiagKind, Diagnostic, KeymapFile, Severity, WorkspaceLayer, WorkspaceProblem,
-};
+use eve_config::{DiagKind, Diagnostic, KeymapFile, Severity, WorkspaceLayer, WorkspaceProblem};
+use eve_view::MessageLevel;
 
 use crate::editor::state::EditorState;
 use crate::io::config_reload::ReloadPlan;
@@ -28,6 +29,7 @@ use crate::io::fs::{
 use crate::io::fspath::FsPath;
 use crate::io::pending::Pending;
 use crate::jobs::{JobKind, JobResult};
+use crate::ui_model::keys;
 
 /// ワークスペース設定のファイルの名前 (`<root>/.eve/config.toml`、07 §12.1)。
 pub const WORKSPACE_CONFIG_FILE: &str = "config.toml";
@@ -35,20 +37,26 @@ pub const WORKSPACE_CONFIG_FILE: &str = "config.toml";
 pub const WORKSPACE_KEYMAP_FILE: &str = "keymap.toml";
 /// 1 ファイルの大きさの上限 (バイト。07 §12.5 の WSC-1)。
 pub const WORKSPACE_FILE_MAX_BYTES: u64 = 256 * 1024;
-/// ワークスペース層のキーの割当の上限 (1 ファイル。07 §7.4 の WKEY-3)。
-pub const WORKSPACE_KEYMAP_MAX: usize = 1_000;
 /// v0.5 では読まない `.eve` の下のディレクトリ (あれば未対応の情報診断を 1 件ずつ、WSC-1)。
 const UNSUPPORTED_DIRS: [&str; 3] = ["languages", "themes", "queries"];
 
 /// 1 つのファイルの読込の結果。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Fetched<T> {
-    /// 無い・読まなかった (層を外す)。
+    /// 無い・所有者の検査で読まなかった (層を外す)。
     Absent,
     /// 読んだ。
     Got(T),
-    /// 一時の失敗 (`Busy`): 前に読んだものを使い続ける。
+    /// 構文エラー・読めない (起動時は層を持たない。`config.reload` では前に読んだ層を保つ、07 §6 の規則 1)。
+    Broken,
+    /// 一時の失敗 (`Busy`): 前に読んだ層と診断を使い続ける。
     Keep,
+}
+
+impl<T> Fetched<T> {
+    fn keeps_diagnostics(&self) -> bool {
+        matches!(self, Fetched::Keep)
+    }
 }
 
 /// `ReadWorkspaceConfig` の結果。
@@ -58,12 +66,15 @@ pub struct WorkspaceRead {
     pub config_path: FsPath,
     /// `<root>/.eve/keymap.toml`。
     pub keymap_path: FsPath,
-    /// `.eve/config.toml` を読んで分類した層。
+    /// `.eve/config.toml` を読んだ層 (分類は主スレッドで重ねるときに行う)。
     pub layer: Fetched<WorkspaceLayer>,
-    /// `.eve/keymap.toml` (割当の上限を超えた分を除き、その警告を診断に足したもの。検証は主スレッドで、下の層と比べる)。
+    /// `.eve/keymap.toml` (検証は主スレッドで、下の層と比べる)。
     pub keymap: Fetched<KeymapFile>,
-    /// ファイルごとの診断 (表示名はファイルの絶対パス)。読まなかった理由と、`.eve/config.toml` の読込・分類の診断。
-    pub reports: Vec<(String, Vec<Diagnostic>)>,
+    /// `.eve/config.toml` の名前で出す、層の外の診断 (読まなかった理由・構文エラー・読めない置き場所の情報)。分類の診断は
+    /// 重ねるときに足す。
+    pub config_notes: Vec<Diagnostic>,
+    /// `.eve/keymap.toml` の名前で出す、読まなかった理由と構文エラー (読めたときの診断は、キーマップを当てるときに出す)。
+    pub keymap_notes: Vec<Diagnostic>,
 }
 
 /// 位置の無い (ファイル全体の) 診断 1 件。
@@ -83,24 +94,26 @@ fn whole(severity: Severity, kind: DiagKind, value: String) -> Diagnostic {
 /// 大文字小文字を区別しない)。検査を省くかは Port が開いた後の最終のパスで決める (07 §12.1 の OWN-5) ので、ここは診断の
 /// 文言を選ぶのにだけ使う。
 fn written_under(dir: &FsPath, safe_dirs: &[FsPath]) -> bool {
-    let parts = |p: &FsPath| -> Vec<String> {
-        p.as_path()
-            .components()
-            .map(|c| {
-                let s = c.as_os_str().to_string_lossy().into_owned();
-                if cfg!(windows) {
-                    s.to_ascii_lowercase()
-                } else {
-                    s
-                }
-            })
-            .collect()
-    };
-    let d = parts(dir);
+    let d = components(dir);
     safe_dirs.iter().any(|s| {
-        let s = parts(s);
+        let s = components(s);
         !s.is_empty() && d.len() >= s.len() && d[..s.len()] == s[..]
     })
+}
+
+/// 比べるためのパスの要素 (Windows は ASCII の小文字にする)。
+fn components(p: &FsPath) -> Vec<String> {
+    p.as_path()
+        .components()
+        .map(|c| {
+            let s = c.as_os_str().to_string_lossy().into_owned();
+            if cfg!(windows) {
+                s.to_ascii_lowercase()
+            } else {
+                s
+            }
+        })
+        .collect()
 }
 
 /// 読まなかった理由の診断 (07 §12.1 の OWN-7)。`value` は判定に落ちた物 (置き場所のディレクトリかファイル) のパス。
@@ -130,14 +143,21 @@ fn rejected(
     whole(Severity::Warning, DiagKind::Workspace(problem), path)
 }
 
+/// 構文エラーと同じ形の、読めない理由の診断 (エラー)。
+fn unreadable(message: String) -> Diagnostic {
+    whole(Severity::Error, DiagKind::Syntax { message }, String::new())
+}
+
 /// 1 つのファイルを所有者の検査つきで読んだ結果。
 enum Outcome {
     /// 無い。
     Missing,
     /// 読めた本文。
     Text(String),
-    /// 読まなかった (診断 1 件)。`dir` は置き場所のディレクトリで落ちた (`.eve` を信用しない)。
-    NotRead { diag: Diagnostic, dir: bool },
+    /// 所有者の検査・大きさで読まなかった (診断 1 件)。`dir` は置き場所のディレクトリで落ちた (`.eve` を信用しない)。
+    Rejected { diag: Diagnostic, dir: bool },
+    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。
+    Unreadable { diag: Diagnostic, dir: bool },
     /// 一時の失敗。
     Busy,
 }
@@ -155,18 +175,12 @@ fn read_one(fs: &dyn FileSystem, dir: &FsPath, name: &str, safe_dirs: &[FsPath])
         Ok(CheckedRead::Missing) => Outcome::Missing,
         Ok(CheckedRead::Read { bytes }) => match String::from_utf8(bytes) {
             Ok(t) => Outcome::Text(t),
-            Err(_) => Outcome::NotRead {
-                diag: whole(
-                    Severity::Error,
-                    DiagKind::Syntax {
-                        message: "not valid UTF-8".to_owned(),
-                    },
-                    String::new(),
-                ),
+            Err(_) => Outcome::Unreadable {
+                diag: unreadable("not valid UTF-8".to_owned()),
                 dir: false,
             },
         },
-        Ok(CheckedRead::TooLarge) => Outcome::NotRead {
+        Ok(CheckedRead::TooLarge) => Outcome::Rejected {
             diag: whole(
                 Severity::Warning,
                 DiagKind::Workspace(WorkspaceProblem::TooLarge),
@@ -174,7 +188,7 @@ fn read_one(fs: &dyn FileSystem, dir: &FsPath, name: &str, safe_dirs: &[FsPath])
             ),
             dir: false,
         },
-        Ok(CheckedRead::Rejected { what, verdict }) => Outcome::NotRead {
+        Ok(CheckedRead::Rejected { what, verdict }) => Outcome::Rejected {
             diag: rejected(what, verdict, dir, &path, safe_dirs),
             dir: what == CheckedObject::Dir,
         },
@@ -182,7 +196,7 @@ fn read_one(fs: &dyn FileSystem, dir: &FsPath, name: &str, safe_dirs: &[FsPath])
             FsErrorKind::Busy => Outcome::Busy,
             FsErrorKind::NotFound => Outcome::Missing,
             // 判定できない Port (所有者の検査を持たない FS): 読まない
-            FsErrorKind::Unsupported => Outcome::NotRead {
+            FsErrorKind::Unsupported => Outcome::Rejected {
                 diag: rejected(
                     CheckedObject::Dir,
                     OwnerVerdict::Unknown {
@@ -194,80 +208,80 @@ fn read_one(fs: &dyn FileSystem, dir: &FsPath, name: &str, safe_dirs: &[FsPath])
                 ),
                 dir: true,
             },
-            _ => Outcome::NotRead {
-                diag: whole(
-                    Severity::Error,
-                    DiagKind::Syntax {
-                        message: fs_reason(&e),
-                    },
-                    String::new(),
-                ),
+            _ => Outcome::Unreadable {
+                diag: unreadable(fs_reason(&e)),
                 dir: true,
             },
         },
     }
 }
 
-/// ワークスペース層を読む (ジョブの本体。07 §12.5 の WSC-1 / WSC-2)。`lower` はユーザー層の値 (「方向のみ」の比較)、
-/// `safe_dirs` は `workspace.safe_directories`。
+/// ワークスペース層を読む (ジョブの本体。07 §12.5 の WSC-1 / WSC-2)。`safe_dirs` は `workspace.safe_directories`。
 pub fn read_workspace_config(
     fs: &dyn FileSystem,
     root: &FsPath,
-    lower: &Config,
     conditions: eve_config::Conditions,
     safe_dirs: &[FsPath],
 ) -> WorkspaceRead {
     let dir = root.join(WORKSPACE_CONFIG_DIR);
     let config_path = dir.join(WORKSPACE_CONFIG_FILE);
     let keymap_path = dir.join(WORKSPACE_KEYMAP_FILE);
-    let config_name = config_path.display();
-    let keymap_name = keymap_path.display();
-    let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
+    let mut config_notes = Vec::new();
+    let mut keymap_notes = Vec::new();
     let mut dir_trusted = true;
     let layer = match read_one(fs, &dir, WORKSPACE_CONFIG_FILE, safe_dirs) {
         Outcome::Missing => Fetched::Absent,
         Outcome::Busy => Fetched::Keep,
-        Outcome::NotRead { diag, dir } => {
+        Outcome::Rejected { diag, dir } => {
             dir_trusted &= !dir;
-            reports.push((config_name.clone(), vec![diag]));
+            config_notes.push(diag);
             Fetched::Absent
         }
+        Outcome::Unreadable { diag, dir } => {
+            dir_trusted &= !dir;
+            config_notes.push(diag);
+            Fetched::Broken
+        }
         Outcome::Text(text) => {
-            let mut l = eve_config::load_workspace_str(&text, conditions, lower);
+            let mut l = eve_config::load_workspace_str(&text, conditions);
+            let name = config_path.display();
             for d in &mut l.languages {
-                d.source.clone_from(&config_name);
+                d.source.clone_from(&name);
             }
-            if !l.diagnostics.is_empty() {
-                reports.push((config_name.clone(), l.diagnostics.clone()));
+            if l.has_error() {
+                // 構文エラーの診断は分類の診断と同じく、重ねるときに出す (`classify` が読込の診断を返す)
+                config_notes.extend(l.classify(&eve_config::Config::default()).diagnostics);
+                Fetched::Broken
+            } else {
+                Fetched::Got(l)
             }
-            Fetched::Got(l)
         }
     };
     let keymap = match read_one(fs, &dir, WORKSPACE_KEYMAP_FILE, safe_dirs) {
         Outcome::Missing => Fetched::Absent,
         Outcome::Busy => Fetched::Keep,
-        Outcome::NotRead { diag, dir } => {
+        Outcome::Rejected { diag, dir } => {
             dir_trusted &= !dir;
-            reports.push((keymap_name, vec![diag]));
+            keymap_notes.push(diag);
             Fetched::Absent
         }
+        Outcome::Unreadable { diag, dir } => {
+            dir_trusted &= !dir;
+            keymap_notes.push(diag);
+            Fetched::Broken
+        }
         Outcome::Text(text) => {
-            let mut file =
-                eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text));
-            if let Some(over) = file.entries.get(WORKSPACE_KEYMAP_MAX) {
-                let d = Diagnostic {
-                    severity: Severity::Warning,
-                    kind: DiagKind::Workspace(WorkspaceProblem::TooManyKeys),
-                    key: String::new(),
-                    value: WORKSPACE_KEYMAP_MAX.to_string(),
-                    line: over.line,
-                    column: over.column,
-                    condition: None,
-                };
-                file.entries.truncate(WORKSPACE_KEYMAP_MAX);
-                file.diagnostics.push(d);
+            let file = eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text));
+            if file
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Severity::Error)
+            {
+                keymap_notes.extend(file.diagnostics);
+                Fetched::Broken
+            } else {
+                Fetched::Got(file)
             }
-            Fetched::Got(file)
         }
     };
     // 読まない置き場所 (WSC-1)。`.eve` を判定で信用できたときだけ一覧する (`.eve` のリンクを辿らない。中の項目は名前を
@@ -278,23 +292,18 @@ pub fn read_workspace_config(
             .filter(|u| names.iter().any(|n| n.eq_ignore_ascii_case(u)))
             .collect();
         found.sort_unstable();
-        let diags: Vec<Diagnostic> = found
-            .into_iter()
-            .map(|u| Diagnostic {
-                key: format!("{WORKSPACE_CONFIG_DIR}/{u}"),
-                ..whole(Severity::Info, DiagKind::Unsupported, String::new())
-            })
-            .collect();
-        if !diags.is_empty() {
-            eve_config::merge_reports(&mut reports, [(config_name, diags)]);
-        }
+        config_notes.extend(found.into_iter().map(|u| Diagnostic {
+            key: format!("{WORKSPACE_CONFIG_DIR}/{u}"),
+            ..whole(Severity::Info, DiagKind::Unsupported, String::new())
+        }));
     }
     WorkspaceRead {
         config_path,
         keymap_path,
         layer,
         keymap,
-        reports,
+        config_notes,
+        keymap_notes,
     }
 }
 
@@ -323,28 +332,23 @@ impl EditorState {
     }
 
     /// `ReadWorkspaceConfig` を積む (起動時はルートが決まったとき、`config.reload` はユーザー層を読み直した後。`reload` は
-    /// 届いた後に続ける再読込)。積まなかった (読まない設定・ルートが無い) ときは `reload` を返す。
+    /// 届いた後に続ける再読込)。`safe_dirs` は、その時点のユーザー層と `--set` の `workspace.safe_directories` (`config.reload`
+    /// では読み直した値)。積まなかった (読まない設定・ルートが無い) ときは `reload` を返す。
     pub(crate) fn start_workspace_config_read(
         &mut self,
-        lower: &Config,
+        safe_dirs: &[String],
         reload: Option<ReloadPlan>,
     ) -> Option<ReloadPlan> {
+        self.warn_home_safe_directories(safe_dirs);
         let Some(root) = self.workspace_config_root() else {
             return reload;
         };
-        let safe_dirs: Vec<FsPath> = self
-            .settings
-            .config
-            .safe_directories
-            .iter()
-            .map(|s| FsPath::from(s.as_str()))
-            .collect();
+        let safe_dirs: Vec<FsPath> = safe_dirs.iter().map(|s| FsPath::from(s.as_str())).collect();
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
             JobKind::ReadWorkspaceConfig {
                 root,
-                lower: Arc::new(lower.clone()),
                 conditions: self.config_conditions(),
                 safe_dirs,
             },
@@ -356,6 +360,56 @@ impl EditorState {
             },
         );
         None
+    }
+
+    /// `workspace.safe_directories` にホームディレクトリそのものを書いていたら、書いた所に広すぎる場所の警告を足す (07 §12.1 の
+    /// OWN-5。ルート・ドライブの直下は eve-config が読むときに見る)。ホームは `Paths` の `~` の展開で求める。
+    fn warn_home_safe_directories(&mut self, safe_dirs: &[String]) {
+        let Ok(home) = self.paths.normalize("~") else {
+            return;
+        };
+        let home = components(&home);
+        let hits: Vec<&String> = safe_dirs
+            .iter()
+            .filter(|s| {
+                let p = FsPath::from(s.as_str());
+                let mut c = components(&p);
+                // 末尾の区切り (`C:\Users\me\`) は同じものとみなす
+                while c.last().is_some_and(String::is_empty) {
+                    c.pop();
+                }
+                c == home
+            })
+            .collect();
+        if hits.is_empty() {
+            return;
+        }
+        let (source, line, column, condition) = match self
+            .current_user_layer()
+            .origins
+            .of("workspace.safe_directories")
+        {
+            eve_config::Origin::User {
+                source,
+                line,
+                column,
+                condition,
+            } => (source.clone(), *line, *column, *condition),
+            _ => (eve_config::SET_SOURCE.to_owned(), 0, 0, None),
+        };
+        let diags: Vec<Diagnostic> = hits
+            .into_iter()
+            .map(|s| Diagnostic {
+                severity: Severity::Warning,
+                kind: DiagKind::ListItem(eve_config::ListItemProblem::TooBroad),
+                key: "workspace.safe_directories".to_owned(),
+                value: s.clone(),
+                line,
+                column,
+                condition,
+            })
+            .collect();
+        self.report_config_more(&source, &diags);
     }
 
     /// ワークスペース層の読込の結果 (07 §12.5 の WSC-3 / WSC-4)。`reload` があれば、層を差し替えた後に `config.reload` を
@@ -373,21 +427,19 @@ impl EditorState {
             keymap_path,
             layer,
             keymap,
-            reports,
+            config_notes,
+            keymap_notes,
         } = read;
         let config_name = config_path.display();
         let keymap_name = keymap_path.display();
-        // 一覧の診断は読み直した結果に置き換える (`.eve/keymap.toml` の検証の診断は、キーマップを当てるときに置き換える)
-        let names = [config_name.clone(), keymap_name.clone()];
-        self.settings.workspace_files = names.to_vec();
-        self.forget_config_diagnostics(|f| f == config_name);
-        if !matches!(keymap, Fetched::Got(_)) {
-            self.forget_config_diagnostics(|f| f == keymap_name);
-        }
-        for (file, diags) in &reports {
-            self.report_config(file, diags);
-        }
+        self.settings.workspace_files = vec![config_name.clone(), keymap_name.clone()];
+        let reloading = reload.is_some();
         let languages_before = self.settings.workspace_languages.clone();
+        // 一時の失敗のファイルは、前に読んだ層と診断を使い続ける
+        if !layer.keeps_diagnostics() {
+            self.settings.workspace_notes = config_notes;
+        }
+        let mut kept: Vec<&str> = Vec::new();
         match layer {
             Fetched::Absent => {
                 self.settings.workspace_layer = None;
@@ -397,24 +449,64 @@ impl EditorState {
                 self.settings.workspace_languages = l.languages.clone();
                 self.settings.workspace_layer = Some(Arc::new(l));
             }
+            // 起動時は層を持たない。`config.reload` では前に読んだ層を保つ (07 §6 の規則 1)
+            Fetched::Broken if reloading => kept.push(&config_name),
+            Fetched::Broken => {
+                self.settings.workspace_layer = None;
+                self.settings.workspace_languages.clear();
+            }
             Fetched::Keep => {}
         }
         match keymap {
-            Fetched::Absent => self.keys.workspace_keymap_pending = Some((None, keymap_name)),
-            Fetched::Got(k) => self.keys.workspace_keymap_pending = Some((Some(k), keymap_name)),
+            Fetched::Absent => {
+                self.report_config(&keymap_name, &keymap_notes);
+                self.keys.workspace_keymap_pending = Some((None, keymap_name.clone()));
+            }
+            Fetched::Got(k) => {
+                self.keys.workspace_keymap_pending = Some((Some(k), keymap_name.clone()));
+            }
+            Fetched::Broken => {
+                self.report_config(&keymap_name, &keymap_notes);
+                if reloading {
+                    kept.push(&keymap_name);
+                } else {
+                    self.keys.workspace_keymap_pending = Some((None, keymap_name.clone()));
+                }
+            }
             Fetched::Keep => {}
         }
+        for file in kept {
+            self.show_message(
+                MessageLevel::Warn,
+                keys::MSG_CONFIG_RELOAD_KEPT,
+                &[("file", file)],
+            );
+        }
         match reload {
-            // `config.reload`: 言語定義の読み直しは、再読込が積む (判定し直さない、LANG-7)
-            Some(plan) => self.apply_config_reload(plan),
+            // `config.reload`: 言語定義の読み直しは、再読込が積む (判定し直さない、LANG-7)。新しいファイルの形は決め直す
+            Some(plan) => {
+                self.apply_config_reload(plan);
+                self.refresh_new_file_formats();
+            }
             None => {
                 self.recompose_config();
                 // 起動の後に届いたワークスペース層の言語定義を、明示の指定の無い文書にも効かせる (LANG-7)
                 if self.settings.workspace_languages != languages_before {
-                    self.spawn_languages_read(true);
+                    self.spawn_languages_read_for_workspace();
                 }
             }
         }
+    }
+
+    /// ワークスペース層の `.eve/config.toml` の診断を出す (層の外の診断と、今のユーザー層と比べた分類の診断。07 §12.5 の
+    /// WSC-4)。重ね直すたびに置き換える。
+    pub(crate) fn report_workspace_config(&mut self, classified: &[Diagnostic]) {
+        let Some(name) = self.settings.workspace_files.first().cloned() else {
+            return;
+        };
+        let mut diags = self.settings.workspace_notes.clone();
+        diags.extend(classified.iter().cloned());
+        self.report_config(&name, &diags);
     }
 
     /// ユーザー層・ワークスペース層・コマンドライン層を重ね直して差し替える (ワークスペース層が届いたとき。07 §12.5 の
@@ -435,11 +527,15 @@ impl EditorState {
             &src.sets,
             src.conditions,
         );
+        self.report_workspace_config(&composed.workspace_diagnostics);
+        let exclude_before = self.exclude_config();
         self.settings.user_layer = Some(user);
         self.settings.config_origins = composed.origins;
         self.apply_reloaded_config(composed.config);
         self.refresh_all_doc_settings();
         self.refresh_new_file_formats();
+        // 起動直後に始めたファインダの走査は、届く前の除外で走っている (やり直す)
+        self.finder_on_exclude_changed(&exclude_before);
     }
 }
 

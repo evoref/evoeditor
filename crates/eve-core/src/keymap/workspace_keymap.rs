@@ -105,6 +105,11 @@ pub(super) fn apply_workspace_keymap(
             }
             continue;
         };
+        // (h) 確認のダイアログの選択 (保存・破棄・上書き) を、知らないキーで確定させない (保守的な規則、07 §7.4 の WKEY-2)
+        if ctx == "dialog" {
+            reject(&mut push, KeyRejectReason::Dialog);
+            continue;
+        }
         let Ok(seq) = parse_sequence(&e.keys) else {
             warn(&mut push, KeymapProblem::BadKey, &e.keys);
             continue;

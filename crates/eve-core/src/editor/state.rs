@@ -143,6 +143,9 @@ pub(crate) struct Settings {
     /// ワークスペース層のファイルの表示名 (`.eve/config.toml`・`.eve/keymap.toml` の絶対パス。診断の一覧の `Enter` で開き、
     /// `config.reload` でユーザー層の診断と一緒に消さない)。読んでいなければ空。
     pub(crate) workspace_files: Vec<String>,
+    /// `.eve/config.toml` の名前で出す、層の外の診断 (読まなかった理由・構文エラー・未対応の置き場所。分類の診断は重ねるたびに
+    /// 足す)。
+    pub(crate) workspace_notes: Vec<eve_config::Diagnostic>,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -426,6 +429,7 @@ impl EditorState {
                 workspace_languages: Vec::new(),
                 workspace_language_set: None,
                 workspace_files: Vec::new(),
+                workspace_notes: Vec::new(),
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
                     eve_view::ColorDepth::TrueColor,
@@ -578,19 +582,19 @@ impl EditorState {
         doc.format.default_eol = line_ending_of(v.default_line_ending.value);
     }
 
-    /// まだ編集も保存もしていない新しいファイルの文書 (ディスクに無いパスの文書) の文字コードと改行を決め直す (ワークスペース層が
-    /// 届いた後。07 §3.6 の LAYER-4。編集した後は決め直さない)。
+    /// まだ編集も保存もしていない新しいファイルの文書 (ディスクに無いパスの文書と、標準入力でない無題の文書) の文字コードと
+    /// 改行を決め直す (ワークスペース層が届いた後と、`config.reload` の後。07 §3.6 の LAYER-4。編集した後は決め直さない)。
     pub(crate) fn refresh_new_file_formats(&mut self) {
         let ids: Vec<eve_view::DocumentId> = self
             .docs
             .documents
             .iter()
             .filter(|(_, d)| {
-                d.path.is_some()
-                    && d.disk_stamp.is_none()
+                d.disk_stamp.is_none()
                     && d.stdin.is_none()
                     && d.load_state == crate::document::LoadState::Ready
-                    && d.revision() == eve_view::Revision::INITIAL
+                    && !d.is_dirty()
+                    && !d.history().can_undo()
             })
             .map(|(id, _)| *id)
             .collect();

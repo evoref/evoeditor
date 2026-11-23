@@ -1745,11 +1745,11 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // eve-config の禁止事項のとおり主スレッドで組まない)、組めない値の診断を返す (07 §9.6 の段 2 の細目)。正規表現は
                                                                       // OnceLock に置くので、このジョブが組んでいる最中に主スレッドが同じ正規表現で判定すると、組み終わるまで待つ
                                                                       // (1 つにつき 1 ms 未満。組み終わっていなければ主スレッドが組む)
-    ReadWorkspaceConfig { root: FsPath, lower: Arc<Config> /*ユーザー層の値。「方向のみ」の比較に使う*/, conditions: Conditions /*07 §3.4 の COND-2*/,
+    ReadWorkspaceConfig { root: FsPath, conditions: Conditions /*07 §3.4 の COND-2*/,
                           safe_dirs: Vec<FsPath> /*workspace.safe_directories*/ },
                                                                       // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み
                                                                       // (dir は <root>/.eve、links = NoFollowFromEve、safe_dirs をそのまま渡す。安全な場所の下かは Port が開いたディレクトリの最終のパスで決める、§4.5)、
-                                                                      // 解析・条件の解決・検証・分類までジョブの中で行い (WSC-2)、安全な項目の値・キーの割当・診断を返す。doc は None
+                                                                      // 解析・条件の解決・検証までジョブの中で行い (WSC-2)、書かれた値と書いた所・キーの割当・診断を返す。分類 (07 §12.3) は主スレッドで重ねるたびに今のユーザー層と比べて行う。doc は None
     ReadEditorConfig { path: FsPath /*文書の開いたときの絶対パス*/, safe_dirs: Arc<[FsPath]> },
                                                                       // io。文書の読込の完了・名前を付けて保存・config.reload で積む (07 §10.3 の EC-1)。上へ read_checked で .editorconfig を集めて読み
                                                                       // (dir は各祖先、links = Follow、safe_dirs をそのまま渡す)、解析と glob の照合までジョブの中で行い、当たったプロパティ (由来つき) と診断を返す
