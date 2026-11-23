@@ -25,6 +25,10 @@
 //! `OpenStdin` の投入でそのスレッドへ **移す** (`spawner` は弱い参照だけを持つ)。`Arc` を最後に手放すのが
 //! `eve-stdin-job` になり、取った読み手を手放す (`eve-stdin` を止めて、Windows は最大約 0.5 秒待つ) のもそのスレッドで
 //! 起きる (メインのスレッドで手放さない)。
+//!
+//! **Host の作業** (`HostTasks`、02 §4.4。v0.5 の M33 の段 7): ファイル監視の登録・解除 (05 §12.2 の 9) は、ジョブではなく
+//! Host の作業として `io` のキューに積む。レーンはジョブと同じ順 (投入順) で走らせ、結果は core に返さない (作業が自分で
+//! 受信口へ送る)。パニックはその作業だけを捨てて次へ進む。
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -45,9 +49,19 @@ use crate::msg::HostMsg;
 /// `Drop` がワーカーの終了を待つ上限 (02 §11.2.1 の置換中フラグの待ちに合わせる)。
 const JOIN_WAIT: Duration = Duration::from_secs(1);
 
-struct Work {
-    req: JobRequest,
-    cancel: CancelToken,
+/// レーンのキューの項目。
+#[expect(
+    clippy::large_enum_variant,
+    reason = "ほとんどの項目はジョブで、ジョブを箱に入れると投入のたびに確保が増える (作業は監視の登録・解除だけでまれ)"
+)]
+enum Work {
+    /// ジョブ (`run_job` で走らせ、結果を `HostMsg::Job` で送る)。
+    Job {
+        req: JobRequest,
+        cancel: CancelToken,
+    },
+    /// Host の作業 (`HostTasks::spawn_io_task`。結果は作業が自分で送る)。
+    Task(Box<dyn FnOnce() + Send>),
 }
 
 /// ワーカー 1 本 (キューと、終わりを知らせる受信口)。
@@ -81,7 +95,14 @@ impl Lane {
                             Err(_) => break,
                         },
                     };
-                    let Work { req, cancel } = work;
+                    let (req, cancel) = match work {
+                        Work::Job { req, cancel } => (req, cancel),
+                        Work::Task(task) => {
+                            // Host の作業のパニックは、その作業を捨てて次へ進む (パニックフックはログだけ、02 §9.1)
+                            let _ = catch_unwind(AssertUnwindSafe(task));
+                            continue;
+                        }
+                    };
                     let (job, doc, base) = (req.id, req.doc, req.base);
                     let outcome = catch_unwind(AssertUnwindSafe(|| {
                         run_job(req, &ports, &cancel, &mut |r| send(r))
@@ -97,7 +118,7 @@ impl Lane {
                             while let Ok(w) = qrx.try_recv() {
                                 local.push_back(w);
                             }
-                            local.push_back(Work { req, cancel });
+                            local.push_back(Work::Job { req, cancel });
                         }
                         Err(_) => send(JobOutput {
                             job,
@@ -209,23 +230,21 @@ impl JobSpawner for ThreadJobSpawner {
             tokens.retain(|_, t| t.is_shared());
             tokens.insert(id, cancel.clone());
         }
-        let work = Work {
-            req: JobRequest {
-                id,
-                doc,
-                base,
-                kind,
-            },
-            cancel,
+        let req = JobRequest {
+            id,
+            doc,
+            base,
+            kind,
         };
-        let sent = if matches!(work.req.kind, JobKind::OpenStdin { .. }) {
+        let sent = if matches!(req.kind, JobKind::OpenStdin { .. }) {
             self.stdin_job.set(Some(id));
             // 標準入力を読込のスレッドへ移す (2 回目の投入は標準入力を持たず、最初から読めない)
             let mut ports = self.ports.clone();
             ports.stdin = self.stdin.borrow_mut().take();
             *self.stdin_weak.borrow_mut() = ports.stdin.as_ref().map(Arc::downgrade);
-            spawn_stdin_job(work, ports, self.tx.clone()).is_ok()
-        } else if Self::is_bg(&work.req.kind) {
+            spawn_stdin_job(req, cancel, ports, self.tx.clone()).is_ok()
+        } else if Self::is_bg(&req.kind) {
+            let work = Work::Job { req, cancel };
             let mut bg = self.bg.borrow_mut();
             if bg.is_none() {
                 *bg = Lane::start("eve-bg", self.ports.clone(), self.tx.clone()).ok();
@@ -234,11 +253,7 @@ impl JobSpawner for ThreadJobSpawner {
                 .and_then(|l| l.queue.as_ref())
                 .is_some_and(|q| q.send(work).is_ok())
         } else {
-            self.io
-                .borrow()
-                .queue
-                .as_ref()
-                .is_some_and(|q| q.send(work).is_ok())
+            self.send_io(Work::Job { req, cancel })
         };
         if !sent {
             // ワーカーが死んでいる: ジョブ表の行が残らないよう、その場で終端の結果を返す
@@ -264,6 +279,15 @@ impl JobSpawner for ThreadJobSpawner {
 }
 
 impl ThreadJobSpawner {
+    /// `io` のキューに積む。ワーカーが死んでいれば `false` (項目はここで手放す)。
+    fn send_io(&self, work: Work) -> bool {
+        self.io
+            .borrow()
+            .queue
+            .as_ref()
+            .is_some_and(|q| q.send(work).is_ok())
+    }
+
     fn wake_stdin(&self) {
         // 読込のスレッドが既に手放していれば何もしない (`upgrade` の一時の参照は、読み手を取った後なので、ここで最後に
         // 手放しても読み手の drop にはならない)
@@ -276,11 +300,15 @@ impl ThreadJobSpawner {
 
 /// 標準入力の読込のジョブを、専用のスレッド `eve-stdin-job` で走らせる (02 §9.1)。スレッドはジョブが終わると終わる。
 /// `JoinHandle` は持たない (終了のときに待たない、02 §9.6)。パニックは `io` / `bg` と同じく `Failed { Panic }` にする。
-fn spawn_stdin_job(work: Work, ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<()> {
+fn spawn_stdin_job(
+    req: JobRequest,
+    cancel: CancelToken,
+    ports: JobPorts,
+    tx: Sender<HostMsg>,
+) -> std::io::Result<()> {
     thread::Builder::new()
         .name("eve-stdin-job".to_owned())
         .spawn(move || {
-            let Work { req, cancel } = work;
             let job = req.id;
             // 標準入力の読込は区切らない (続きを返さない)
             let outcome = catch_unwind(AssertUnwindSafe(|| {
@@ -301,6 +329,23 @@ fn spawn_stdin_job(work: Work, ports: JobPorts, tx: Sender<HostMsg>) -> std::io:
             }
         })
         .map(drop)
+}
+
+/// Host 自身の作業の投入口 (02 §4.4 の `HostTasks`)。メインスレッドからだけ呼ぶ。作業の結果は core に返さない
+/// (作業が自分で受信口へ送る)。
+///
+/// v0.5 の M33 で、ファイル監視の登録・解除 (05 §12.2 の 9) のために `io` の口だけを入れた。仕様の `spawn_host_task`
+/// (`bg` の口。クリップボードの文字列化) は、クリップボードが使い捨てのスレッドのままなので持たない (02 §4.4 の
+/// 「v0.2.0 の実装との差」)。
+pub trait HostTasks {
+    /// `io` のキューに積む (ジョブと同じ順で走る)。キューが閉じていれば (終了の後)、作業はここで手放し、走らせない。
+    fn spawn_io_task(&self, task: Box<dyn FnOnce() + Send>);
+}
+
+impl HostTasks for ThreadJobSpawner {
+    fn spawn_io_task(&self, task: Box<dyn FnOnce() + Send>) {
+        let _ = self.send_io(Work::Task(task));
+    }
 }
 
 impl Drop for ThreadJobSpawner {

@@ -37,4 +37,5 @@ pub(crate) mod swap;
 pub(crate) mod swap_recovery;
 pub(crate) mod unmap;
 pub(crate) mod unmappable;
+pub(crate) mod watch;
 pub(crate) mod workspace_config;
