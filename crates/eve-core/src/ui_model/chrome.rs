@@ -216,12 +216,22 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 外部変更: 確認で「無視」を選んだ文書は、ディスクの内容と違うことを保存か再読込まで示す (03 §9.5、04 §8.7)
-    if doc.external_seen.is_some() {
-        let (long, short) = (
-            render(state, keys::STATUS_EXTERNAL_CHANGE_LONG, &[]),
-            render(state, keys::STATUS_EXTERNAL_CHANGE_SHORT, &[]),
-        );
+    // 外部変更: 確認で「無視」を選んだ文書と、監視で外部の変更・削除が分かった文書は、ディスクの内容と違うことを保存か
+    // 再読込まで示す (03 §9.5、§9.5.1 の WATCH-9、04 §8.7)
+    let deleted = doc.external_pending == Some(crate::document::ExternalPending::Deleted);
+    if doc.external_seen.is_some() || doc.external_pending.is_some() {
+        let (long_key, short_key) = if deleted {
+            (
+                keys::STATUS_EXTERNAL_DELETED_LONG,
+                keys::STATUS_EXTERNAL_DELETED_SHORT,
+            )
+        } else {
+            (
+                keys::STATUS_EXTERNAL_CHANGE_LONG,
+                keys::STATUS_EXTERNAL_CHANGE_SHORT,
+            )
+        };
+        let (long, short) = (render(state, long_key, &[]), render(state, short_key, &[]));
         items.push(item(
             StatusKind::ExternalChange,
             &long,

@@ -82,6 +82,7 @@ fn env_init(caps: eve_view::Capabilities, init: HostInit) -> Env {
     };
     let jobs = ManualJobSpawner::new(jp);
     let ports = Ports {
+        watcher: None,
         fs,
         clock: Arc::new(clock.clone()),
         jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,

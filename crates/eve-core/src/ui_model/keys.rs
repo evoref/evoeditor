@@ -354,9 +354,26 @@ pub(crate) const UI_WORKSPACE_SEARCH_PLACEHOLDER: &str = "ui.workspace_search.pl
 pub(crate) const UI_WORKSPACE_SEARCH_SKIPPED_SUFFIX: &str = "ui.workspace_search.skipped_suffix";
 pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
+// ファイル監視 (v0.5 の M33 の段 8。03 §9.5.1、04 §15.2)
+pub(crate) const INFO_EXTERNAL_CHANGED: &str = "info.external.changed";
+pub(crate) const INFO_EXTERNAL_CHANGED_MANY: &str = "info.external.changed_many";
+pub(crate) const INFO_EXTERNAL_DELETED: &str = "info.external.deleted";
+pub(crate) const INFO_EXTERNAL_RELOADED: &str = "info.external.reloaded";
+pub(crate) const INFO_WATCH_UNAVAILABLE: &str = "info.watch.unavailable";
+pub(crate) const STATUS_EXTERNAL_DELETED_LONG: &str = "status.external_deleted.long";
+pub(crate) const STATUS_EXTERNAL_DELETED_SHORT: &str = "status.external_deleted.short";
+pub(crate) const UI_BUFFER_LIST_EXTERNAL_CHANGED: &str = "ui.buffer_list.external_changed";
+pub(crate) const UI_BUFFER_LIST_EXTERNAL_DELETED: &str = "ui.buffer_list.external_deleted";
+pub(crate) const UI_WATCH_REASON_DENIED: &str = "ui.watch.reason.denied";
+pub(crate) const UI_WATCH_REASON_LIMIT: &str = "ui.watch.reason.limit";
+pub(crate) const UI_WATCH_REASON_NETWORK: &str = "ui.watch.reason.network";
+pub(crate) const UI_WATCH_REASON_NOT_FOUND: &str = "ui.watch.reason.not_found";
+pub(crate) const UI_WATCH_REASON_FAILED: &str = "ui.watch.reason.failed";
+pub(crate) const UI_WATCH_REASON_UNSUPPORTED_FS: &str = "ui.watch.reason.unsupported_fs";
+
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 332] = [
+const ALL: &[&str] = &[
     UI_CONFIG_ORIGIN_WORKSPACE,
     UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
     HINT_UI_CANCEL,
@@ -689,6 +706,21 @@ const ALL: [&str; 332] = [
     UI_WORKSPACE_SEARCH_PLACEHOLDER,
     UI_WORKSPACE_SEARCH_SKIPPED_SUFFIX,
     UI_WORKSPACE_SEARCH_TITLE,
+    INFO_EXTERNAL_CHANGED,
+    INFO_EXTERNAL_CHANGED_MANY,
+    INFO_EXTERNAL_DELETED,
+    INFO_EXTERNAL_RELOADED,
+    INFO_WATCH_UNAVAILABLE,
+    STATUS_EXTERNAL_DELETED_LONG,
+    STATUS_EXTERNAL_DELETED_SHORT,
+    UI_BUFFER_LIST_EXTERNAL_CHANGED,
+    UI_BUFFER_LIST_EXTERNAL_DELETED,
+    UI_WATCH_REASON_DENIED,
+    UI_WATCH_REASON_LIMIT,
+    UI_WATCH_REASON_NETWORK,
+    UI_WATCH_REASON_NOT_FOUND,
+    UI_WATCH_REASON_FAILED,
+    UI_WATCH_REASON_UNSUPPORTED_FS,
 ];
 
 #[cfg(test)]

@@ -131,6 +131,7 @@ mod tests {
                     link: None,
                     fs_kind: FsKind::Local,
                     owner_is_me: None,
+                    offline: false,
                     file_id_unique: false,
                 })
             } else {

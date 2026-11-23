@@ -344,7 +344,8 @@ struct Ports {                                   // Host が組み立てて Edit
     jobs: Rc<dyn JobSpawner>,                    // 同じ実体を Host (HostTasks として) とテスト (run_jobs) がメインスレッドの中で共有する。Send でない
                                                  // (そのため Editor と Host も Send でない。外部のループからの駆動への影響は §9.2、提案、OQ-176)
     paths: Arc<dyn Paths>,
-    // 後の版の Port (FileWatcher v0.5、ProcessRunner v0.6 以降、SecretStore v1.L …) は最初の利用者と同時にフィールドを足す (規則 6)
+    watcher: Option<Rc<dyn FileWatcher>>,       // v0.5 の M33 の段 8 (下の「`FileWatcher`」)。None なら監視しない。jobs と同じく Rc で共有し、メインスレッドだけで使う
+    // 後の版の Port (ProcessRunner v0.6 以降、SecretStore v1.L …) は最初の利用者と同時にフィールドを足す (規則 6)
 }
 #[derive(Clone)]
 struct JobPorts {                                // ジョブ本体 run_job (§9.3) が受け取る Port。Send + Sync。JobSpawner の実装が保持してワーカーに渡す
@@ -412,10 +413,10 @@ trait ProcessRunner: Send + Sync {
 ```rust
 // 擬似コード。eve-core が定義し eve-platform が実装する。メインスレッドから呼ぶ (規則 3。どのメソッドも要求を積むだけで OS を呼ばない)
 trait FileWatcher {
-    fn watch_dir(&mut self, dir: &FsPath) -> WatchId;  // ディレクトリを非再帰で監視する要求。WatchId は呼び出し側が数え上げに使う (同じ dir を 2 回頼まない。数え上げは core)。
+    fn watch_dir(&self, dir: &FsPath) -> WatchId;      // ディレクトリを非再帰で監視する要求。WatchId は呼び出し側が数え上げに使う (同じ dir を 2 回頼まない。数え上げは core)。
                                                       // 実際の登録 (監視できる FS の判定と notify の watch) は io のレーンの Host の作業で行い、結果を
                                                       // HostMsg::Fs(FsEvent { watch, kind: Started | Failed { err } }) で返す
-    fn unwatch(&mut self, id: WatchId);               // 監視を外す要求 (結果は送らない。外した後に届いたイベントは core が捨てる)
+    fn unwatch(&self, id: WatchId);                   // 監視を外す要求 (結果は送らない。外した後に届いたイベントは core が捨てる)
 }
 struct FsEvent { watch: WatchId, kind: FsEventKind }
 #[non_exhaustive] enum FsEventKind {
@@ -434,11 +435,12 @@ struct FsEvent { watch: WatchId, kind: FsEventKind }
 // crate の向き: eve-platform は eve-host に依存しない。eve-host は eve-platform の実装を作るときに 2 つのクロージャを渡す:
 //   io の口 `Box<dyn Fn(Box<dyn FnOnce() + Send>)>` (HostTasks::spawn_io_task を包んだもの。登録・解除を io のレーンで行う) と、
 //   知らせの口 `Arc<dyn Fn(FsEvent) + Send + Sync>` (受信口へ HostMsg::Fs を送る。notify のコールバックと io の作業から呼ぶ)
-// Ports に `watcher: Option<Box<dyn FileWatcher>>` を足す (規則 6。None なら監視しない: 監視を使わない試験とヘッドレス)
+// Ports に `watcher: Option<Rc<dyn FileWatcher>>` を足した (M33 の段 8。規則 6。None なら監視しない: 監視を使わない試験とヘッドレス)。
+// JobSpawner と同じく、メソッドは &self で採番は内部可変性 (Rc<dyn …> で共有し、Ports の Clone と両立する)
 ```
 
 - **実装の状態 (M33 の段 7、07 §12.6.2)**: trait と型 (`eve_core::{FileWatcher, WatchId, FsEvent, FsEventKind, WatchError}`。`WatchError` は `Display` と `Error` を持つ)、本番の `eve_platform::watch::NotifyWatcher` (`NotifyWatcher::new(io, sink)`。上の 2 つの口の型は `IoSpawn` / `FsSink`)、組み立ての `eve_host::file_watcher(tasks: &Rc<dyn HostTasks>, tx)` (`tasks` は弱い参照で持ち、監視が `io` のワーカーの寿命を延ばさない。`tasks` が無い・`io` のキューが閉じた後の要求は走らせずに捨てる)、`HostMsg::Fs(FsEvent)` (Host の `step` は段 8 まで捨てる)、偽物の `eve_testkit::FakeWatcher` を入れた。**知らせの順の約束** (`eve_core::FileWatcher::watch_dir` の説明が正本): `Started` / `Failed` は要求ごとに 1 回 (登録の作業のパニックも `Failed { Other }`)。`Started` より先に同じ識別の `Changed`・`Rescan`・`Lost` が届き得る (登録の直後の変更。05 §12.2 の 9 の (a)) ので、core は結果を待っている識別の知らせも受ける。`Failed` より先に `Changed` などが届き得るが、`Failed` を受けたらその識別の前の知らせは捨ててよく、`Failed` の後に届いた同じ識別の知らせも捨てる (監視していない)。`Started` の後の `Lost` はその監視の失効 (登録の直後に消えたときは `Started` の後にもう一度 `Lost` が届く)。終了の後 (`io` のキューが閉じた後) の要求には結果が届かない。
-- **段 8 で足すもの**: `Ports.watcher` と `Editor::on_fs_event` は、最初の利用者 (core の監視の張り外し、03 §9.5.1) と同じ段 8 で足す (規則 6)。`Ports` は `#[derive(Clone)]` なので、`Box<dyn FileWatcher>` (`Clone` でない) の持たせ方 (`Rc<RefCell<dyn FileWatcher>>` で包む、`Editor` が `Ports` から取り出して持つ、など) は段 8 の PR で決める。
+- **実装の状態 (M33 の段 8、07 §12.6.2)**: `Ports.watcher: Option<Rc<dyn FileWatcher>>` と `Editor::on_fs_event` を足した (規則 6。core の監視の張り外し・待ち合わせ・照合が最初の利用者、03 §9.5.1)。持たせ方は `JobSpawner` に揃え、trait のメソッドを `&self` に改めた (段 7 の `&mut self` から。eve-platform の `NotifyWatcher` は識別の採番を `Cell` で、`FakeWatcher` は `RefCell` で持つ)。`eve_host::file_watcher` は `Rc<dyn FileWatcher>` を返し、bin が `Ports.watcher` に入れる。Host の `step` は `HostMsg::Fs` を `Editor::on_fs_event` へ渡す。決めた点と退けた案 (`Rc<RefCell<dyn FileWatcher>>` で包む・`Editor` が取り出して持つ) は 07 §12.6.3。
 
 **サービス Port** (長寿命の非同期サービス。v0.6 以降)
 
@@ -547,7 +549,9 @@ struct FileMeta  { kind: FileKind /*File|Dir|Other*/, len: u64, mtime: FileTime,
                    file_id: Option<FileId>, nlink: u32, link: Option<LinkInfo /*dangling 含む*/>, fs_kind: FsKind /*Local|Network|Unknown*/,
                    owner_is_me: Option<bool> /*他ユーザー所有の事前判定 (05 §4.4)。判定できない OS・FS は None*/,
                    file_id_unique: bool /*v0.5 の M31: file_id を「同じファイルか」の判定に使ってよい (Windows の NTFS / ReFS のローカルのボリュームで 0 でない値、Unix の Local)。
-                                          FAT・exFAT・Network・Unknown は false (値が使い回され・重なり得る)。03 §12.7.6、05 §5.4*/ }
+                                          FAT・exFAT・Network・Unknown は false (値が使い回され・重なり得る)。03 §12.7.6、05 §5.4*/,
+                   offline: bool /*v0.5 の M33 の段 8: 中身を読むと呼び戻しが起きる (Windows の FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS。OneDrive のオンライン専用など)。
+                                   監視の照合 (MetaPurpose::WatchCheck) はこのファイルの内容ハッシュを取らない (03 §9.5.1 の WATCH-5)。Unix は常に false*/ }
 struct FileStamp { mtime: FileTime, len: u64, file_id: Option<FileId>, hash: Option<ContentHash> } // 外部変更の比較キー (計算規則は 05 §5.5)
 struct RecoveryDirEntry { path: FsPath, rescue: bool /*true = 「退避先に保存」の退避 (rescue/ の中)。false = 異常終了の退避 (recovery/ 直下)*/ } // 代替の退避先 (05 §7.5) かどうかは持たない (v0.2.0)
 // write_recovery / list_recovery_dirs の場所 (state_dir と代替の退避先) は、FileSystem の実装が構築時に Host から受け取る
@@ -913,7 +917,8 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | ~~`notify_clipboard_fallback(reason: &str)`~~ | — | v0.2.0 の暫定の入口だった。v0.3 の M16 (STR-C2) で `report(HostReport::ClipboardFallback { reason })` に置き換えて消した |
 | `swap_leftovers()` / `swap_recovered_leftovers()` | Host (正常終了) | 正常終了で消すスワップの一覧 (03 §10.2) |
 | `state()` / `state_mut()` | Host・テスト | v0.2.0 の暫定の入口 (下の「v0.2.0 の実装との差」)。v0.3 の M14 で Host からの利用をなくす |
-| `on_fs_event` (v0.5) / `on_service_message` (v1.L) | Host | 最初の利用者の版で足す |
+| `on_fs_event(ev: FsEvent)` (v0.5 の M33 の段 8) | Host (`HostMsg::Fs` を受けた `step` の中) | ファイル監視の知らせ (登録の結果と、監視しているディレクトリの変化) を受け、文書ごとの待ち合わせを始める (03 §9.5.1 の WATCH-3 / WATCH-4)。I/O はしない。待ち合わせの期限は `next_deadline` に入り、照合は期限の `tick` で `io` のジョブに積む |
+| `on_service_message` (v1.L) | Host | 最初の利用者の版で足す |
 
 ```rust
 // eve-core。Send + Sync。EmergencySnapshot のスロット (§11.2.1) に入れ、受信スレッドが Editor に触れずに読む

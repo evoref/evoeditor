@@ -508,6 +508,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "file.huge_file_warn_bytes",
         "file.long_line_threshold",
         "file.reload_on_external_change",
+        "file.watch.enabled",
         "search.newline_sugar",
         "search.cp932_compat_fold",
         "search.case",
@@ -563,6 +564,7 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("file.huge_file_warn_bytes", "536870912"),
         ("file.long_line_threshold", "1048576"),
         ("file.reload_on_external_change", "auto_if_unmodified"),
+        ("file.watch.enabled", "true"),
         ("search.newline_sugar", "true"),
         ("search.cp932_compat_fold", "true"),
         ("search.case", "smart"),
@@ -699,11 +701,12 @@ const INT_KEYS: [&str; 15] = [
     "search.max_matches",
     "search.count_limit",
 ];
-const BOOL_KEYS: [&str; 10] = [
+const BOOL_KEYS: [&str; 11] = [
     "search.workspace.respect_gitignore",
     "search.workspace.follow_symlinks",
     "file.swap.enabled",
     "file.swap.exclude_secret_files",
+    "file.watch.enabled",
     "view.wrap_kinsoku",
     "ui.mouse",
     "ui.hint_bar",

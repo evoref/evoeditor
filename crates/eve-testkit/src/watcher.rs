@@ -92,6 +92,11 @@ impl FakeWatcher {
         Box::new(self.clone())
     }
 
+    /// `Ports.watcher` に渡す共有の参照 (同じ記録を指す複製)。
+    pub fn shared(&self) -> Rc<dyn FileWatcher> {
+        Rc::new(self.clone())
+    }
+
     /// これまでの要求 (順に)。
     pub fn requests(&self) -> Vec<WatchRequest> {
         self.inner.borrow().requests.clone()
@@ -149,7 +154,7 @@ impl FakeWatcher {
 }
 
 impl FileWatcher for FakeWatcher {
-    fn watch_dir(&mut self, dir: &FsPath) -> WatchId {
+    fn watch_dir(&self, dir: &FsPath) -> WatchId {
         let mut inner = self.inner.borrow_mut();
         inner.next += 1;
         let id = WatchId(inner.next);
@@ -169,7 +174,7 @@ impl FileWatcher for FakeWatcher {
         id
     }
 
-    fn unwatch(&mut self, id: WatchId) {
+    fn unwatch(&self, id: WatchId) {
         let mut inner = self.inner.borrow_mut();
         inner.requests.push(WatchRequest::Unwatch(id));
         inner.active.remove(&id);
@@ -183,7 +188,7 @@ mod tests {
     #[test]
     fn 要求を記録し知らせを積む() {
         let fake = FakeWatcher::new();
-        let mut port = fake.boxed();
+        let port = fake.boxed();
         let a = port.watch_dir(&FsPath::from("/w"));
         let b = port.watch_dir(&FsPath::from("/v"));
         assert_ne!(a, b);

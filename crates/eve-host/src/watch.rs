@@ -16,7 +16,7 @@ use eve_platform::watch::{FsSink, IoSpawn, NotifyWatcher};
 use crate::msg::HostMsg;
 use crate::workers::HostTasks;
 
-/// 本番のファイル監視 (notify) を作る。`tasks` は `io` のキューの口 (本番は `ThreadJobSpawner`)、`tx` は Host の受信口への
+/// 本番のファイル監視 (notify) を作る (`Ports.watcher` に渡す共有の参照)。`tasks` は `io` のキューの口 (本番は `ThreadJobSpawner`)、`tx` は Host の受信口への
 /// 送信口。watcher (notify) は最初の登録の作業で作る (プロセスに 1 つ、05 §12.2 の 5)。
 ///
 /// `tasks` は弱い参照で持つ (監視が `io` のワーカーの寿命を延ばさない)。`tasks` が既に無いとき・`io` のキューが閉じた
@@ -24,7 +24,7 @@ use crate::workers::HostTasks;
 ///
 /// 手放すと、watcher を手放す作業を `io` に積む (notify のスレッドが止まり、監視のハンドルが閉じる)。`io` に積めなければ、
 /// その場で手放す (notify の `Drop` は待たない)。
-pub fn file_watcher(tasks: &Rc<dyn HostTasks>, tx: Sender<HostMsg>) -> Box<dyn FileWatcher> {
+pub fn file_watcher(tasks: &Rc<dyn HostTasks>, tx: Sender<HostMsg>) -> Rc<dyn FileWatcher> {
     let tasks: Weak<dyn HostTasks> = Rc::downgrade(tasks);
     let io: IoSpawn = Box::new(move |task| {
         if let Some(t) = tasks.upgrade() {
@@ -35,5 +35,5 @@ pub fn file_watcher(tasks: &Rc<dyn HostTasks>, tx: Sender<HostMsg>) -> Box<dyn F
         // 受信口が閉じていれば (終了の後) 捨てる
         let _ = tx.send(HostMsg::Fs(ev));
     });
-    Box::new(NotifyWatcher::new(io, sink))
+    Rc::new(NotifyWatcher::new(io, sink))
 }

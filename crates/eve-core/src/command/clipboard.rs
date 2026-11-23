@@ -303,6 +303,11 @@ impl EditorState {
         CommandResult::Done
     }
 
+    /// 待っている貼り付けの応答の token か。
+    pub(crate) fn clipboard_waiting(&self, token: ClipboardToken) -> bool {
+        self.clipboard.token == Some(token)
+    }
+
     /// `InputEvent::ClipboardContent` の応答。最後の要求の token と違えば捨てる。届いた時点の Selection に貼り付ける。
     /// 読み取れなかった (`None`) ときは内部レジスタの内容を貼り付ける (05 §8.1)。本文へは内部レジスタと照合して入れる
     /// (03 §8.3.1。`edit::paste_text`)。

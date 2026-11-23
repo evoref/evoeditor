@@ -534,6 +534,7 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::OpenStdin { doc, .. }
         | Pending::CheckUnchanged { doc }
         | Pending::ExternalCheck { doc, .. }
+        | Pending::WatchCheck { doc, .. }
         | Pending::FindNext { doc, .. }
         | Pending::ReplaceAll { doc, .. }
         | Pending::ReplaceOne { doc, .. }

@@ -56,6 +56,17 @@ pub(crate) enum Pending {
     SaveAsTarget(Box<crate::io::save_as::SaveAsAsk>),
     /// 外部変更の確認 (03 §9.5)。`explicit` は `file.check_external_changes` (フォーカス復帰でない)。
     ExternalCheck { doc: DocumentId, explicit: bool },
+    /// ファイル監視の照合 (03 §9.5.1 の WATCH-5。`MetaPurpose::WatchCheck`)。`round` は同じ時刻に期限が来た照合の回
+    /// (メッセージを 1 件にまとめる)。`switch` は文書の切替の照合 (WATCH-8 の (a))。
+    WatchCheck {
+        doc: DocumentId,
+        round: Option<u64>,
+        switch: bool,
+        /// 照合を積んだ時刻 (その後に知らせが届いたかを見る)。
+        at: crate::time::Tick,
+        /// 打ち切りの照合 (WATCH-4。結果を捨てない)。
+        cap: bool,
+    },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
     /// 単発の検索 (保持に無く、同期検索でも見つからなかった `search.next` / `search.prev`)。
@@ -146,6 +157,35 @@ pub(crate) enum Pending {
     },
 }
 
+impl Pending {
+    /// このジョブが、文書の内容かディスクの状態に関わる文書 (読込・保存・照合と、結果を文書に当てる非同期の編集)。
+    /// この間は外部変更の照合 (フォーカス復帰・`file.check_external_changes`・監視の照合) をせず、終わってから確かめる
+    /// (03 §9.5 の M9d、§9.5.1 の WATCH-5)。閉じるときに取り消すジョブ (`take_pending_for`) とは別の基準。
+    pub(crate) fn busy_doc(&self) -> Option<DocumentId> {
+        match self {
+            Pending::Open { doc, .. }
+            | Pending::OpenStdin { doc, .. }
+            | Pending::Save { doc, .. }
+            | Pending::CheckUnchanged { doc }
+            | Pending::ExternalCheck { doc, .. }
+            | Pending::WatchCheck { doc, .. }
+            | Pending::ReplaceAll { doc, .. }
+            | Pending::ReplaceOne { doc, .. } => Some(*doc),
+            Pending::ConvertEol(c) => Some(c.doc),
+            Pending::SelectAllMatches(ask) => Some(ask.doc()),
+            Pending::ReplaceUnmappable { ask, .. } => Some(ask.doc),
+            _ => None,
+        }
+    }
+}
+
+impl EditorState {
+    /// 文書 `doc` に `Pending::busy_doc` のジョブがある。
+    pub(crate) fn doc_has_job(&self, doc: DocumentId) -> bool {
+        self.io.pending.values().any(|p| p.busy_doc() == Some(doc))
+    }
+}
+
 /// 保存ジョブの文脈 (`Pending::Save` のうち、結果の処理に渡すもの)。
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SaveCtx {
@@ -176,7 +216,8 @@ impl EditorState {
                 Pending::Open { doc: d, .. }
                 | Pending::OpenStdin { doc: d, .. }
                 | Pending::CheckUnchanged { doc: d }
-                | Pending::ExternalCheck { doc: d, .. } => *d == doc,
+                | Pending::ExternalCheck { doc: d, .. }
+                | Pending::WatchCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::SaveAsTarget(ask) => ask.doc == doc,
                 Pending::Search => self.find.search.as_ref().is_some_and(|s| s.doc() == doc),
@@ -316,6 +357,15 @@ impl EditorState {
             Pending::SaveAsTarget(ask) => self.finish_save_as_target(*ask, r),
             Pending::ExternalCheck { doc, explicit } => {
                 self.finish_external_check(doc, explicit, r);
+            }
+            Pending::WatchCheck {
+                doc,
+                round,
+                switch,
+                at,
+                cap,
+            } => {
+                self.finish_watch_check(doc, round, switch, at, cap, r);
             }
             Pending::Search => {}
             Pending::FindNext {

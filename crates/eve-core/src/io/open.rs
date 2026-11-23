@@ -26,6 +26,9 @@ pub(crate) enum OpenKind {
     Reopen,
     /// 再読込: `Origin::Reload` の Transaction で適用する (Undo できる)。
     Reload,
+    /// ファイル監視からの再読込 (03 §9.5.1 の WATCH-6): `Reload` と同じく適用し、開く前の確認が要る内容・失敗・取消しでは
+    /// 確認を出さずに外部変更の印にする。
+    WatchReload,
 }
 
 /// `file.open` の読込を始めた時点のフォーカスのペインと、そこに出ていた文書 (切り替え元。03 §9.8、§9.9 の PANE-8 (b))。
@@ -250,7 +253,7 @@ impl EditorState {
                 text,
                 format,
                 preserved,
-                meta: _,
+                meta,
                 stamp,
                 changed_during_load,
                 detected,
@@ -277,6 +280,9 @@ impl EditorState {
                     self.snap_views_after_partial(doc_id);
                 }
                 self.io.partial_end_noted.remove(&doc_id);
+                // 開いた: 文書のディレクトリを監視する (03 §9.5.1 の WATCH-1。ネットワークの FS は頼まずに縮退する)
+                self.watch_note_fs(doc_id, meta.fs_kind);
+                self.watch_sync_doc(doc_id);
                 if long_lines > 0 {
                     self.message(
                         MessageLevel::Info,
@@ -328,6 +334,12 @@ impl EditorState {
                 // パスが決まったので、新しいファイルの形をその文書ごとの値で決め直す (07 §3.6 の LAYER-4)
                 self.set_new_file_format(&mut d);
                 self.put_document(doc_id, d);
+                // フォルダがあれば監視する (無いフォルダは、保存で作られた後に張る。03 §9.5.1 の WATCH-1)
+                if parent_missing.is_some() {
+                    self.watch_note_no_parent(doc_id);
+                } else {
+                    self.watch_sync_doc(doc_id);
+                }
                 let key = if parent_missing.is_some() {
                     keys::MSG_OPEN_PARENT_MISSING
                 } else {

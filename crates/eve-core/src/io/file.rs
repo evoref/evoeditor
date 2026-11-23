@@ -137,6 +137,8 @@ impl EditorState {
     /// 表示しているペインは、先に次の文書へ替える (03 §9.9 の PANE-9。ペインに優先して出す文書があるときは、呼び側が
     /// `close_shown_document` で替える)。ペインが消えた View を指したままにならない。
     pub fn close_document(&mut self, doc: DocumentId) {
+        // 監視の登録を外し、その文書の待ち合わせ・照合の回を捨てる (閉じた文書の古い知らせを使わない、03 §9.5.1)
+        self.watch_forget(doc);
         self.move_panes_off(doc, None);
         debug_assert!(
             self.panes_showing(doc).is_empty(),

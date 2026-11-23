@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1047 件)。
+/// `locales/en.toml` の文言 (1062 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -271,6 +271,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.cursor.limit"), B("Up to {limit} cursors; selection unchanged")),
     (B("info.eol.converted"), B("Converted {count} line endings to {eol} (undo restores them)")),
     (B("info.eol.unchanged"), B("Line endings are already {eol}")),
+    (B("info.external.changed"), B("{name} was changed outside the editor")),
+    (B("info.external.changed_many"), B("{count} files were changed or deleted outside the editor (marked in the buffer list)")),
+    (B("info.external.deleted"), B("{name} was deleted outside the editor")),
+    (B("info.external.reloaded"), B("Reloaded {name} to match the external change (you can undo this)")),
     (B("info.external.unchanged"), B("{path} has not changed")),
     (B("info.goto_line.clamped"), B("There is no line {line}. Moved to the last line ({last})")),
     (B("info.hint_bar.hidden"), B("The hint bar is hidden (its line is used for the text)")),
@@ -344,6 +348,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.swap.encoding_mismatch"), B("The unsaved content of {path} was written as {encoding}. Reopen with {encoding} ({key:file.reopen_with_encoding}) to be offered the recovery")),
     (B("info.swap.recovered"), B("Applied the recovered content. {path} does not change until you save")),
     (B("info.undo.history_trimmed"), B("Dropped old undo history to stay within the memory limit")),
+    (B("info.watch.unavailable"), B("Cannot watch the folder of {path} ({reason}). External changes are checked when you return to the editor and when you save")),
     (B("msg.cli.directory.hint"), B("Start with the path of a file")),
     (B("msg.cli.directory.text"), B("{path} is a folder and cannot be opened. An untitled document was opened")),
     (B("msg.cli.directory_ignored.hint"), B("Specify only one folder as the workspace")),
@@ -684,6 +689,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("status.eol_mixed"), B("mixed")),
     (B("status.external_change.long"), B("[Changed on disk]")),
     (B("status.external_change.short"), B("Changed")),
+    (B("status.external_deleted.long"), B("[Deleted on disk]")),
+    (B("status.external_deleted.short"), B("Deleted")),
     (B("status.loading.long"), B("[Loading {percent}%]")),
     (B("status.loading.short"), B("{percent}%")),
     (B("status.loading_bytes.long"), B("[Loading {size}]")),
@@ -698,6 +705,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("status.saving.short"), B("Saving")),
     (B("status.selection"), B("({count} chars selected)")),
     (B("status.untitled"), B("Untitled-{n}")),
+    (B("ui.buffer_list.external_changed"), B("changed on disk")),
+    (B("ui.buffer_list.external_deleted"), B("deleted on disk")),
     (B("ui.buffer_list.no_match"), B("No matching documents")),
     (B("ui.buffer_list.placeholder"), B("Filter by name")),
     (B("ui.buffer_list.title"), B("Buffers")),
@@ -1040,6 +1049,12 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.search.replace_all_button"), B("[A] Replace All")),
     (B("ui.search.replace_label"), B("Replace:")),
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
+    (B("ui.watch.reason.denied"), B("permission denied")),
+    (B("ui.watch.reason.failed"), B("watching could not be started")),
+    (B("ui.watch.reason.limit"), B("the OS limit on watches was reached")),
+    (B("ui.watch.reason.network"), B("a network or virtual file system (such as WSL's /mnt/c)")),
+    (B("ui.watch.reason.not_found"), B("the folder does not exist")),
+    (B("ui.watch.reason.unsupported_fs"), B("this file system ({fs}) is not watched")),
     (B("ui.workspace.class.semi_safe"), B("semi-safe")),
     (B("ui.workspace.key_reason.args"), B("it has arguments")),
     (B("ui.workspace.key_reason.bound"), B("it changes an existing binding")),
@@ -1060,7 +1075,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1047 件)。
+/// `locales/ja.toml` の文言 (1062 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1323,6 +1338,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.cursor.limit"), B("カーソルは {limit} 個までです。選択を変えませんでした")),
     (B("info.eol.converted"), B("{count} 個の改行を {eol} に変換しました (元に戻すで戻せます)")),
     (B("info.eol.unchanged"), B("改行はすでに {eol} です")),
+    (B("info.external.changed"), B("{name} が外部で変更されました")),
+    (B("info.external.changed_many"), B("{count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります)")),
+    (B("info.external.deleted"), B("{name} が外部で削除されました")),
+    (B("info.external.reloaded"), B("{name} を外部の変更に合わせて読み直しました (元に戻すこともできます)")),
     (B("info.external.unchanged"), B("{path} は変更されていません")),
     (B("info.goto_line.clamped"), B("行 {line} はありません。最後の行 ({last}) へ移動しました")),
     (B("info.hint_bar.hidden"), B("ヒントバーを隠しました (その行を本文に使います)")),
@@ -1396,6 +1415,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.swap.encoding_mismatch"), B("{path} の未保存の内容は {encoding} で書かれています。文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で {encoding} を選ぶと、復旧を提案します")),
     (B("info.swap.recovered"), B("復旧内容を適用しました。保存するまで {path} は変わりません")),
     (B("info.undo.history_trimmed"), B("メモリの上限のため、古い元に戻す履歴を破棄しました")),
+    (B("info.watch.unavailable"), B("{path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます")),
     (B("msg.cli.directory.hint"), B("ファイルのパスを指定して起動してください")),
     (B("msg.cli.directory.text"), B("{path} はフォルダなので開けません。無題の文書を開きました")),
     (B("msg.cli.directory_ignored.hint"), B("ワークスペースにするフォルダは 1 つだけ指定してください")),
@@ -1736,6 +1756,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("status.eol_mixed"), B("混在")),
     (B("status.external_change.long"), B("[外部で変更]")),
     (B("status.external_change.short"), B("外部変更")),
+    (B("status.external_deleted.long"), B("[外部で削除]")),
+    (B("status.external_deleted.short"), B("外部削除")),
     (B("status.loading.long"), B("[読込中 {percent}%]")),
     (B("status.loading.short"), B("{percent}%")),
     (B("status.loading_bytes.long"), B("[読込中 {size}]")),
@@ -1750,6 +1772,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("status.saving.short"), B("保存中")),
     (B("status.selection"), B("({count} 文字選択)")),
     (B("status.untitled"), B("無題-{n}")),
+    (B("ui.buffer_list.external_changed"), B("外部で変更")),
+    (B("ui.buffer_list.external_deleted"), B("外部で削除")),
     (B("ui.buffer_list.no_match"), B("一致する文書はありません")),
     (B("ui.buffer_list.placeholder"), B("文書名で絞り込み")),
     (B("ui.buffer_list.title"), B("バッファ")),
@@ -2092,6 +2116,12 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.search.replace_all_button"), B("[A] すべて置換")),
     (B("ui.search.replace_label"), B("置換:")),
     (B("ui.too_small"), B("端末が小さすぎます ({cols}x{rows} 以上が必要)")),
+    (B("ui.watch.reason.denied"), B("権限がありません")),
+    (B("ui.watch.reason.failed"), B("監視を始められません")),
+    (B("ui.watch.reason.limit"), B("監視の数が OS の上限に達しました")),
+    (B("ui.watch.reason.network"), B("ネットワークや仮想の FS (WSL の /mnt/c など)")),
+    (B("ui.watch.reason.not_found"), B("フォルダがありません")),
+    (B("ui.watch.reason.unsupported_fs"), B("この FS ({fs}) では監視しません")),
     (B("ui.workspace.class.semi_safe"), B("準安全")),
     (B("ui.workspace.key_reason.args"), B("引数を持つため")),
     (B("ui.workspace.key_reason.bound"), B("既にある割当を変えるため")),

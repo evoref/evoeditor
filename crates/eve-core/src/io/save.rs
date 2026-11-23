@@ -867,7 +867,11 @@ impl EditorState {
                 self.show_save_warning(path, &report.warnings);
                 if path_changed {
                     self.after_save_as(doc_id, path);
+                    self.watch_forget_fs(doc_id);
                 }
+                // 保存した: 監視があることを確かめる (パスが変われば古いディレクトリの数を減らす。失効していれば張り直す。
+                // 03 §9.5.1 の WATCH-1)
+                self.watch_after_save(doc_id);
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)

@@ -235,6 +235,7 @@ fn host_with_stdin(
         paths: paths.clone(),
     });
     let ports = eve_core::Ports {
+        watcher: None,
         fs,
         clock: Arc::new(clock),
         jobs: std::rc::Rc::clone(&jobs) as std::rc::Rc<dyn JobSpawner>,
