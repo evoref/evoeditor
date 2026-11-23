@@ -85,10 +85,7 @@ impl EditorState {
     /// すべての割当を更新する (ヘルプのキー一覧用)。
     pub(crate) fn set_all_key_bindings(
         &mut self,
-        all: std::collections::BTreeMap<
-            String,
-            Vec<(Vec<eve_view::KeyStroke>, crate::ui_model::help::KeyState)>,
-        >,
+        all: std::collections::BTreeMap<String, Vec<crate::ui_model::help::KeyEntry>>,
     ) {
         self.keys.key_all = all;
     }

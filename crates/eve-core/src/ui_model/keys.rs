@@ -179,6 +179,7 @@ pub(crate) const MSG_SWAP_READ_FAILED: &str = "msg.swap.read_failed";
 pub(crate) const MSG_SWAP_REMOVE_FAILED: &str = "msg.swap.remove_failed";
 pub(crate) const MSG_SWAP_TOO_LARGE: &str = "msg.swap.too_large";
 pub(crate) const MSG_SWAP_UNREADABLE: &str = "msg.swap.unreadable";
+pub(crate) const MSG_WORKSPACE_NOT_REREAD: &str = "msg.workspace.not_reread";
 pub(crate) const MSG_WORKSPACE_ROOT_INVALID: &str = "msg.workspace.root_invalid";
 pub(crate) const MSG_WORKSPACE_SCAN_FAILED: &str = "msg.workspace.scan_failed";
 pub(crate) const MSG_WORKSPACE_SEARCH_FAILED: &str = "msg.workspace.search_failed";
@@ -220,6 +221,8 @@ pub(crate) const UI_CONFIG_ORIGIN_DEFAULT: &str = "ui.config_origin.default";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN: &str = "ui.config_origin.language_builtin";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_FILE: &str = "ui.config_origin.language_file";
 pub(crate) const UI_CONFIG_ORIGIN_USER: &str = "ui.config_origin.user";
+pub(crate) const UI_CONFIG_ORIGIN_WORKSPACE: &str = "ui.config_origin.workspace";
+pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE: &str = "ui.config_origin.language_workspace";
 pub(crate) const UI_CONFIG_SHOW_ITEM: &str = "ui.config_show.item";
 pub(crate) const UI_CONFIG_SHOW_NO_MATCH: &str = "ui.config_show.no_match";
 pub(crate) const UI_CONFIG_SHOW_PLACEHOLDER: &str = "ui.config_show.placeholder";
@@ -371,6 +374,8 @@ pub(crate) const UI_WATCH_REASON_UNSUPPORTED_FS: &str = "ui.watch.reason.unsuppo
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
 const ALL: &[&str] = &[
+    UI_CONFIG_ORIGIN_WORKSPACE,
+    UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -541,6 +546,7 @@ const ALL: &[&str] = &[
     MSG_SWAP_REMOVE_FAILED,
     MSG_SWAP_TOO_LARGE,
     MSG_SWAP_UNREADABLE,
+    MSG_WORKSPACE_NOT_REREAD,
     MSG_WORKSPACE_ROOT_INVALID,
     MSG_WORKSPACE_SCAN_FAILED,
     MSG_WORKSPACE_SEARCH_FAILED,

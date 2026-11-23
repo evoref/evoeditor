@@ -62,17 +62,6 @@ pub struct KeymapFile {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-fn pos(text: &str, offset: usize) -> (u32, u32) {
-    let head = text.get(..offset.min(text.len())).unwrap_or("");
-    let line = head.matches('\n').count() + 1;
-    let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-    // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
-    (
-        u32::try_from(line).unwrap_or(u32::MAX),
-        u32::try_from(col).unwrap_or(u32::MAX),
-    )
-}
-
 /// `args` の 1 つの値。`i64` に収まらない整数は、引数にならない値として型の名前だけを残す。
 fn arg_value(v: &DeValue<'_>) -> KeyArgValue {
     match v {
@@ -85,13 +74,21 @@ fn arg_value(v: &DeValue<'_>) -> KeyArgValue {
 }
 
 struct Cx<'a> {
-    text: &'a str,
     out: KeymapFile,
+    /// 行の始まりの表 (位置を引く)。
+    lines: crate::position::LineIndex<'a>,
+    /// 上限を超えて残さなかった診断の数。
+    dropped: usize,
 }
 
 impl Cx<'_> {
     fn diag(&mut self, severity: Severity, kind: DiagKind, key: &str, at: usize) {
-        let (line, column) = pos(self.text, at);
+        // 上限を超えた分は位置も引かずに数えるだけ (07 §4.3)
+        if self.out.diagnostics.len() >= crate::CONFIG_MAX_DIAGNOSTICS {
+            self.dropped += 1;
+            return;
+        }
+        let (line, column) = self.lines.pos(at);
         self.out.diagnostics.push(Diagnostic {
             severity,
             kind,
@@ -175,7 +172,7 @@ impl Cx<'_> {
                 return;
             }
         };
-        let (line, column) = pos(self.text, at);
+        let (line, column) = self.lines.pos(at);
         self.out.entries.push(KeymapEntry {
             context: context.to_owned(),
             keys: keys.to_owned(),
@@ -230,8 +227,9 @@ impl Cx<'_> {
 /// `keymap.toml` の本文を読む。空でも構文エラーでも `KeymapFile` を返す。
 pub fn load_keymap_str(text: &str) -> KeymapFile {
     let mut cx = Cx {
-        text,
         out: KeymapFile::default(),
+        lines: crate::position::LineIndex::new(text),
+        dropped: 0,
     };
     // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
     if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
@@ -241,7 +239,7 @@ pub fn load_keymap_str(text: &str) -> KeymapFile {
     let root = match DeTable::parse(text) {
         Ok(t) => t,
         Err(e) => {
-            let (line, column) = e.span().map_or((0, 0), |s| pos(text, s.start));
+            let (line, column) = e.span().map_or((0, 0), |s| cx.lines.pos(s.start));
             cx.out.diagnostics.push(Diagnostic {
                 severity: Severity::Error,
                 kind: DiagKind::Syntax {
@@ -258,6 +256,9 @@ pub fn load_keymap_str(text: &str) -> KeymapFile {
     };
     for (name, value) in root.get_ref() {
         cx.top(name, value);
+    }
+    if cx.dropped > 0 {
+        cx.out.diagnostics.push(crate::position::more(cx.dropped));
     }
     cx.out
 }

@@ -13,7 +13,10 @@ use eve_config::{
 };
 use eve_view::{CommandId, KeyCode, KeyStroke, Modifiers};
 
-use super::{Binding, Keymap, Layer, NONE_COMMAND, format_sequence, parse_sequence};
+use super::workspace_keymap::apply_workspace_keymap;
+use super::{
+    Binding, Keymap, Layer, NONE_COMMAND, WORKSPACE_LAYER, format_sequence, parse_sequence,
+};
 use crate::command::arg_schema::{ArgType, command_args};
 use crate::command::context::ContextExpr;
 use crate::command::{ArgValue, Args, CommandRegistry, ids};
@@ -29,9 +32,17 @@ const ESCAPE_COMMANDS: [&str; 3] = [ids::APP_QUIT, ids::UI_PALETTE_OPEN, ids::UI
 
 impl Editor {
     /// `keymap.toml` の内容でユーザー層を置き換える。戻り値は、読込の診断に検証の診断を足したもの。
+    ///
+    /// ユーザー層の検証はワークスペース層を外した状態で行い (診断がワークスペースに依らないように)、その後で
+    /// ワークスペース層 (07 §7.4) を新しい下の層に照らして検証し直す。そのときの診断は返さない (ワークスペースの
+    /// 読込のたびに `set_workspace_keymap` が出す)。
     pub fn set_user_keymap(&mut self, file: &KeymapFile) -> Vec<Diagnostic> {
         self.state.keys.user_keymap_entries = Some(file.entries.clone());
+        self.keymap.remove_layer(WORKSPACE_LAYER);
         let diags = apply_user_keymap(&self.registry, &mut self.keymap, file);
+        if let Some(ws) = &self.state.keys.workspace_keymap_file {
+            apply_workspace_keymap(&self.registry, &mut self.keymap, ws);
+        }
         self.refresh_key_labels();
         diags
     }
@@ -48,7 +59,7 @@ pub fn resolve_keymap(file: &KeymapFile) -> (Keymap, Vec<Diagnostic>) {
 }
 
 /// 層に入れた割当 (コンテキスト・キーの列・`when`) と、それを書いた行 (`file.entries` の番号)。
-type Origin = (&'static str, Vec<KeyStroke>, ContextExpr, usize);
+pub(super) type Origin = (&'static str, Vec<KeyStroke>, ContextExpr, usize);
 
 /// `file` を検証してユーザー層にし、`keymap` のユーザー層を置き換える。戻り値は、読込の診断に検証の診断を足したもの。
 /// 検証の診断は書かれた行の順に並べ、その後に脱出キーの診断を置く。
@@ -156,7 +167,7 @@ fn apply_user_keymap(
     }
     keymap.set_user_layer(layer.clone());
     let escape = restore_escape_keys(keymap, &mut layer, &origins, file);
-    prefix_diagnostics(keymap, &origins, file, &mut entry_diags);
+    prefix_diagnostics(keymap, "user", &origins, file, &mut entry_diags);
     entry_diags.sort_by_key(|(i, _)| *i);
     diags.extend(entry_diags.into_iter().map(|(_, d)| d));
     diags.extend(escape);
@@ -164,7 +175,7 @@ fn apply_user_keymap(
 }
 
 /// `file.entries[i]` の診断 (キーは書かれたとおり `keys.<コンテキスト>.<キー>`、位置はその行)。
-fn entry_diagnostic(
+pub(super) fn entry_diagnostic(
     file: &KeymapFile,
     i: usize,
     severity: Severity,
@@ -224,8 +235,11 @@ fn check_args(command: &str, args: &[(String, KeyArgValue)]) -> Result<Args, Str
 ///
 /// 割当のコンテキストを参照するフォーカスの一部でだけ奪われる衝突は、ユーザーの割当なら `ChordPrefixPartly` (値は奪う
 /// チョードの `コンテキスト: キー`)、既定の割当なら `ChordShadowsDefaultPartly` にする (ほかのフォーカスでは使える)。
-fn prefix_diagnostics(
+///
+/// 「ユーザー」は名前が `layer` の層 (`user`、またはワークスペース層 `workspace`)。ほかの層どうしの衝突は出さない。
+pub(super) fn prefix_diagnostics(
     keymap: &Keymap,
+    layer: &str,
     origins: &[Origin],
     file: &KeymapFile,
     entry_diags: &mut Vec<(usize, Diagnostic)>,
@@ -242,11 +256,7 @@ fn prefix_diagnostics(
         let b = &at_layer.bindings()[d.at.1];
         let c = &by_layer.bindings()[d.by.1];
         let chord = format!("{}: {}", c.context, format_sequence(&c.sequence));
-        let item = match (
-            at_layer.name == "user",
-            by_layer.name == "user",
-            d.everywhere,
-        ) {
+        let item = match (at_layer.name == layer, by_layer.name == layer, d.everywhere) {
             (true, _, false) => {
                 origin(origins, b).map(|i| warn(i, KeymapProblem::ChordPrefixPartly, &chord))
             }
@@ -340,7 +350,7 @@ fn restore_escape_keys(
 }
 
 /// 層の割当 `b` を書いた行の番号。同じコンテキスト・キー・`when` の割当は後の行が上書きするので、最後の行。
-fn origin(origins: &[Origin], b: &Binding) -> Option<usize> {
+pub(super) fn origin(origins: &[Origin], b: &Binding) -> Option<usize> {
     origins
         .iter()
         .rev()
@@ -349,6 +359,6 @@ fn origin(origins: &[Origin], b: &Binding) -> Option<usize> {
 }
 
 /// 修飾のない (または Shift だけの) 文字キー。`Text` として届くので、割り当てても効かず、文字入力を奪う。
-fn is_printable(s: KeyStroke) -> bool {
+pub(super) fn is_printable(s: KeyStroke) -> bool {
     matches!(s.key, KeyCode::Char(_)) && (s.mods == Modifiers::NONE || s.mods == Modifiers::SHIFT)
 }

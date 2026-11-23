@@ -356,11 +356,33 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
-        JobKind::PrecompileLanguages { set } => JobResult::LanguagesPrecompiled {
-            reports: set.precompile(),
-            set: set.clone(),
-        },
-        JobKind::ReadLanguages { dir, config } => {
+        JobKind::PrecompileLanguages {
+            set,
+            workspace,
+            workspace_files,
+        } => {
+            let mut reports = set.precompile();
+            if let Some(ws) = workspace {
+                // ワークスペース層の集まりにはユーザー層の定義も入っているので、診断はワークスペース層のファイルの分だけ
+                let more = ws
+                    .precompile()
+                    .into_iter()
+                    .filter(|(f, _)| workspace_files.contains(f));
+                eve_config::merge_reports(&mut reports, more);
+            }
+            JobResult::LanguagesPrecompiled {
+                reports,
+                set: set.clone(),
+                workspace: workspace.clone(),
+            }
+        }
+        JobKind::ReadLanguages {
+            dir,
+            config,
+            workspace,
+            precompile,
+            workspace_files,
+        } => {
             let (mut defs, mut reports) = match dir {
                 Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),
                 None => (Vec::new(), Vec::new()),
@@ -369,11 +391,43 @@ pub fn run_job(
             all.append(&mut defs);
             let (set, more) = eve_config::LanguageSet::build(&all);
             eve_config::merge_reports(&mut reports, more);
+            // ワークスペース層を重ねた集まり。診断はワークスペース層のファイルのものだけ (ユーザー層の分は上と同じ)
+            let workspace_set = (!workspace.is_empty()).then(|| {
+                let (ws, more) = eve_config::LanguageSet::build_layers(&all, workspace);
+                let ws_files: Vec<&str> = workspace.iter().map(|d| d.source.as_str()).collect();
+                eve_config::merge_reports(
+                    &mut reports,
+                    more.into_iter()
+                        .filter(|(f, _)| ws_files.contains(&f.as_str())),
+                );
+                std::sync::Arc::new(ws)
+            });
+            if *precompile {
+                eve_config::merge_reports(&mut reports, set.precompile());
+                if let Some(ws) = &workspace_set {
+                    let more = ws
+                        .precompile()
+                        .into_iter()
+                        .filter(|(f, _)| workspace_files.contains(f));
+                    eve_config::merge_reports(&mut reports, more);
+                }
+            }
             JobResult::LanguagesRead {
                 set: std::sync::Arc::new(set),
+                workspace_set,
                 reports,
             }
         }
+        JobKind::ReadWorkspaceConfig {
+            root,
+            conditions,
+            safe_dirs,
+        } => JobResult::WorkspaceConfigRead(crate::io::workspace_config::read_workspace_config(
+            &*ports.fs,
+            root,
+            *conditions,
+            safe_dirs,
+        )),
         JobKind::Metadata {
             path,
             purpose,

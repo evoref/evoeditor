@@ -41,6 +41,8 @@ pub struct ConfigArgs {
     pub files: Vec<String>,
     /// `--no-config`: ユーザー層 (`config.toml` と `keymap.toml`) を読まない。
     pub no_config: bool,
+    /// `--no-workspace-config`: ワークスペース層 (`.eve/config.toml`・`.eve/keymap.toml`) を読まない (07 §12.5 の WSC-7)。
+    pub no_workspace_config: bool,
     /// `--set <key>=<value>`: コマンドライン層。最後に重ねる。
     pub sets: Vec<String>,
 }
@@ -255,6 +257,7 @@ pub fn parse(
             ),
             s if s.starts_with("--config=") => config.files.push(s["--config=".len()..].to_owned()),
             "--no-config" | "-N" => config.no_config = true,
+            "--no-workspace-config" => config.no_workspace_config = true,
             "--set" | "-s" => {
                 let v = it
                     .next()
@@ -529,6 +532,12 @@ mod tests {
             panic!()
         };
         assert!(config.no_config);
+        assert!(!config.no_workspace_config);
+        // `--no-workspace-config` はワークスペース層だけを読まない (07 §12.5 の WSC-7)
+        let Cli::Run { config, .. } = p(&["--no-workspace-config"]).unwrap() else {
+            panic!()
+        };
+        assert!(config.no_workspace_config && !config.no_config);
         assert_eq!(
             p(&["--set", "novalue"]).unwrap_err(),
             UsageError::BadSet("novalue".into())

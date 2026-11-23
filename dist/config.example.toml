@@ -113,6 +113,12 @@ regex_default = false
 max_matches = 10000
 # 検索で一致の件数を数える上限 (1000〜1000000000)。超えたら数えるのをやめて「N+」と出します。
 count_limit = 1000000
+# 横断検索とファインダで、リポジトリの .gitignore と .git/info/exclude を効かせるか。false でも workspace.exclude は効きます。
+workspace.respect_gitignore = true
+# 横断検索とファインダが、シンボリックリンク (Windows のジャンクションを含む) の先のフォルダへ降りるか。
+workspace.follow_symlinks = false
+# 横断検索で探すファイルの大きさの上限 (バイト。1024〜1073741824)。超えたファイルは飛ばして数えます。
+workspace.max_file_size = 2097152
 
 [clipboard]
 # 端末の機能 (OSC 52) でクリップボードへ書くか: "auto" (SSH の接続中、または OS のクリップボードを使えないとき) /
@@ -120,6 +126,17 @@ count_limit = 1000000
 osc52 = "auto"
 # OSC 52 で送る上限 (base64 にしたバイト数。1000〜16777216)。超えたら送りません。
 osc52_max_bytes = 100000
+
+[workspace]
+# ワークスペースのルートを探す目印 (フォルダの直下の名前)。開いたファイルのフォルダから上へ探し、最初に見つかった所を
+# ルートにします。起動時に決まります。
+root_markers = [".eve", ".git", ".hg", ".svn"]
+# ファインダと横断検索で除く物 (.gitignore の 1 行と同じ書き方)。足すときは "exclude+" = ["*.log"] と書けます。
+exclude = ["**/.git", "**/node_modules", "**/target"]
+# ワークスペース設定 (.eve/config.toml・.eve/keymap.toml) と .editorconfig を、所有者の検査なしで読むフォルダ (絶対パス)。
+# exFAT のドライブや WSL の /mnt/c の上のリポジトリなど、所有者を確かめられない場所のためのものです。ここ (ユーザーの設定) と
+# --set でだけ書けます。
+safe_directories = []
 
 # OS・環境ごとの値 (条件付きセクション): 同じファイルを Windows・macOS・Linux で共有し、条件に合うときだけ効く値を
 # 書けます。条件の無い値の後に os → frontend → env の順に重なります (後が勝ちます)。条件は

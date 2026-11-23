@@ -345,6 +345,15 @@ pub enum LangOrigin {
         /// 桁。
         column: u32,
     },
+    /// ワークスペース層の `.eve/config.toml` の `[[language]]` (07 §9.6 の LANG-2)。
+    Workspace {
+        /// 表示名 (`.eve/config.toml` の絶対パス)。
+        source: String,
+        /// 行。
+        line: u32,
+        /// 桁。
+        column: u32,
+    },
 }
 
 /// 定義の層 (判定で、より強い層の定義が勝つ。LANG-6 (d))。
@@ -354,6 +363,8 @@ pub enum LanguageLayer {
     Builtin,
     /// ユーザー層 (`config.toml` の `[[language]]`・`--config`・`languages/*.toml`)。
     User,
+    /// ワークスペース層 (`.eve/config.toml` の `[[language]]`。ルートの下の文書の判定だけに使う、07 §3.6 の LAYER-1)。
+    Workspace,
 }
 
 /// 判定の名前 1 つ (`file_types` の拡張子・`file_names` のファイル名・`file_globs` の glob)。
@@ -492,7 +503,18 @@ fn anchored_prefix(source: &str) -> String {
     out.into_iter().collect()
 }
 
+/// `first_line` の正規表現を組んだ回数 (プロセスの通算)。
+static FIRST_LINE_COMPILES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// `first_line` の正規表現を組んだ回数 (プロセスの通算。試験が、主スレッドの処理の前後で組まなかったことを確かめる)。
+#[doc(hidden)]
+#[must_use]
+pub fn first_line_compiles() -> usize {
+    FIRST_LINE_COMPILES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn compile_first_line(source: &str) -> Result<Regex, regex::Error> {
+    FIRST_LINE_COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     regex::RegexBuilder::new(source)
         .size_limit(REGEX_SIZE_LIMIT)
         .dfa_size_limit(REGEX_SIZE_LIMIT)
@@ -516,6 +538,12 @@ pub struct Language {
     pub tab_width: Option<(u8, LangOrigin)>,
     /// `comment.line`。
     pub comment_line: Option<(String, LangOrigin)>,
+    /// ワークスペース層の定義の `indent.unit` (ルートの下の文書だけに効く、07 §3.6 の LAYER-1 の (7))。
+    pub ws_indent_unit: Option<(IndentUnit, LangOrigin)>,
+    /// ワークスペース層の定義の `indent.width`。
+    pub ws_indent_width: Option<(u8, LangOrigin)>,
+    /// ワークスペース層の定義の `indent.tab_width`。
+    pub ws_tab_width: Option<(u8, LangOrigin)>,
 }
 
 impl Language {
@@ -543,6 +571,9 @@ impl Language {
             indent_width: None,
             tab_width: None,
             comment_line: None,
+            ws_indent_unit: None,
+            ws_indent_width: None,
+            ws_tab_width: None,
         }
     }
 
@@ -577,6 +608,9 @@ impl Language {
             indent_width: None,
             tab_width: None,
             comment_line: b.comment_line.map(|c| (c.to_owned(), LangOrigin::Builtin)),
+            ws_indent_unit: None,
+            ws_indent_width: None,
+            ws_tab_width: None,
         }
     }
 }
@@ -642,6 +676,17 @@ impl LanguageSet {
     /// か、判定で使うとき。正規表現を組む時間で、起動時の文書を開くのを待たせない)。
     #[must_use]
     pub fn build(defs: &[LanguageDef]) -> (LanguageSet, Vec<(String, Vec<Diagnostic>)>) {
+        LanguageSet::build_layers(defs, &[])
+    }
+
+    /// [`LanguageSet::build`] と同じだが、ユーザー層の定義 `defs` の後に、ワークスペース層の定義 `workspace` を重ねる
+    /// (LANG-5。ルートの下の文書の判定に使う集まり。ワークスペース層の `indent` は `ws_*` に置き、§3.6 の (7) の段にする)。
+    /// 定義の数の上限 (LANG-3) は層ごとに数える。
+    #[must_use]
+    pub fn build_layers(
+        defs: &[LanguageDef],
+        workspace: &[LanguageDef],
+    ) -> (LanguageSet, Vec<(String, Vec<Diagnostic>)>) {
         let mut set = LanguageSet::builtin();
         let mut index: HashMap<String, usize> = set
             .languages
@@ -650,22 +695,29 @@ impl LanguageSet {
             .map(|(i, l)| (l.name.clone(), i))
             .collect();
         let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
-        for (n, def) in defs.iter().enumerate() {
-            // 層ごとの定義の数の上限 (LANG-3)。超えた分は使わず、最初の 1 つの所で 1 件警告する
-            if n == LANGUAGE_DEFS_MAX {
-                let d = lang_diag(
-                    LanguageProblem::TooManyDefinitions,
-                    "language",
-                    &LANGUAGE_DEFS_MAX.to_string(),
-                    def.line,
-                    def.column,
-                );
-                crate::merge_reports(&mut reports, [(def.source.clone(), vec![d])]);
-                break;
-            }
-            let diags = set.apply(def, n + 1, &mut index);
-            if !diags.is_empty() {
-                crate::merge_reports(&mut reports, [(def.source.clone(), diags)]);
+        let mut seq = 0;
+        for (layer, defs) in [
+            (LanguageLayer::User, defs),
+            (LanguageLayer::Workspace, workspace),
+        ] {
+            for (n, def) in defs.iter().enumerate() {
+                // 層ごとの定義の数の上限 (LANG-3)。超えた分は使わず、最初の 1 つの所で 1 件警告する
+                if n == LANGUAGE_DEFS_MAX {
+                    let d = lang_diag(
+                        LanguageProblem::TooManyDefinitions,
+                        "language",
+                        &LANGUAGE_DEFS_MAX.to_string(),
+                        def.line,
+                        def.column,
+                    );
+                    crate::merge_reports(&mut reports, [(def.source.clone(), vec![d])]);
+                    break;
+                }
+                seq += 1;
+                let diags = set.apply(def, (layer, seq), &mut index);
+                if !diags.is_empty() {
+                    crate::merge_reports(&mut reports, [(def.source.clone(), diags)]);
+                }
             }
         }
         (set, reports)
@@ -689,6 +741,11 @@ impl LanguageSet {
                 source: file,
                 line,
                 column,
+            }
+            | LangOrigin::Workspace {
+                source: file,
+                line,
+                column,
             } = origin
             {
                 let d = lang_diag(
@@ -708,7 +765,7 @@ impl LanguageSet {
     fn apply(
         &mut self,
         def: &LanguageDef,
-        seq: usize,
+        (layer, seq): (LanguageLayer, usize),
         index: &mut HashMap<String, usize>,
     ) -> Vec<Diagnostic> {
         let mut diags = Vec::new();
@@ -720,10 +777,21 @@ impl LanguageSet {
                 self.languages.len() - 1
             }
         };
-        let at = |line: u32, column: u32| LangOrigin::File {
-            source: def.source.clone(),
-            line,
-            column,
+        let workspace = layer == LanguageLayer::Workspace;
+        let at = |line: u32, column: u32| {
+            if workspace {
+                LangOrigin::Workspace {
+                    source: def.source.clone(),
+                    line,
+                    column,
+                }
+            } else {
+                LangOrigin::File {
+                    source: def.source.clone(),
+                    line,
+                    column,
+                }
+            }
         };
         let l = &mut self.languages[i];
         if let Some(d) = &def.display_name {
@@ -735,7 +803,7 @@ impl LanguageSet {
                 .map(|t| Pattern {
                     text: t.clone(),
                     lower: t.to_ascii_lowercase(),
-                    layer: LanguageLayer::User,
+                    layer,
                     seq,
                     origin: at(v.line, v.column),
                 })
@@ -773,21 +841,31 @@ impl LanguageSet {
             // 正規表現は組まずに置く (組むのは使うときか `precompile`)。組めなければ下の層の値を使う
             let mut f = FirstLine::new(
                 &v.value,
-                (LanguageLayer::User, seq),
+                (layer, seq),
                 at(v.line, v.column),
                 Compiled::User(OnceLock::new()),
             );
             f.fallback = l.first_line.take().map(Box::new);
             l.first_line = Some(f);
         }
+        // ワークスペース層の `indent` は別の段 (§3.6 の LAYER-1 の (7)) に置く
+        let (unit, width, tab) = if workspace {
+            (
+                &mut l.ws_indent_unit,
+                &mut l.ws_indent_width,
+                &mut l.ws_tab_width,
+            )
+        } else {
+            (&mut l.indent_unit, &mut l.indent_width, &mut l.tab_width)
+        };
         if let Some(v) = &def.indent_unit {
-            l.indent_unit = Some((v.value, at(v.line, v.column)));
+            *unit = Some((v.value, at(v.line, v.column)));
         }
         if let Some(v) = &def.indent_width {
-            l.indent_width = Some((v.value, at(v.line, v.column)));
+            *width = Some((v.value, at(v.line, v.column)));
         }
         if let Some(v) = &def.tab_width {
-            l.tab_width = Some((v.value, at(v.line, v.column)));
+            *tab = Some((v.value, at(v.line, v.column)));
         }
         if let Some(v) = &def.comment_line {
             l.comment_line = Some((v.value.clone(), at(v.line, v.column)));
@@ -843,10 +921,16 @@ impl LanguageSet {
                     }
                 }
             }
-            if let (Some(f), Some(line)) = (&l.first_line, input.first_line)
-                && let Some(hit) = f.matching(line)
-            {
-                stages[3].push((0, hit.layer, hit.seq, i, hit.origin.clone()));
+        }
+        // 先頭行 (段 3) は、名前・glob・拡張子 (段 0〜2) で決まらなかったときだけ照らす (段は先頭から順に決まるので結果は
+        // 同じ。名前で決まる文書で正規表現を組まない、07 §9.6)
+        if stages[..3].iter().all(Vec::is_empty) {
+            for (i, l) in self.languages.iter().enumerate() {
+                if let (Some(f), Some(line)) = (&l.first_line, input.first_line)
+                    && let Some(hit) = f.matching(line)
+                {
+                    stages[3].push((0, hit.layer, hit.seq, i, hit.origin.clone()));
+                }
             }
         }
         for mut cands in stages {
@@ -1023,8 +1107,8 @@ pub struct DocValue<T> {
     pub origin: ValueOrigin,
 }
 
-/// 文書ごとに決まる値 (07 §3.6。v0.5 の M33 の段 2 では言語定義が持つ `editor.tab_width`・`editor.indent_unit`・
-/// `editor.indent_width`。`file.default_*` は言語定義が持たないので、層の値のまま)。
+/// 文書ごとに決まる値 (07 §3.6 の 5 つのキー)。`file.default_*` は言語定義が持たない (LANG-3) ので、層の値 ((1)(2)(6)(8)) で
+/// 決まる。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocValues {
     /// `editor.tab_width`。
@@ -1033,52 +1117,108 @@ pub struct DocValues {
     pub indent_unit: DocValue<IndentUnit>,
     /// `editor.indent_width`。
     pub indent_width: DocValue<u8>,
+    /// `file.default_line_ending` (新しいファイルの改行、LAYER-4)。
+    pub default_line_ending: DocValue<crate::DefaultLineEnding>,
+    /// `file.default_encoding` (新しいファイルの文字コード、LAYER-4)。
+    pub default_encoding: DocValue<crate::DefaultEncoding>,
 }
 
-/// 文書ごとの値を決める (07 §3.6 の LAYER-1 の (1)〜(4)・(8))。`config` と `origins` は層を重ねた結果 ((1)(2)(8))、
-/// `language` は文書の言語の定義 (組込みにユーザー層を重ねたもの、(3)(4))。`--set` で決まった値は言語より強く、ほかは
-/// 言語定義がその項目を持てば言語の値になる (持たなければ層の値)。
+/// 文書ごとの値を決める材料 (07 §3.6 の LAYER-1)。
+#[derive(Debug, Clone, Copy)]
+pub struct DocLayers<'a> {
+    /// 層を重ねた設定 ((1)(2)(6)(8)。ワークスペース層が届いていれば、その安全な項目を含む)。
+    pub config: &'a Config,
+    /// `config` の値の由来。
+    pub origins: &'a Origins,
+    /// ユーザー層 ((1)(2))。ワークスペース層を効かせない文書 (ルートの外) は、ワークスペース層で決まった値の代わりにこれを
+    /// 使う。`None` はワークスペース層が無い (`config` がユーザー層とコマンドライン層だけ)。
+    pub user: Option<&'a crate::UserLayer>,
+    /// 文書の言語の定義 ((3)(4)。ルートの下の文書は、ワークスペース層を重ねた集まりの定義で、`ws_*` が (7))。
+    pub language: Option<&'a Language>,
+    /// ワークスペース層 ((6)(7)) を効かせるか (ルートの下の文書。無題の文書は (6) だけで、言語は `plain`)。
+    pub workspace: bool,
+}
+
+/// 文書ごとの値を決める (07 §3.6 の LAYER-1。`.editorconfig` の (5) は段 6)。各キーで、強い段から順に、値を持つ最初の段を
+/// 採る: (8) `--set` → (7) ワークスペース層の言語定義 → (6) ワークスペース層の一般の値 → (3)(4) 言語定義 → (1)(2) 層の値。
+/// (6)(7) は `layers.workspace` のときだけ見る。
 #[must_use]
-pub fn doc_values(config: &Config, origins: &Origins, language: Option<&Language>) -> DocValues {
+pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
+    type Pick<T> = fn(&Language) -> &Option<(T, LangOrigin)>;
     fn pick<T: Copy>(
+        layers: &DocLayers<'_>,
         key: &str,
-        value: T,
-        lang: Option<(&Language, &Option<(T, LangOrigin)>)>,
-        origins: &Origins,
+        get: fn(&Config) -> T,
+        lang: Option<(Pick<T>, Pick<T>)>,
     ) -> DocValue<T> {
-        let origin = origins.of(key);
-        match lang {
-            Some((l, Some((v, at)))) if !matches!(origin, Origin::Cli { .. }) => DocValue {
+        let origin = layers.origins.of(key);
+        let from_language = |l: &Language, v: &Option<(T, LangOrigin)>| {
+            v.as_ref().map(|(v, at)| DocValue {
                 value: *v,
                 origin: ValueOrigin::Language {
                     language: l.name.clone(),
                     at: at.clone(),
                 },
+            })
+        };
+        let layered = || DocValue {
+            value: get(layers.config),
+            origin: ValueOrigin::Config(origin.clone()),
+        };
+        if matches!(origin, Origin::Cli { .. }) {
+            return layered();
+        }
+        let language = layers.language.zip(lang);
+        if layers.workspace {
+            if let Some(v) = language.and_then(|(l, (_, ws))| from_language(l, ws(l))) {
+                return v;
+            }
+            if matches!(origin, Origin::Workspace { .. }) {
+                return layered();
+            }
+        }
+        if let Some(v) = language.and_then(|(l, (user, _))| from_language(l, user(l))) {
+            return v;
+        }
+        match (origin, layers.user) {
+            // ワークスペース層を効かせない文書: ワークスペース層で決まった値の代わりにユーザー層の値
+            (Origin::Workspace { .. }, Some(u)) if !layers.workspace => DocValue {
+                value: get(&u.config),
+                origin: ValueOrigin::Config(u.origins.of(key).clone()),
             },
-            _ => DocValue {
-                value,
-                origin: ValueOrigin::Config(origin.clone()),
-            },
+            _ => layered(),
         }
     }
     DocValues {
         tab_width: pick(
+            layers,
             "editor.tab_width",
-            config.tab_width,
-            language.map(|l| (l, &l.tab_width)),
-            origins,
+            |c| c.tab_width,
+            Some((|l| &l.tab_width, |l| &l.ws_tab_width)),
         ),
         indent_unit: pick(
+            layers,
             "editor.indent_unit",
-            config.indent_unit,
-            language.map(|l| (l, &l.indent_unit)),
-            origins,
+            |c| c.indent_unit,
+            Some((|l| &l.indent_unit, |l| &l.ws_indent_unit)),
         ),
         indent_width: pick(
+            layers,
             "editor.indent_width",
-            config.indent_width,
-            language.map(|l| (l, &l.indent_width)),
-            origins,
+            |c| c.indent_width,
+            Some((|l| &l.indent_width, |l| &l.ws_indent_width)),
+        ),
+        default_line_ending: pick(
+            layers,
+            "file.default_line_ending",
+            |c| c.default_line_ending,
+            None,
+        ),
+        default_encoding: pick(
+            layers,
+            "file.default_encoding",
+            |c| c.default_encoding,
+            None,
         ),
     }
 }

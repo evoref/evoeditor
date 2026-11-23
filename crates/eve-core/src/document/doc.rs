@@ -173,6 +173,9 @@ pub struct Document {
     preserved_anomalies: u32,
     /// 標準入力の文書だけ `Some` (`evoeditor -`、03 §9.2.2。v0.4 の M25)。書くのは core だけ。
     pub stdin: Option<StdinDoc>,
+    /// 利用者が改行・文字コードを明示的に選んだ (`file.set_line_ending` など)。新しいファイルの形を設定から決め直さない
+    /// (07 §3.6 の LAYER-4)。
+    pub(crate) format_chosen: bool,
     /// canonical のパス (同じファイルの判定に使う。03 §12.7.6 の 0、境界の型ではない)。開くジョブの `Identity` と、名前を
     /// 付けて保存の成功で直す。canonicalize できなかったときは正規化したパス。無題・`Identity` が届く前は `None`。
     pub(crate) canonical: Option<FsPath>,
@@ -310,6 +313,7 @@ impl Document {
             preserved,
             preserved_anomalies: 0,
             stdin: None,
+            format_chosen: false,
             canonical: None,
             file_id_unique: false,
             loading_file_id: None,

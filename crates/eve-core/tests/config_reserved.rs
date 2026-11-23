@@ -286,3 +286,82 @@ fn editor_multi_cursor_を書くと専用の情報診断になり値を使わな
         }
     }
 }
+
+/// ワークスペース層の分類の決め方の書き出し (`WorkspacePolicy::spec_label`) の全部。表の分類の列の文の先頭と比べる。
+fn policy_labels() -> Vec<&'static str> {
+    use eve_config::{WorkspaceClass as C, WorkspacePolicy as P};
+    [
+        P::Safe,
+        P::SafeAppend,
+        P::SemiSafe,
+        P::SemiSafeUnlessEqual,
+        P::SmallerSafe,
+        P::SafeValue {
+            safe: "true",
+            otherwise: C::SemiSafe,
+        },
+        P::SafeValue {
+            safe: "true",
+            otherwise: C::Dangerous,
+        },
+        P::SafeValue {
+            safe: "false",
+            otherwise: C::Dangerous,
+        },
+        P::ExternalChange,
+        P::NoEffect,
+        P::AlwaysIgnored,
+    ]
+    .iter()
+    .map(eve_config::WorkspacePolicy::spec_label)
+    .collect()
+}
+
+// verifies: AC-FR-705-1
+/// 宣言の表の分類の列 (`eve_config::workspace_policy`) が、07 §12.3 の「v0.5 の公開キーごとの分類」の表と一致する。表の
+/// 分類の列の文は、書き出しのうち最も長く当たるものと比べる。どの公開キーも表に 1 回だけ現れ、表の公開キーでないキー
+/// (後の段で公開する `file.watch.enabled` など) は公開前のキー。
+#[test]
+fn ワークスペース層の分類は_07_の_12_3_の公開キーごとの表と一致する() {
+    let body = section(DOC, "### 12.3 項目の分類").expect("07 §12.3 を読める");
+    let tables = tables_in(&body);
+    let t = tables
+        .iter()
+        .find(|t| t.column("当たる基準・理由").is_some())
+        .expect("07 §12.3 に公開キーごとの表がある");
+    let (kc, cc) = (
+        t.column("キー").expect("キーの列"),
+        t.column("分類").expect("分類の列"),
+    );
+    let public = public_keys();
+    let labels = policy_labels();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for r in &t.rows {
+        let class = r.cells[cc].trim();
+        let want = labels
+            .iter()
+            .filter(|l| class.starts_with(**l))
+            .max_by_key(|l| l.len())
+            .copied();
+        for id in identifiers(&r.cells[kc])
+            .into_iter()
+            .filter(|id| is_key(id))
+        {
+            if !public.contains(&id) {
+                assert!(
+                    RESERVED_KEYS.contains(&id.as_str()),
+                    "表の {id} は公開キーでも公開前のキーでもない"
+                );
+                continue;
+            }
+            assert!(seen.insert(id.clone()), "表に 2 回: {id}");
+            let have = eve_config::workspace_policy(&id).map(|p| p.spec_label());
+            assert_eq!(have, want, "{id}: 表は {class}");
+        }
+    }
+    let missing: Vec<&String> = public.difference(&seen).collect();
+    assert!(
+        missing.is_empty(),
+        "07 §12.3 の公開キーごとの表に無い: {missing:?}"
+    );
+}

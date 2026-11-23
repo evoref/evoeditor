@@ -115,6 +115,8 @@ pub(crate) fn start(
     };
     let config = loaded.config;
     let config_origins = loaded.origins;
+    // ユーザー層 (ワークスペース層を重ねる土台、07 §12.5 の WSC-3)
+    let config_user = loaded.user;
     // 設定ファイルの言語定義 (`languages/*.toml` と一緒に、起動の後の io のジョブで重ねる、07 §9.6 の LANG-2)
     let config_languages = loaded.languages;
     let mut config_reports = loaded.reports;
@@ -165,6 +167,7 @@ pub(crate) fn start(
         initial_encoding: encoding,
         config: Some(config),
         config_origins: Some(config_origins),
+        config_user: Some(config_user),
         config_languages,
         config_reports,
         user_theme,

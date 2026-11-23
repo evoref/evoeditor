@@ -35,6 +35,12 @@
   "search.regex_default": false,
   "search.max_matches": 10000,
   "search.count_limit": 1000000,
+  "search.workspace.respect_gitignore": true,
+  "search.workspace.follow_symlinks": false,
+  "search.workspace.max_file_size": 2097152,
   "clipboard.osc52": "auto",
-  "clipboard.osc52_max_bytes": 100000
+  "clipboard.osc52_max_bytes": 100000,
+  "workspace.root_markers": [".eve", ".git", ".hg", ".svn"],
+  "workspace.exclude": ["**/.git", "**/node_modules", "**/target"],
+  "workspace.safe_directories": []
 }

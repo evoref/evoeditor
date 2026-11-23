@@ -674,6 +674,18 @@ text = "{item} cannot be written in a conditional section"
 hint = 'Use when = "os == \"windows\"" for OS-specific bindings. This section is not used'
 text = "Conditional sections ({item}) are not supported in keymap.toml"
 
+[msg.config.more]
+hint = "Only the first 100 are shown. Fix them and reload"
+text = "This file has {count} more problems"
+
+[msg.config.invalid_item]
+hint = "This item is not used"
+text = "The item {value} of {item} is invalid ({reason})"
+
+[msg.config.broad_safe_directory]
+hint = "The ownership check is skipped for everything under it. Write the folder of the repository instead"
+text = "{value} in {item} is too broad"
+
 [msg.config.invalid_value]
 hint = "Allowed values: {allowed}. This item uses the default {default}"
 text = "The value {value} of {item} cannot be used"
@@ -1070,6 +1082,10 @@ text = "The document changed after the recovery offer, so it was not applied"
 hint = "Delete it by hand"
 text = "Could not delete the swap: {dir}"
 
+[msg.workspace.not_reread]
+hint = "Another program has it open, so it could not be reread with the changed safe directories. Close it and reload the settings"
+text = "Dropped {path}"
+
 [msg.workspace.root_invalid]
 hint = "Specify a folder. {root} is used as the workspace for now"
 text = "Cannot use {path} as the workspace: {reason}"
@@ -1081,6 +1097,55 @@ text = "Cannot read the workspace {root}: {reason}"
 [msg.workspace.search_failed]
 hint = "Change the search text to search again"
 text = "Workspace search failed: {reason}"
+
+[msg.workspace.item_pending]
+hint = "In v0.5, write it in your user settings instead"
+text = "{item} is not applied from workspace settings ({class})"
+
+[msg.workspace.item_pending_unsafe]
+hint = "Check it before deciding to use it"
+text = "{item} = {value} was requested by this repository but is not applied for safety"
+
+[msg.workspace.item_ignored]
+hint = "Workspace settings cannot change this item"
+text = "{item} cannot be set in workspace settings (always ignored)"
+
+[msg.workspace.item_no_effect]
+hint = "Write it in your user settings"
+text = "{item} has no effect in workspace settings (decided at startup)"
+
+[msg.workspace.key_rejected]
+hint = "Workspace key bindings can only add keys that are not bound yet"
+text = "Workspace key binding {key} is not used ({reason})"
+
+[msg.workspace.too_many_keys]
+hint = "The bindings beyond the limit are not read"
+text = "There are more than {count} workspace key bindings"
+
+[msg.workspace.not_owned]
+hint = "Take ownership (takeown / chown), or add it to workspace.safe_directories in your user settings"
+text = "Did not read {path}: it is owned by {owner}"
+
+[msg.workspace.others_can_write]
+hint = "On Windows, disable inheritance with icacls and remove that account; on Unix, run chmod o-w"
+text = "Did not read {path}: other users ({who}) can write to it"
+
+[msg.workspace.owner_unknown]
+hint = "To read it, add it to workspace.safe_directories in your user settings"
+text = "Did not read {path}: ownership cannot be checked on this file system ({fs})"
+
+[msg.workspace.opened_elsewhere]
+hint = "Check where the links or junctions on the way point to, then reload the settings"
+text = "Did not read {path}: the opened file is not in the checked place"
+
+[msg.workspace.not_regular]
+hint = "Place it as a regular file, not a link"
+text = "Did not read {path}: it is not a regular file (a symbolic link, a junction, or similar)"
+
+[msg.workspace.too_large]
+hint = "Keep it at 256 KiB or less"
+text = "Did not read {path}: it is too large"
+
 
 [msg.reload.missing]
 hint = "To keep the current content, recreate the file with Save ({key:file.save}), or use Save As ({key:file.save_as})"
@@ -1275,6 +1340,12 @@ os = "OS language"
 [ui.config.syntax_reason]
 key_depth = "a key has more than 16 levels"
 nesting = "inline tables and arrays are nested more than 16 levels deep"
+
+[ui.config.item_reason]
+empty = "it is empty"
+not_name = "it is not a name directly under a folder"
+relative = "it is not an absolute path"
+wildcard = "* cannot be used"
 
 [ui.config.type]
 array = "an array"
@@ -1607,6 +1678,8 @@ cli = "--set"
 condition = "{origin} [{condition}]"
 language_builtin = "language {language} (built-in)"
 language_file = "language {language}: {file}:{line}"
+workspace = "workspace: .eve/config.toml:{line}"
+language_workspace = "language {language}: .eve/config.toml:{line}"
 
 [ui.lang_set]
 title = "Set Language (current: {language})"
@@ -1623,6 +1696,19 @@ footer_scanning = "{matched}/{total} scanning…"
 footer_truncated = "{matched}/{total} (stopped at {limit} files)"
 unreadable_suffix = " · {dirs} unreadable folders"
 no_match = "No matching files"
+
+[ui.workspace.class]
+semi_safe = "semi-safe"
+
+[ui.workspace.key_reason]
+bound = "it changes an existing binding"
+shadows = "it disables an existing binding"
+text = "it takes a text key"
+args = "it has arguments"
+none = "it removes a binding"
+exec = "it runs an external command"
+command = "the command cannot be bound from a workspace"
+dialog = "it is a key in a confirmation dialog"
 
 [ui.workspace_search]
 title = "Search Workspace {toggles}"

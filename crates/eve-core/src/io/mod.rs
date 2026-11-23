@@ -39,3 +39,4 @@ pub(crate) mod unmap;
 pub(crate) mod unmappable;
 pub(crate) mod watch;
 pub(crate) mod watch_doc;
+pub(crate) mod workspace_config;

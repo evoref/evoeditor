@@ -34,12 +34,31 @@ impl EditorState {
         &self.settings.languages
     }
 
-    /// 文書の言語の定義 (`plain`・決めていない・定義の無い言語は `None`)。
+    /// 文書の言語の定義 (`plain`・決めていない・定義の無い言語は `None`)。ルートの下の文書は、ワークスペース層の言語定義を
+    /// 重ねた集まりから引く (07 §3.6 の LAYER-1 の (7))。
     pub(crate) fn language_of(&self, doc: &Document) -> Option<&Language> {
         doc.language
             .id
             .as_deref()
-            .and_then(|id| self.settings.languages.get(id))
+            .and_then(|id| self.language_set_for(doc).get(id))
+    }
+
+    /// 文書の判定と文書ごとの値に使う言語定義の集まり: ルートの下の文書でワークスペース層に言語定義があれば、それを重ねた
+    /// 集まり。ほかは組込みにユーザー層を重ねた集まり。
+    fn language_set_for(&self, doc: &Document) -> &LanguageSet {
+        match &self.settings.workspace_language_set {
+            Some(set) if doc.path.is_some() && self.doc_in_workspace(doc) => set,
+            _ => &self.settings.languages,
+        }
+    }
+
+    /// ワークスペース層 (07 §3.6 の LAYER-1 の (6)(7)) を効かせる文書か: ルートの下のパスの文書と、無題の文書 (無題は
+    /// (6) だけ。言語は `plain`)。ルートが決まっていなければ無題の文書だけ。
+    pub(crate) fn doc_in_workspace(&self, doc: &Document) -> bool {
+        match &doc.path {
+            None => doc.stdin.is_none(),
+            Some(p) => self.workspace_relative(p).is_some(),
+        }
     }
 
     /// 文書の言語 ID (`doc.language` の値。決めていなければ空)。
@@ -47,13 +66,27 @@ impl EditorState {
         doc.language.id.as_deref().unwrap_or("")
     }
 
-    /// 文書ごとの値 (07 §3.6 の LAYER-1。段 2 では (1)〜(4)・(8))。
+    /// 文書ごとの値 (07 §3.6 の LAYER-1。段 5 では (1)〜(4)・(6)〜(8))。
     pub(crate) fn doc_values_of(&self, doc: &Document) -> eve_config::DocValues {
-        eve_config::doc_values(
-            &self.settings.config,
-            &self.settings.config_origins,
-            self.language_of(doc),
-        )
+        eve_config::doc_values(&eve_config::DocLayers {
+            config: &self.settings.config,
+            origins: &self.settings.config_origins,
+            user: self.settings.user_layer.as_ref(),
+            language: self.language_of(doc),
+            workspace: self.doc_in_workspace(doc),
+        })
+    }
+
+    /// 文書に依らない、ワークスペース層を除いた文書ごとのキーの値 (07 §3.6 の (1)(2)(8)。既存のファイルの改行の判定に使う、
+    /// LAYER-4)。
+    pub(crate) fn user_doc_values(&self) -> eve_config::DocValues {
+        eve_config::doc_values(&eve_config::DocLayers {
+            config: &self.settings.config,
+            origins: &self.settings.config_origins,
+            user: self.settings.user_layer.as_ref(),
+            language: None,
+            workspace: false,
+        })
     }
 
     /// 文書に写す表示の設定と字下げの設定 (文書ごとの値と、文書に依らない表示の設定から)。
@@ -149,7 +182,7 @@ impl EditorState {
         let rel = d.path.as_ref().and_then(|p| self.workspace_relative(p));
         let head = (d.path.is_some() || d.stdin.is_some()).then(|| doc_head(d));
         let first = head.as_deref().map(eve_config::first_line_of);
-        let detected = self.settings.languages.detect(&DetectInput {
+        let detected = self.language_set_for(d).detect(&DetectInput {
             file_name: name.as_deref(),
             rel_path: rel.as_deref(),
             first_line: first,
@@ -221,56 +254,125 @@ impl EditorState {
                 return;
             }
         }
+        self.spawn_languages_read(startup, false);
+    }
+
+    /// 起動の後に届いたワークスペース層の言語定義を重ねて読み直す (届いたら明示の指定の無い文書を判定し直し、診断はワークスペース
+    /// 層のファイルの分だけを足す。ユーザー層の言語定義の診断は既に出しているので、2 重にしない)。
+    pub(crate) fn spawn_languages_read_for_workspace(&mut self) {
+        self.spawn_languages_read(true, true);
+    }
+
+    /// 言語定義の読込を積む。`redetect` なら、届いたときに明示の指定の無い文書の言語を判定し直す (起動時の読込と、起動の後に
+    /// ワークスペース層の言語定義が届いたとき。LANG-7)。
+    fn spawn_languages_read(&mut self, redetect: bool, workspace_only: bool) {
         let dir = self.config_sources().languages;
+        // 正規表現はジョブの中で組む (差し替えた集まりで主スレッドが判定するときに組まない)。起動時の 1 回だけは
+        // `PrecompileLanguages` で組む (起動時の文書の読込を待たせない、07 §9.6 の段 2 の細目)
+        let precompile = workspace_only || !redetect;
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
             JobKind::ReadLanguages {
                 dir,
                 config: self.settings.config_languages.clone(),
+                workspace: self.settings.workspace_languages.clone(),
+                precompile,
+                workspace_files: self.settings.workspace_files.clone(),
             },
         );
-        self.io
-            .pending
-            .insert(job, Pending::LanguagesRead { startup });
+        self.io.pending.insert(
+            job,
+            Pending::LanguagesRead {
+                startup: redetect,
+                workspace_only,
+                precompiled: precompile,
+            },
+        );
     }
 
     /// 届いた定義の集まりの `first_line` の正規表現を組むジョブを積む (io。起動時は起動時のパスを開くジョブの後ろになる)。
-    fn start_languages_precompile(&mut self) {
+    /// ワークスペース層の集まりも組む (判定で初めて要ったときに主スレッドで組まない)。`workspace_only` なら、診断は
+    /// ワークスペース層のファイルの分だけを足す。
+    fn start_languages_precompile(&mut self, redetect: bool) {
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
             JobKind::PrecompileLanguages {
                 set: self.settings.languages.clone(),
+                workspace: self.settings.workspace_language_set.clone(),
+                workspace_files: self.settings.workspace_files.clone(),
             },
         );
-        self.io.pending.insert(job, Pending::LanguagesPrecompile);
+        self.io
+            .pending
+            .insert(job, Pending::LanguagesPrecompile { redetect });
     }
 
-    /// 正規表現を組んだ結果: 組めなかった `first_line` の診断を出す (今の定義の集まりのものだけ)。
-    pub(crate) fn finish_languages_precompile(&mut self, r: JobResult) {
-        let JobResult::LanguagesPrecompiled { set, reports } = r else {
+    /// 正規表現を組んだ結果: 組めなかった `first_line` の診断を出す (今の定義の集まりのものだけ)。`redetect` なら、組んだ後で
+    /// 明示の指定の無い文書の言語を判定し直す (起動時の読込。判定で正規表現を主スレッドで組まない)。
+    pub(crate) fn finish_languages_precompile(&mut self, r: JobResult, redetect: bool) {
+        let JobResult::LanguagesPrecompiled {
+            set,
+            workspace,
+            reports,
+        } = r
+        else {
             return;
         };
-        if !std::sync::Arc::ptr_eq(&set, &self.settings.languages) {
+        let same_ws = match (&workspace, &self.settings.workspace_language_set) {
+            (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        if !std::sync::Arc::ptr_eq(&set, &self.settings.languages) || !same_ws {
+            // 古い結果 (間に `config.reload` で差し替えた): 今の集まりは差し替えるときにジョブの中で組み済みなので、判定し直しの
+            // 求めはその場で済ませる (印を残して、後の無関係な `config.reload` で判定し直さない、LANG-7)
+            if redetect {
+                self.redetect_languages();
+            }
             return;
         }
         for (file, diags) in &reports {
             self.report_config_more(file, diags);
         }
+        if redetect {
+            self.redetect_languages();
+        }
     }
 
     /// 言語定義の読込の結果: 定義の集まりを差し替え、診断を出し、開いている文書の文書ごとの値を決め直す。起動時の読込なら、
     /// 先に開き終わった文書 (標準入力など) の言語を判定し直す (LANG-7)。`config.reload` の読込では判定し直さない。
-    pub(crate) fn finish_languages_read(&mut self, r: JobResult, startup: bool) {
-        let JobResult::LanguagesRead { set, reports } = r else {
+    pub(crate) fn finish_languages_read(
+        &mut self,
+        r: JobResult,
+        startup: bool,
+        workspace_only: bool,
+        precompiled: bool,
+    ) {
+        let JobResult::LanguagesRead {
+            set,
+            workspace_set,
+            reports,
+        } = r
+        else {
             return;
         };
         self.settings.languages = set;
+        self.settings.workspace_language_set = workspace_set;
         self.settings.ambiguous_noted.clear();
         // 言語定義のファイルの診断は読み直した結果に置き換える。設定ファイルの言語定義の診断 (正規表現など) は、設定ファイルの
         // 診断に足す (設定ファイルの診断は、起動時の報告か `config.reload` が先に置き換えている)
-        self.forget_config_diagnostics(|f| f.starts_with(crate::io::languages::LANGUAGES_PREFIX));
+        // ワークスペース層の言語定義が届いて読み直したときは、ワークスペース層のファイルの診断だけを足す (ほかは出したまま)
+        let reports: Vec<_> = reports
+            .into_iter()
+            .filter(|(f, _)| !workspace_only || self.settings.workspace_files.contains(f))
+            .collect();
+        if !workspace_only {
+            self.forget_config_diagnostics(|f| {
+                f.starts_with(crate::io::languages::LANGUAGES_PREFIX)
+            });
+        }
         for (file, diags) in &reports {
             if file.starts_with(crate::io::languages::LANGUAGES_PREFIX) {
                 self.report_config(file, diags);
@@ -278,11 +380,16 @@ impl EditorState {
                 self.report_config_more(file, diags);
             }
         }
-        if startup {
-            self.redetect_languages();
-        }
         self.refresh_all_doc_settings();
-        self.start_languages_precompile();
+        if precompiled {
+            // 正規表現はジョブの中で組んである
+            if startup {
+                self.redetect_languages();
+            }
+        } else {
+            // 判定し直すのは正規表現を組んだ後 (主スレッドで組まない)
+            self.start_languages_precompile(startup);
+        }
     }
 
     /// 設定ファイルの言語定義を差し替える (起動時の Host と `config.reload`)。

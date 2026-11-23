@@ -197,7 +197,7 @@ keyword.control.return = { fg = "#cba6f7", fallback256 = { fg = "ansi.183" }, mo
         (theme, (3, 6)),
         (keymap, (4, 5)),
         (config, (3, 7)),
-        (include_str!("../../../../dist/config.example.toml"), (0, 3)),
+        (include_str!("../../../../dist/config.example.toml"), (1, 3)),
     ] {
         let got = max_depths(src);
         assert_eq!(got, want, "{src}");

@@ -148,6 +148,8 @@ pub struct HostInit {
     pub config: Option<eve_config::Config>,
     /// 設定の値の由来 (`config.show`、07 §3.5)。`config` と一緒に当てる。
     pub config_origins: Option<eve_config::Origins>,
+    /// ユーザー層 (`eve_config::Resolved::user`。ワークスペース層を重ねる土台、07 §12.5)。`config` と一緒に当てる。
+    pub config_user: Option<eve_config::UserLayer>,
     /// 設定ファイルの `[[language]]` の定義 (`eve_config::Resolved::languages`、07 §9.6)。`config` と一緒に当てる。
     pub config_languages: Vec<eve_config::LanguageDef>,
     /// 設定の診断 (表示名, 診断)。最初の Frame の後に、この順にメッセージとして出す (07 §4.3、FR-703)。空の診断は捨てる。
@@ -204,6 +206,7 @@ impl Host {
             initial_encoding,
             config,
             config_origins,
+            config_user,
             config_languages,
             config_reports,
             user_theme,
@@ -232,6 +235,7 @@ impl Host {
             editor.configure(StartupConfig {
                 config: Some(c.clone()),
                 config_origins,
+                config_user,
                 config_languages: Some(config_languages),
                 ..Default::default()
             });

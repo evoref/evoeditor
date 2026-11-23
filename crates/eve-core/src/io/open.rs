@@ -331,6 +331,8 @@ impl EditorState {
                 // 存在しないパス: 空の新規文書 (dirty ではない)。保存すると作成する
                 let mut d = self.blank_document();
                 d.path = Some(path.clone());
+                // パスが決まったので、新しいファイルの形をその文書ごとの値で決め直す (07 §3.6 の LAYER-4)
+                self.set_new_file_format(&mut d);
                 self.put_document(doc_id, d);
                 // フォルダがあれば監視する (無いフォルダは、保存で作られた後に張る。03 §9.5.1 の WATCH-1)
                 if parent_missing.is_some() {
