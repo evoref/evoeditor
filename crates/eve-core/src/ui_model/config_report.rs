@@ -83,7 +83,14 @@ impl EditorState {
                 }
             }
         }
-        self.show_config_problems(file, diagnostics);
+        // 要約も上限を掛けた後の列で作る
+        if workspace {
+            let mut shown = diagnostics.to_vec();
+            eve_config::cap_diagnostics(&mut shown);
+            self.show_config_problems(file, &shown);
+        } else {
+            self.show_config_problems(file, diagnostics);
+        }
     }
 
     /// 一覧から、テーマが無い診断 (`DiagKind::ThemeNotFound`) を消す (テーマを読み直す前)。

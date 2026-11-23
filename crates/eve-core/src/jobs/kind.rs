@@ -71,9 +71,9 @@ pub enum JobKind {
     },
     /// 言語定義を読んで重ねる (07 §9.6 の LANG-2、02 §9.3 の `ReadLanguages`)。起動時は、起動時のパスを開くジョブより前に
     /// 積む (`io` は直列なので、起動時の文書は定義が届いた後に開き終わる)。`config.reload` でも積む。`dir` の
-    /// `*.toml` を名前の順に読み、`config` (設定ファイルの `[[language]]`) の後に重ね、ユーザー層の `first_line` の正規表現を
-    /// 組まない (組むのは `PrecompileLanguages`。正規表現を組む時間で起動時の文書を開くのを待たせない)。結果は
-    /// `JobResult::LanguagesRead`。
+    /// `*.toml` を名前の順に読み、`config` (設定ファイルの `[[language]]`) の後に重ねる。`first_line` の正規表現は、起動時の
+    /// 1 回は組まず (組むのは `PrecompileLanguages`。組む時間で起動時の文書を開くのを待たせない)、ほか (`config.reload`・
+    /// ワークスペース層が届いた契機) はジョブの中で組む (`precompile`)。結果は `JobResult::LanguagesRead`。
     ReadLanguages {
         /// `<config_dir>/languages`。`None` は読まない (`--no-config`)。
         dir: Option<FsPath>,
@@ -82,7 +82,8 @@ pub enum JobKind {
         /// ワークスペース層の `[[language]]` の定義 (`.eve/config.toml`、07 §9.6 の LANG-2)。空でなければ、ユーザー層の後に
         /// 重ねた集まり (ルートの下の文書の判定に使う) も作る。
         workspace: Vec<eve_config::LanguageDef>,
-        /// ジョブの中で `first_line` の正規表現まで組む (起動の後にワークスペース層が届いた契機。届いたらすぐ判定し直すので)。
+        /// ジョブの中で `first_line` の正規表現まで組む (起動時の 1 回のほか。差し替えた集まりで主スレッドが判定するときに
+        /// 組まない)。
         precompile: bool,
         /// ワークスペース層のファイルの表示名 (ワークスペース層の集まりの診断は、このファイルの分だけ返す)。
         workspace_files: Vec<String>,

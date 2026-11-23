@@ -1738,7 +1738,7 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     ReadTheme { dir: FsPath, name: String },                          // io (v0.2)。テーマファイルを inherits の親までたどって読む (07 §8.6)
     // ── 設定と言語 (v0.5 の M33。07 §9.6 / §12.5 / §10.3) ──
     ReadLanguages { dir: Option<FsPath> /*<config_dir>/languages。--no-config は None*/, config: Vec<LanguageDef> /*config.toml の [[language]]*/,
-                    workspace: Vec<LanguageDef> /*.eve/config.toml の [[language]]*/, precompile: bool /*ワークスペース層が届いた契機はジョブで正規表現まで組む*/,
+                    workspace: Vec<LanguageDef> /*.eve/config.toml の [[language]]*/, precompile: bool /*起動時の 1 回のほか (config.reload・ワークスペース層が届いた契機) はジョブで正規表現まで組む*/,
                     workspace_files: Vec<String> },
                                                                       // io。起動時に、起動時のパスを開くジョブより前に積む (07 §9.6 の LANG-2)。config.reload でも積む。
                                                                       // 名前の順に *.toml を読み (256 ファイル・1 ファイル 256 KiB まで)、解析し、config の後に重ね、file_globs の glob を

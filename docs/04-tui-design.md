@@ -2007,6 +2007,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.workspace.opened_elsewhere` (v0.5) | 安全な場所の下で、開いたファイルが判定した場所と違った (OWN-6 の `Unknown { query_failed }` のうち、書いた形で `workspace.safe_directories` の下のもの。警告。M33 の段 5 で足した、07 §12.6.3) | {path} を読みませんでした: 開いたファイルが確かめた場所にありません / 途中のリンクやジャンクションの行き先を確かめてから、設定を読み直してください |
 | `msg.workspace.not_regular` (v0.5) | ふつうのファイルでない (`.eve` とファイルのシンボリックリンク・ジャンクション・FIFO など。OWN-6。警告。同上) | {path} を読みませんでした: ふつうのファイルではありません (シンボリックリンク・ジャンクションなど) / リンクにせず、ふつうのファイルとして置いてください |
 | `msg.workspace.too_large` (v0.5) | 256 KiB を超えるワークスペース設定のファイル (WSC-1。警告。同上) | {path} を読みませんでした: 大きすぎます / 256 KiB 以下にしてください |
+| `msg.workspace.not_reread` (v0.5) | `config.reload` で `workspace.safe_directories` が変わり、ワークスペース層のファイルが一時の失敗 (共有違反・リース) で読み直せず、前の層を外した (07 §12.5 の WSC-1。警告。M33 の段 5 の再レビューで足した) | {path} を外しました / ほかのプログラムが開いていて、変えた安全な場所で読み直せませんでした。閉じてから設定を読み直してください |
 | `ui.workspace.class.semi_safe` (v0.5) | `msg.workspace.item_pending` の `{class}` | 準安全 |
 | `ui.workspace.key_reason.bound` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (a) 下の層に割当のあるキー) | 既にある割当を変えるため |
 | `ui.workspace.key_reason.shadows` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (b) 下の層の割当を使えなくするチョード) | 既にある割当を使えなくするため |

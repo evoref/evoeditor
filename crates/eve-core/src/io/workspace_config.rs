@@ -156,9 +156,9 @@ enum Outcome {
     Text(String),
     /// 所有者の検査・大きさで読まなかった (診断 1 件)。`dir` は置き場所のディレクトリで落ちた (`.eve` を信用しない)。
     Rejected { diag: Diagnostic, dir: bool },
-    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。`dir` は OS の失敗 (置き場所の権限・ファイルの読込の失敗など。
-    /// 層を外す)。偽は UTF-8 でない (ファイルの中身の誤りで、`config.reload` では前の層を保つ)。
-    Unreadable { diag: Diagnostic, dir: bool },
+    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。`os_failure` は OS の失敗 (置き場所の権限・ファイルの読込の
+    /// 失敗など。層を外し、`.eve` を信用しない)。偽は UTF-8 でない (ファイルの中身の誤りで、`config.reload` では前の層を保つ)。
+    Unreadable { diag: Diagnostic, os_failure: bool },
     /// 一時の失敗。
     Busy,
 }
@@ -178,7 +178,7 @@ fn read_one(fs: &dyn FileSystem, dir: &FsPath, name: &str, safe_dirs: &[FsPath])
             Ok(t) => Outcome::Text(t),
             Err(_) => Outcome::Unreadable {
                 diag: unreadable("not valid UTF-8".to_owned()),
-                dir: false,
+                os_failure: false,
             },
         },
         Ok(CheckedRead::TooLarge) => Outcome::Rejected {
@@ -211,7 +211,7 @@ fn read_one(fs: &dyn FileSystem, dir: &FsPath, name: &str, safe_dirs: &[FsPath])
             },
             _ => Outcome::Unreadable {
                 diag: unreadable(fs_reason(&e)),
-                dir: true,
+                os_failure: true,
             },
         },
     }
@@ -240,10 +240,10 @@ pub fn read_workspace_config(
         }
         // OS の失敗 (置き場所の権限・ファイルの読込の失敗など) は層を外す (信頼の取り消しを通す)。前の層を保つのはファイルの
         // 構文エラー・UTF-8 でないときだけ
-        Outcome::Unreadable { diag, dir } => {
-            dir_trusted &= !dir;
+        Outcome::Unreadable { diag, os_failure } => {
+            dir_trusted &= !os_failure;
             config_notes.push(diag);
-            if dir {
+            if os_failure {
                 Fetched::Absent
             } else {
                 Fetched::Broken
@@ -273,10 +273,10 @@ pub fn read_workspace_config(
             Fetched::Absent
         }
         // OS の失敗は層を外す (上と同じ)
-        Outcome::Unreadable { diag, dir } => {
-            dir_trusted &= !dir;
+        Outcome::Unreadable { diag, os_failure } => {
+            dir_trusted &= !os_failure;
             keymap_notes.push(diag);
-            if dir {
+            if os_failure {
                 Fetched::Absent
             } else {
                 Fetched::Broken
@@ -405,16 +405,31 @@ impl EditorState {
             .workspace_safe_dirs
             .replace(safe_dirs)
             .is_some_and(|before| Some(&before) != self.settings.workspace_safe_dirs.as_ref());
+        let config_name = config_path.display();
+        let keymap_name = keymap_path.display();
+        let mut dropped: Vec<&str> = Vec::new();
         if safe_changed {
             if layer == Fetched::Keep {
                 layer = Fetched::Absent;
+                if self.settings.workspace_layer.is_some() {
+                    dropped.push(&config_name);
+                }
             }
             if keymap == Fetched::Keep {
                 keymap = Fetched::Absent;
+                if self.keys.workspace_keymap_file.is_some() {
+                    dropped.push(&keymap_name);
+                }
             }
         }
-        let config_name = config_path.display();
-        let keymap_name = keymap_path.display();
+        // 逃げ道を変えた読み直しで、一時の失敗のために読めず外した (黙って外さない)
+        for file in dropped {
+            self.show_message(
+                MessageLevel::Warn,
+                keys::MSG_WORKSPACE_NOT_REREAD,
+                &[("path", file)],
+            );
+        }
         self.settings.workspace_files = vec![config_name.clone(), keymap_name.clone()];
         let reloading = reload.is_some();
         let languages_before = self.settings.workspace_languages.clone();

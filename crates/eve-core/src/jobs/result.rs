@@ -166,7 +166,8 @@ pub enum JobResult {
     },
     /// `ReadLanguages` の結果。
     LanguagesRead {
-        /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現はまだ組んでいない。組むのは
+        /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現は、起動時の 1 回のほか (`config.reload`・
+        /// ワークスペース層が届いた契機) は組んである。起動時の 1 回は組んでいない。組むのは
         /// `PrecompileLanguages`)。
         set: std::sync::Arc<eve_config::LanguageSet>,
         /// ワークスペース層の定義も重ねた集まり (ワークスペース層に定義が無ければ `None`)。

@@ -326,14 +326,17 @@ impl EditorState {
             _ => false,
         };
         if !std::sync::Arc::ptr_eq(&set, &self.settings.languages) || !same_ws {
-            // 古い結果 (間に `config.reload` で差し替えた): 判定し直しの求めは、差し替えた集まりが組み終わったときに持ち越す
-            self.settings.redetect_after_compile |= redetect;
+            // 古い結果 (間に `config.reload` で差し替えた): 今の集まりは差し替えるときにジョブの中で組み済みなので、判定し直しの
+            // 求めはその場で済ませる (印を残して、後の無関係な `config.reload` で判定し直さない、LANG-7)
+            if redetect {
+                self.redetect_languages();
+            }
             return;
         }
         for (file, diags) in &reports {
             self.report_config_more(file, diags);
         }
-        if redetect || std::mem::take(&mut self.settings.redetect_after_compile) {
+        if redetect {
             self.redetect_languages();
         }
     }
@@ -379,8 +382,8 @@ impl EditorState {
         }
         self.refresh_all_doc_settings();
         if precompiled {
-            // 正規表現はジョブの中で組んである。持ち越した判定し直しの求めもここで済ませる
-            if startup || std::mem::take(&mut self.settings.redetect_after_compile) {
+            // 正規表現はジョブの中で組んである
+            if startup {
                 self.redetect_languages();
             }
         } else {

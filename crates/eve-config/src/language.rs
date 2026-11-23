@@ -921,10 +921,16 @@ impl LanguageSet {
                     }
                 }
             }
-            if let (Some(f), Some(line)) = (&l.first_line, input.first_line)
-                && let Some(hit) = f.matching(line)
-            {
-                stages[3].push((0, hit.layer, hit.seq, i, hit.origin.clone()));
+        }
+        // 先頭行 (段 3) は、名前・glob・拡張子 (段 0〜2) で決まらなかったときだけ照らす (段は先頭から順に決まるので結果は
+        // 同じ。名前で決まる文書で正規表現を組まない、07 §9.6)
+        if stages[..3].iter().all(Vec::is_empty) {
+            for (i, l) in self.languages.iter().enumerate() {
+                if let (Some(f), Some(line)) = (&l.first_line, input.first_line)
+                    && let Some(hit) = f.matching(line)
+                {
+                    stages[3].push((0, hit.layer, hit.seq, i, hit.origin.clone()));
+                }
             }
         }
         for mut cands in stages {

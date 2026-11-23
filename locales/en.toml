@@ -1075,6 +1075,10 @@ text = "The document changed after the recovery offer, so it was not applied"
 hint = "Delete it by hand"
 text = "Could not delete the swap: {dir}"
 
+[msg.workspace.not_reread]
+hint = "Another program has it open, so it could not be reread with the changed safe directories. Close it and reload the settings"
+text = "Dropped {path}"
+
 [msg.workspace.root_invalid]
 hint = "Specify a folder. {root} is used as the workspace for now"
 text = "Cannot use {path} as the workspace: {reason}"

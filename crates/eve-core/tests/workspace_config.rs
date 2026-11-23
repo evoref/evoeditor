@@ -956,6 +956,12 @@ fn 一時の失敗で前の層を保つときは知らせ_安全な場所が変�
     h.cmd("config.reload");
     h.run_jobs();
     assert_eq!(tab_width(&h), 4);
+    // 黙って外さない
+    assert!(
+        h.messages().iter().any(|m| m == "msg.workspace.not_reread"),
+        "{:?}",
+        h.messages()
+    );
 }
 
 // verifies: AC-FR-705-1
@@ -986,4 +992,61 @@ fn 明示的に改行を選んだ新しいファイルは_後から届いたワ�
         Some("あ\n".as_bytes()),
         "改行も文字コードも選んだ時のまま (UTF-8・LF)"
     );
+}
+
+// ---- 最後の再レビューで直した点 ----
+
+// verifies: AC-FR-704-2
+/// 起動時の `PrecompileLanguages` の結果が `config.reload` の後に (古い結果として) 届いても、判定し直しの求めを後の無関係な
+/// `config.reload` に持ち越さない (LANG-7: `config.reload` では判定し直さない)。
+#[test]
+fn 古い起動時の組み立ての結果の判定し直しを_後の_config_reload_に持ち越さない() {
+    let mut h = Harness::builder()
+        .defer_start()
+        .dir("/evo/config")
+        .dir("/w/repo/.git")
+        .file(CONFIG, b"")
+        .file("/w/repo/a.zzq", b"text\n")
+        .build();
+    h.editor.configure(StartupConfig {
+        config_sources: Some(ConfigSources {
+            files: vec![("config.toml".to_owned(), FsPath::new(CONFIG))],
+            conditions: linux(),
+            ..ConfigSources::default()
+        }),
+        workspace: Some("/w/repo".to_owned()),
+        ..Default::default()
+    });
+    h.editor
+        .open_initial_files(&[InitialFile::path("/w/repo/a.zzq")], false, None);
+    h.started();
+    // 起動時の `PrecompileLanguages` の結果だけを取り置く
+    let mut held = Vec::new();
+    for _ in 0..1_000 {
+        let outs = h.run_one_job_held();
+        if outs.is_empty() {
+            break;
+        }
+        if outs
+            .iter()
+            .any(|o| matches!(o.body, eve_core::JobResult::LanguagesPrecompiled { .. }))
+        {
+            held = outs;
+        } else {
+            h.deliver(outs);
+        }
+    }
+    assert!(!held.is_empty(), "起動時の組み立てを取り置いた");
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.deliver(held);
+    assert_eq!(language(&h), "plain");
+    // 言語定義を足して読み直す: config.reload では判定し直さない
+    h.fs.set_file(
+        &FsPath::new(CONFIG),
+        b"[[language]]\nname = \"zzq\"\nfile_types = [\"zzq\"]\n",
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(language(&h), "plain");
 }

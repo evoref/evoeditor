@@ -146,9 +146,6 @@ pub(crate) struct Settings {
     /// `.eve/config.toml` の名前で出す、層の外の診断 (読まなかった理由・構文エラー・未対応の置き場所。分類の診断は重ねるたびに
     /// 足す)。
     pub(crate) workspace_notes: Vec<eve_config::Diagnostic>,
-    /// 起動時の判定し直しの求めを、差し替えた言語定義の集まりが組み終わるまで持ち越している (古い `PrecompileLanguages` の
-    /// 結果が届いた)。
-    pub(crate) redetect_after_compile: bool,
     /// 前回ワークスペース層を読んだときの `workspace.safe_directories` (`config.reload` で変わったら、一時の失敗でも前の層を
     /// 保たない、07 §12.5 の WSC-1)。
     pub(crate) workspace_safe_dirs: Option<Vec<String>>,
@@ -436,7 +433,6 @@ impl EditorState {
                 workspace_language_set: None,
                 workspace_files: Vec::new(),
                 workspace_notes: Vec::new(),
-                redetect_after_compile: false,
                 workspace_safe_dirs: None,
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",

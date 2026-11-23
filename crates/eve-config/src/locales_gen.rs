@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1045 件)。
+/// `locales/en.toml` の文言 (1047 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -656,6 +656,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.workspace.not_owned.text"), B("Did not read {path}: it is owned by {owner}")),
     (B("msg.workspace.not_regular.hint"), B("Place it as a regular file, not a link")),
     (B("msg.workspace.not_regular.text"), B("Did not read {path}: it is not a regular file (a symbolic link, a junction, or similar)")),
+    (B("msg.workspace.not_reread.hint"), B("Another program has it open, so it could not be reread with the changed safe directories. Close it and reload the settings")),
+    (B("msg.workspace.not_reread.text"), B("Dropped {path}")),
     (B("msg.workspace.opened_elsewhere.hint"), B("Check where the links or junctions on the way point to, then reload the settings")),
     (B("msg.workspace.opened_elsewhere.text"), B("Did not read {path}: the opened file is not in the checked place")),
     (B("msg.workspace.others_can_write.hint"), B("On Windows, disable inheritance with icacls and remove that account; on Unix, run chmod o-w")),
@@ -1058,7 +1060,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1045 件)。
+/// `locales/ja.toml` の文言 (1047 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1706,6 +1708,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.workspace.not_owned.text"), B("{path} を読みませんでした: 所有者が {owner} です")),
     (B("msg.workspace.not_regular.hint"), B("リンクにせず、ふつうのファイルとして置いてください")),
     (B("msg.workspace.not_regular.text"), B("{path} を読みませんでした: ふつうのファイルではありません (シンボリックリンク・ジャンクションなど)")),
+    (B("msg.workspace.not_reread.hint"), B("ほかのプログラムが開いていて、変えた安全な場所で読み直せませんでした。閉じてから設定を読み直してください")),
+    (B("msg.workspace.not_reread.text"), B("{path} を外しました")),
     (B("msg.workspace.opened_elsewhere.hint"), B("途中のリンクやジャンクションの行き先を確かめてから、設定を読み直してください")),
     (B("msg.workspace.opened_elsewhere.text"), B("{path} を読みませんでした: 開いたファイルが確かめた場所にありません")),
     (B("msg.workspace.others_can_write.hint"), B("Windows は icacls で継承を切ってそのアカウントを外し、Unix は chmod o-w で外してください")),
