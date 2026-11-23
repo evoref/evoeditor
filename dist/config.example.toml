@@ -114,3 +114,12 @@ count_limit = 1000000
 osc52 = "auto"
 # OSC 52 で送る上限 (base64 にしたバイト数。1000〜16777216)。超えたら送りません。
 osc52_max_bytes = 100000
+
+# OS・環境ごとの値 (条件付きセクション): 同じファイルを Windows・macOS・Linux で共有し、条件に合うときだけ効く値を
+# 書けます。条件の無い値の後に os → frontend → env の順に重なります (後が勝ちます)。条件は
+# os.windows / os.macos / os.linux / os.unix (macOS と Linux) / frontend.tui / env.ssh / env.tmux / env.wsl。
+# 今効いている値と、どこで決まったかは、コマンドパレットの「設定の値と由来を表示」で確かめられます。
+# [os.windows.file]
+# default_line_ending = "crlf"
+# [env.ssh.clipboard]
+# osc52 = "always"

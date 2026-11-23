@@ -159,6 +159,77 @@ fn check_config_はテーマファイルも確かめる() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// この実行ファイルの OS の条件の名前と、ほかの OS の条件の名前 (07 §3.4。試験を OS に依らない形で書く)。
+fn this_and_other_os() -> (&'static str, &'static str) {
+    if cfg!(windows) {
+        ("os.windows", "os.linux")
+    } else if cfg!(target_os = "macos") {
+        ("os.macos", "os.windows")
+    } else {
+        ("os.linux", "os.windows")
+    }
+}
+
+// verifies: AC-NFR-405-2
+#[test]
+fn check_config_は偽の条件のセクションの誤りを条件を添えて出す() {
+    let (_, other) = this_and_other_os();
+    let d = dir("cond-check");
+    std::fs::write(
+        d.join("config.toml"),
+        format!("[{other}.editor]\ntab_witdh = 2\n[os.win.editor]\ntab_width = 2\n"),
+    )
+    .unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 0, "警告だけ: {out}");
+    // 実行している OS では偽の条件のセクションでも、綴りの誤りを書いた行で知らせ、本文に条件を添える (COND-4)
+    let line = out
+        .lines()
+        .find(|l| l.contains("editor.tab_witdh"))
+        .unwrap_or_else(|| panic!("綴りの誤りの行が無い: {out}"));
+    assert!(line.contains("config.toml:2:"), "{out}");
+    assert!(line.contains(&format!("[{other}]")), "{out}");
+    // 未知の条件の名前は候補つきで知らせる (COND-5 (a))
+    assert!(
+        out.contains("os.win は条件付きセクションの名前ではありません")
+            && out.contains("os.windows ではありませんか?"),
+        "{out}"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+// verifies: AC-NFR-405-2
+#[test]
+fn dump_config_は条件付きセクションを今の環境で解決した値を出す() {
+    let (this, other) = this_and_other_os();
+    let d = dir("cond-dump");
+    std::fs::write(
+        d.join("config.toml"),
+        format!(
+            "[editor]\ntab_width = 3\n[{this}.editor]\ntab_width = 2\n[{other}.editor]\ntab_width = 9\nindent_width = 9\n"
+        ),
+    )
+    .unwrap();
+    let (code, out) = run(
+        &d,
+        &[
+            "--dump-config",
+            "--set",
+            &format!("{this}.view.ambiguous_width=2"),
+            "--set",
+            &format!("{other}.view.wrap=soft"),
+        ],
+    );
+    assert_eq!(code, 0, "{out}");
+    // 出力の形は v0.4 と同じ (由来は出さない、COND-7)。値は今の OS の条件で解いたもの
+    assert!(out.contains("tab_width = 2\n"), "{out}");
+    assert!(out.contains("indent_width = 4\n"), "{out}");
+    assert!(out.contains("ambiguous_width = 2\n"), "{out}");
+    assert!(out.contains("wrap = \"off\"\n"), "{out}");
+    assert!(!out.contains("os."), "条件の名前を出さない: {out}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 // ---------- 外から見える出力のゴールデン (docs/review/v0.3-findings.md の STR-T1、v0.3 の M13) ----------
 // 比べ方は eve_testkit::golden と同じ (bin は eve-testkit に依存しない決まり、deps-policy.toml)。
 // `EVE_UPDATE_GOLDEN=1` で作る・書き換える。既にあるゴールデンの書き換えは人間が判断する (11 §6.2)。

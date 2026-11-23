@@ -17,9 +17,10 @@ pub const RESERVED_SECTIONS: &[&str] = &[
     "workspace",
 ];
 
-/// 条件付きセクションの条件の名前 (`[os.*]`・`[env.*]`・`[frontend.*]`・`[host.*]`。docs/07 §3.4 の表の `条件キー` 列)。
-/// 解決は v0.5 の M33 (NFR-405) で入れる。それまでは予約のセクションと同じく、書くとセクションごとに
-/// 「このバージョンでは未対応」の情報診断にして中身を使わない。表との一致は eve-core の試験 `config_reserved` が確かめる。
+/// 条件付きセクションの条件の種類 (`[os.*]`・`[env.*]`・`[frontend.*]`・`[host.*]`。docs/07 §3.4 の表の `条件キー` 列)。
+/// v0.5 の M33 (NFR-405) から `os`・`frontend`・`env` を解決する (`config.rs` の読込、§3.4 の COND-1〜COND-8)。`host` と
+/// `env.ci` は名前の予約のみで、書くと「このバージョンでは未対応」の情報診断にする (COND-5 (e))。`keymap.toml` に書くと
+/// 専用の警告 (COND-6)。表との一致は eve-core の試験 `config_reserved` が確かめる。
 pub const CONDITIONAL_SECTIONS: &[&str] = &["env", "frontend", "host", "os"];
 
 /// 公開しない、常に有効の機能のキー (フルキー)。書くと、公開前のキーの「このバージョンでは未対応」ではなく、専用の情報診断

@@ -546,6 +546,7 @@ impl LocaleFile {
                 value: String::new(),
                 line: 0,
                 column: 0,
+                condition: None,
             }],
         }
     }
@@ -608,6 +609,7 @@ pub fn load_locale_file(
         value: String::new(),
         line,
         column,
+        condition: None,
     };
     if bytes.len() > LOCALE_MAX_BYTES {
         out.diagnostics
@@ -1014,6 +1016,7 @@ impl Sink<'_> {
             value: value.to_owned(),
             line,
             column,
+            condition: None,
         });
     }
 
@@ -1028,6 +1031,7 @@ impl Sink<'_> {
                 value: String::new(),
                 line: 0,
                 column: 0,
+                condition: None,
             });
         }
         self.out

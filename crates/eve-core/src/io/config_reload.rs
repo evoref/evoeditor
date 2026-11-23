@@ -34,6 +34,9 @@ pub struct ConfigSources {
     /// ユーザーの言語ファイルの置き場 (`<設定ディレクトリ>/locales`、07 §17.4)。`None` は見ない (`--no-config`)。
     /// 読むのは起動時の bin だけで、ここは診断の一覧から開くときと、`config.reload` で変わったかを見るときに使う。
     pub locales: Option<crate::FsPath>,
+    /// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。起動時に bin が 1 回だけ決め、`config.reload` も同じ値で解く。
+    /// `when` の `os` / `frontend` (§7.3) もこの値を返す。既定は、この実行ファイルの OS・TUI・環境の条件なし。
+    pub conditions: eve_config::Conditions,
 }
 
 /// 起動時に bin が決めた、ユーザーの言語ファイルの事実 (07 §17.4)。`config.reload` は言語ファイルの中身を読み直さず、
@@ -160,6 +163,14 @@ impl EditorState {
         self.io.config_sources = Some(sources);
     }
 
+    /// 条件付きセクションの条件の値 (起動時に bin が決めたもの。置かれていなければ既定、07 §3.4 の COND-2)。
+    pub(crate) fn config_conditions(&self) -> eve_config::Conditions {
+        self.io
+            .config_sources
+            .as_ref()
+            .map_or_else(eve_config::Conditions::default, |s| s.conditions)
+    }
+
     pub(crate) fn config_sources(&self) -> ConfigSources {
         if let Some(s) = &self.io.config_sources {
             return s.clone();
@@ -174,6 +185,7 @@ impl EditorState {
             sets: Vec::new(),
             themes: Some(dir.join("themes")),
             locales: Some(dir.join("locales")),
+            conditions: eve_config::Conditions::default(),
         }
     }
 }
@@ -186,6 +198,7 @@ fn unreadable(message: String) -> eve_config::Diagnostic {
         value: String::new(),
         line: 0,
         column: 0,
+        condition: None,
     }
 }
 
@@ -256,7 +269,7 @@ impl EditorState {
                 text: text_of(f),
             })
             .collect();
-        let mut resolved = eve_config::resolve(&sources, &src.sets);
+        let mut resolved = eve_config::resolve(&sources, &src.sets, src.conditions);
         eve_config::check_ui_locale(&mut resolved, &available, &dir, self.locale());
         let keymap: KeymapFile = match keymap.as_ref().map(text_of) {
             None | Some(Ok(None)) => KeymapFile::default(),
@@ -294,6 +307,7 @@ impl EditorState {
         } else {
             changed = eve_config::changed_keys(self.config(), &resolved.config);
             self.io.theme_name_at = resolved.theme_name_at.clone();
+            self.settings.config_origins = resolved.origins;
             self.apply_reloaded_config(resolved.config);
             // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);

@@ -114,6 +114,9 @@ pub(crate) struct Settings {
     pub(crate) user_theme: Option<(String, eve_config::theme::Theme)>,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
     pub(crate) config: eve_config::Config,
+    /// 公開キーの値の由来 (層・ファイル・行・条件、07 §3.5)。`config.show` が出す。起動時に Host が渡し、`config.reload` で
+    /// 差し替える。
+    pub(crate) config_origins: eve_config::Origins,
     /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
     pub(crate) locale: eve_config::Locale,
     /// 選んだ言語の文言の表 (07 §17.4。同梱の表にユーザーの言語ファイルを重ねたもの。起動時に 1 回作り、実行中は変えない)。
@@ -383,6 +386,7 @@ impl EditorState {
             },
             settings: Settings {
                 config: eve_config::Config::default(),
+                config_origins: eve_config::Origins::default(),
                 locale: eve_config::Locale::default(),
                 catalog: eve_config::Catalog::builtin_shared(eve_config::Locale::default()),
                 user_theme: None,
@@ -1260,6 +1264,17 @@ impl EditorState {
             // Range が 2 つ以上 (03 §4.5.5)
             "selection.multi" => b(view.is_some_and(|v| v.selection.len() >= 2)),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
+            // 実行ファイルの対象 OS と frontend (07 §7.3。条件付きセクションと同じ条件の値、§3.4 の COND-6)。
+            // 対象の 3 つの OS でなければ空
+            "os" => Some(CtxValue::Str(
+                self.config_conditions()
+                    .os
+                    .map_or("", eve_config::Os::name)
+                    .to_owned(),
+            )),
+            "frontend" => Some(CtxValue::Str(
+                self.config_conditions().frontend.name().to_owned(),
+            )),
             // Window のペインが 2 つ以上 (03 §9.9、07 §7.3)
             "pane.split" => b(self
                 .focused_window()

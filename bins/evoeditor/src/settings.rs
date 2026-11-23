@@ -57,6 +57,22 @@ pub(crate) fn config_sources(
         themes: (!args.no_config && has_dir).then(|| dir.join("themes")),
         // ユーザーの言語ファイル (07 §17.4)。`--no-config` では見ない
         locales: (!args.no_config && has_dir).then(|| dir.join("locales")),
+        conditions: conditions(),
+    }
+}
+
+/// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。起動時に 1 回だけ決める: OS は実行ファイルの対象 OS、frontend は TUI、
+/// 環境は環境変数 (`eve_platform::session_env`。`env.wsl` は Linux でだけ真)。`config.reload` もこの値を使う。
+pub(crate) fn conditions() -> eve_config::Conditions {
+    let env = eve_platform::session_env::session_env();
+    eve_config::Conditions {
+        os: eve_config::Os::current(),
+        frontend: eve_config::Frontend::Tui,
+        env: eve_config::EnvConditions {
+            ssh: env.ssh,
+            tmux: env.tmux,
+            wsl: env.wsl,
+        },
     }
 }
 
@@ -96,7 +112,7 @@ pub(crate) fn load_config(src: &eve_core::ConfigSources) -> eve_config::Resolved
             text: read_source(path.as_path()),
         })
         .collect();
-    eve_config::resolve(&sources, &src.sets)
+    eve_config::resolve(&sources, &src.sets, src.conditions)
 }
 
 /// `keymap.toml` を読む。無ければ空。読めないときは診断を 1 件出して空。
@@ -119,6 +135,7 @@ pub(crate) fn load_keymap(src: &eve_core::ConfigSources) -> eve_config::KeymapFi
                 value: String::new(),
                 line: 0,
                 column: 0,
+                condition: None,
             }],
         },
     }
@@ -209,6 +226,7 @@ fn locale_diag(severity: Severity, problem: LocaleProblem, key: &str, value: &st
         value: value.to_owned(),
         line: 0,
         column: 0,
+        condition: None,
     }
 }
 
@@ -406,6 +424,10 @@ pub(crate) fn describe(name: &str, d: &eve_config::Diagnostic) -> String {
     if !d.value.is_empty() {
         line.push_str(&format!(" value=\"{}\"", clean(&d.value)));
     }
+    // 条件付きセクションの中の診断は、その条件を添える (07 §3.4 の COND-4)
+    if let Some(c) = d.condition {
+        line.push_str(&format!(" condition={}", c.name()));
+    }
     let reason = match &d.kind {
         DiagKind::Syntax { message }
         | DiagKind::Locale(
@@ -452,6 +474,7 @@ mod tests {
             value: "v\u{9b}".to_owned(),
             line: 3,
             column: 1,
+            condition: None,
         };
         let line = describe("locales/fr.toml", &d);
         assert!(
@@ -475,6 +498,45 @@ mod tests {
         assert_eq!(
             describe("config.toml", &long),
             format!("config config.toml unsupported key={}…", "k".repeat(63))
+        );
+    }
+
+    // verifies: AC-NFR-405-2
+    #[test]
+    fn ログの行は条件付きセクションの中の診断に条件を添える() {
+        let d = Diagnostic {
+            severity: Severity::Warning,
+            kind: DiagKind::UnknownKey {
+                suggestion: Some("editor.tab_width".to_owned()),
+            },
+            key: "editor.tab_witdh".to_owned(),
+            value: String::new(),
+            line: 2,
+            column: 1,
+            condition: Some(eve_config::Condition::OsLinux),
+        };
+        assert_eq!(
+            describe("config.toml", &d),
+            "config config.toml:2:1 unknown_key key=editor.tab_witdh condition=os.linux"
+        );
+        // 条件の無い診断には付けない
+        let plain = Diagnostic {
+            condition: None,
+            ..d
+        };
+        assert_eq!(
+            describe("config.toml", &plain),
+            "config config.toml:2:1 unknown_key key=editor.tab_witdh"
+        );
+        // 条件の書き方の誤りは種類の名前で出す
+        let nested = Diagnostic {
+            kind: DiagKind::Condition(eve_config::ConditionProblem::Nested),
+            key: "os.windows.env.ssh".to_owned(),
+            ..plain
+        };
+        assert_eq!(
+            describe("config.toml", &nested),
+            "config config.toml:2:1 condition_nested key=os.windows.env.ssh"
         );
     }
 

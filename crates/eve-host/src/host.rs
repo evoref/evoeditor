@@ -146,6 +146,8 @@ pub struct HostInit {
     pub initial_encoding: Option<eve_core::Encoding>,
     /// 解決済みの設定 (07 §5.0)。`None` は既定の設定のまま (Editor に当てない)。
     pub config: Option<eve_config::Config>,
+    /// 設定の値の由来 (`config.show`、07 §3.5)。`config` と一緒に当てる。
+    pub config_origins: Option<eve_config::Origins>,
     /// 設定の診断 (表示名, 診断)。最初の Frame の後に、この順にメッセージとして出す (07 §4.3、FR-703)。空の診断は捨てる。
     pub config_reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
     /// テーマファイルから読んだテーマ (名前, `None` は読めなかった: default で動く。07 §8.6)。
@@ -172,7 +174,8 @@ pub struct HostInit {
     pub clipboard: Option<Arc<dyn eve_platform::clipboard::ClipboardProvider>>,
     /// 緊急退避の書き手 (無ければ退避は書かない)。
     pub rescue_writer: Option<Arc<dyn RescueWriter>>,
-    /// SSH 接続中か (`clipboard.osc52 = auto` の条件)。`None` は環境変数 `SSH_TTY` / `SSH_CONNECTION` から決める。
+    /// SSH 接続中か (`clipboard.osc52 = auto` の条件)。`None` は環境変数 `SSH_TTY` / `SSH_CONNECTION` (空の値は無いものとする) から
+    /// 決める (`eve_platform::session_env`、07 §3.4 の COND-2 と同じ判定)。
     pub ssh_session: Option<bool>,
     /// `--workspace` / `-w` の値 (入力されたまま、07 §18.3)。起動の後に `io` のジョブでルートを決める (03 §12.7.1)。
     pub workspace: Option<String>,
@@ -198,6 +201,7 @@ impl Host {
         let HostInit {
             initial_encoding,
             config,
+            config_origins,
             config_reports,
             user_theme,
             config_sources,
@@ -224,6 +228,7 @@ impl Host {
         if let Some(c) = &config {
             editor.configure(StartupConfig {
                 config: Some(c.clone()),
+                config_origins,
                 ..Default::default()
             });
         }
@@ -289,10 +294,8 @@ impl Host {
             clip_wait: None,
             render_now: false,
             osc52_write: false,
-            ssh_session: ssh_session.unwrap_or_else(|| {
-                std::env::var_os("SSH_TTY").is_some()
-                    || std::env::var_os("SSH_CONNECTION").is_some()
-            }),
+            ssh_session: ssh_session
+                .unwrap_or_else(|| eve_platform::session_env::session_env().ssh),
             config: config.unwrap_or_default(),
             config_report,
             locale_report: locale_reports

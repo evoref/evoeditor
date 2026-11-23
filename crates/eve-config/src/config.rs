@@ -71,6 +71,41 @@ pub enum DiagKind {
     /// ユーザーの言語ファイル (`locales/<lang>.toml`) の問題 (07 §17.4)。`Diagnostic.key` は平らにした文言のキー
     /// (ファイル全体の問題では空)。値が文字列でない文言は `TypeMismatch` (期待する型は `string`) で表す。
     Locale(crate::LocaleProblem),
+    /// 条件付きセクションの書き方の誤り (07 §3.4 の COND-5 / COND-6。警告)。そのセクション (と、その下のキー) を使わない。
+    /// `Diagnostic.key` は誤りの所までの名前 (`os.win`・`os.windows.env.ssh`・`os.windows.tab_width` など)。
+    Condition(ConditionProblem),
+}
+
+/// 条件付きセクションの誤りの種類 (07 §3.4 の COND-5 / COND-6)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConditionProblem {
+    /// 知らない条件の名前 (`[os.win]`。COND-5 (a))。
+    Unknown {
+        /// 編集距離 2 以下の条件の名前。近いものが無ければ `None`。
+        suggestion: Option<&'static str>,
+    },
+    /// 条件の入れ子 (`[os.windows.env.ssh]`。COND-5 (b))。
+    Nested,
+    /// 条件の直下のキー (`[os.windows]` の `tab_width = 2`。COND-5 (c))。
+    BareKey,
+    /// 条件の中の言語定義 (`[[os.windows.language]]`) と `[keys]` (COND-5 (d))。
+    UnsupportedTable,
+    /// `keymap.toml` の条件付きセクション (COND-6)。キーマップは条件付きセクションを読まない。
+    InKeymap,
+}
+
+impl ConditionProblem {
+    /// 文言のキーの名前 (`msg.config.<これ>`) と、ログの種類の名前。
+    #[must_use]
+    pub fn message_name(&self) -> &'static str {
+        match self {
+            ConditionProblem::Unknown { .. } => "condition_unknown",
+            ConditionProblem::Nested => "condition_nested",
+            ConditionProblem::BareKey => "condition_bare_key",
+            ConditionProblem::UnsupportedTable => "condition_unsupported_table",
+            ConditionProblem::InKeymap => "condition_in_keymap",
+        }
+    }
 }
 
 /// キーマップの問題の種類 (docs/07 §7.4・§7.6)。いずれも該当の割当だけを無効にする。
@@ -128,6 +163,24 @@ pub struct Diagnostic {
     pub line: u32,
     /// 桁 (1 始まりの文字数。位置が無いときは 0)。
     pub column: u32,
+    /// 条件付きセクション (07 §3.4) の中で見つけた診断の、そのセクションの条件 (偽の条件のものも。COND-4)。
+    /// 本文に `[os.linux]` のように添える。
+    pub condition: Option<crate::Condition>,
+}
+
+/// 公開キーの値を使った所 (1 つのファイルの中。`config.show` の由来、07 §3.5)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Written {
+    /// 公開キー。
+    pub key: &'static str,
+    /// キーを書いた行 (1 始まり)。
+    pub line: u32,
+    /// キーを書いた桁 (1 始まりの文字数)。
+    pub column: u32,
+    /// 条件付きセクションの値なら、その条件。
+    pub condition: Option<crate::Condition>,
+    /// 書かれた文字列 (文字列でない値は空)。
+    pub text: String,
 }
 
 /// 公開キーの値の TOML の表記 (`--dump-config` の出力と、診断の既定値の表記)。
@@ -411,13 +464,17 @@ macro_rules! config_keys {
         }
 
         impl Cx<'_> {
-            /// 公開キー `key` の値を読む。誤りは診断を積んで、値を変えない (既定値または下の層の値のまま)。
-            fn value(&mut self, key: &str, v: &Spanned<DeValue<'_>>) {
+            /// 公開キー `key` (書いた所は `at`) の値を読む。誤りは診断を積んで、値を変えない (既定値または下の層の値のまま)。
+            /// 検証だけのとき (偽の条件のセクション、07 §3.4 の COND-4) は、読んで診断を積むが値を使わない。
+            fn value(&mut self, key: &str, at: usize, v: &Spanned<DeValue<'_>>) {
                 match key {
                     $(
                         $key => {
-                            if let Some(x) = read_value!(self, key, v, $ty, $read $(($($arg),*))?) {
+                            if let Some(x) = read_value!(self, key, v, $ty, $read $(($($arg),*))?)
+                                && self.apply
+                            {
                                 self.out.config.$field = x;
+                                self.written($key, at, v);
                             }
                         }
                     )*
@@ -522,8 +579,10 @@ config_keys! {
 pub struct Loaded {
     /// 読み込んだ設定。不正な項目は既定値 (または下の層の値) のまま。
     pub config: Config,
-    /// 見つかった問題 (ファイル内の出現順)。
+    /// 見つかった問題 (表を読んだ順。条件付きセクションの中のものも、条件の無い表と同じ順)。
     pub diagnostics: Vec<Diagnostic>,
+    /// 値を使った公開キーと、書いた所 (重ねた順。同じキーは後のものが勝った値)。
+    pub written: Vec<Written>,
 }
 
 /// 公開キーを持つセクション (公開キーの先頭の名前。並びは `--dump-config` の出力の順、07 §5 の表の順)。
@@ -555,14 +614,24 @@ pub fn load_str(text: &str) -> Loaded {
 }
 
 /// `load_str` と同じだが、書かれていないキーは `base` の値のまま (層を重ねる、07 §3.3)。
-/// 構文エラーなら `base` のまま返す。
+/// 構文エラーなら `base` のまま返す。条件付きセクションは既定の条件 ([`Conditions::default`](crate::Conditions)) で解く。
 pub fn load_str_onto(base: Config, text: &str) -> Loaded {
+    load_str_for(base, text, crate::Conditions::default())
+}
+
+/// `load_str_onto` と同じだが、条件付きセクション (07 §3.4) を `conditions` で解く。1 つのファイルの中で、条件の無い表、
+/// 真の条件のセクション (COND-3 の順) の順にキーごとに重ねる。偽の条件のセクションも検証して診断を出す (COND-4)。
+pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> Loaded {
     let mut cx = Cx {
         text,
         out: Loaded {
             config: base,
             diagnostics: Vec::new(),
+            written: Vec::new(),
         },
+        conditions,
+        apply: true,
+        condition: None,
     };
     // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
     if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
@@ -582,12 +651,26 @@ pub fn load_str_onto(base: Config, text: &str) -> Loaded {
                 value: String::new(),
                 line,
                 column,
+                condition: None,
             });
             return cx.out;
         }
     };
+    // 表を読む順に診断を積み (条件付きセクションは検証だけ)、真の条件のセクションを COND-3 の順に重ねる
+    let mut active: Vec<(crate::Condition, &DeTable<'_>)> = Vec::new();
     for (name, value) in root.get_ref() {
-        cx.section(name, value);
+        if crate::reserved::CONDITIONAL_SECTIONS.contains(&name.get_ref().as_ref()) {
+            cx.conditional(name, value, &mut active);
+        } else {
+            cx.section(name, value);
+        }
+    }
+    active.sort_by_key(|(c, _)| *c);
+    for (c, table) in active {
+        // 診断は検証のときに積んだので、重ねるときの分は捨てる
+        let seen = cx.out.diagnostics.len();
+        cx.scoped(true, Some(c), |cx| cx.under_condition(c.name(), table));
+        cx.out.diagnostics.truncate(seen);
     }
     cx.out
 }
@@ -595,6 +678,12 @@ pub fn load_str_onto(base: Config, text: &str) -> Loaded {
 struct Cx<'a> {
     text: &'a str,
     out: Loaded,
+    /// 条件の値 (07 §3.4 の COND-2)。
+    conditions: crate::Conditions,
+    /// 値を使うか (偽: 検証だけ。偽の条件のセクションと、真の条件のセクションの 1 回目、COND-4)。
+    apply: bool,
+    /// 読んでいるセクションの条件 (条件付きセクションの中のとき)。診断と由来に記録する。
+    condition: Option<crate::Condition>,
 }
 
 impl Cx<'_> {
@@ -620,15 +709,146 @@ impl Cx<'_> {
             value: String::new(),
             line,
             column,
+            condition: self.condition,
         });
+    }
+
+    /// 値を使った所を記録する (`config.show` の由来、07 §3.5)。
+    fn written(&mut self, key: &'static str, at: usize, v: &Spanned<DeValue<'_>>) {
+        let (line, column) = self.pos(at);
+        let text = match v.get_ref() {
+            DeValue::String(s) => s.to_string(),
+            _ => String::new(),
+        };
+        self.out.written.push(Written {
+            key,
+            line,
+            column,
+            condition: self.condition,
+            text,
+        });
+    }
+
+    /// 条件の種類の表 (`[os.*]`・`[frontend.*]`・`[env.*]`・`[host.*]`) を検証し、真の条件のセクションを `active` に足す
+    /// (07 §3.4 の COND-4 / COND-5)。中のキーは、値を使わずに条件の無い表と同じ検証を掛ける。
+    fn conditional<'t>(
+        &mut self,
+        name: &Spanned<DeString<'_>>,
+        value: &'t Spanned<DeValue<'t>>,
+        active: &mut Vec<(crate::Condition, &'t DeTable<'t>)>,
+    ) {
+        let kind: &str = name.get_ref();
+        // `host.*` は v0.5 では解決しない: v0.4 までと同じく、条件の名前ごとに 1 件の情報診断 (COND-5 (e))
+        if !crate::condition::RESOLVED_KINDS.contains(&kind) {
+            self.diag(
+                Severity::Info,
+                DiagKind::Unsupported,
+                kind.to_owned(),
+                name.span().start,
+            );
+            return;
+        }
+        let DeValue::Table(table) = value.get_ref() else {
+            self.diag(
+                Severity::Warning,
+                DiagKind::TypeMismatch {
+                    expected: "table",
+                    found: value.get_ref().type_str(),
+                },
+                kind.to_owned(),
+                value.span().start,
+            );
+            self.set_value(value);
+            return;
+        };
+        for (sub, inner) in table {
+            let full = format!("{kind}.{}", sub.get_ref());
+            let at = sub.span().start;
+            if crate::condition::UNRESOLVED_NAMES.contains(&full.as_str()) {
+                self.diag(Severity::Info, DiagKind::Unsupported, full, at);
+                continue;
+            }
+            let Some(c) = crate::Condition::from_parts(kind, sub.get_ref()) else {
+                let suggestion = near_condition(&full);
+                self.diag(
+                    Severity::Warning,
+                    DiagKind::Condition(ConditionProblem::Unknown { suggestion }),
+                    full,
+                    at,
+                );
+                continue;
+            };
+            let DeValue::Table(t) = inner.get_ref() else {
+                self.diag(
+                    Severity::Warning,
+                    DiagKind::Condition(ConditionProblem::BareKey),
+                    full,
+                    at,
+                );
+                continue;
+            };
+            // 検証だけ (値は使わない)。真の条件のセクションは、後で COND-3 の順に重ねる
+            self.scoped(false, Some(c), |cx| cx.under_condition(&full, t));
+            if self.conditions.holds(c) {
+                active.push((c, t));
+            }
+        }
+    }
+
+    /// 条件 `cond` (`os.windows` など) の下の表を読む。中はセクション (`[os.windows.editor]`) だけで、入れ子の条件・直下の
+    /// キー・言語定義と `[keys]` は誤り (COND-5 (b)〜(d))。誤りのセクションは使わない。
+    fn under_condition(&mut self, cond: &str, table: &DeTable<'_>) {
+        for (name, value) in table {
+            let n: &str = name.get_ref();
+            let full = format!("{cond}.{n}");
+            let at = name.span().start;
+            let problem = if crate::reserved::CONDITIONAL_SECTIONS.contains(&n) {
+                Some(ConditionProblem::Nested)
+            } else if !matches!(value.get_ref(), DeValue::Table(_)) && !is_table_array(value) {
+                Some(ConditionProblem::BareKey)
+            } else if matches!(n, "language" | "keys") {
+                Some(ConditionProblem::UnsupportedTable)
+            } else {
+                None
+            };
+            let Some(p) = problem else {
+                self.section(name, value);
+                continue;
+            };
+            // 入れ子は、入れ子の条件の名前ごとに 1 件 (`os.windows.env.ssh` と `os.windows.env.tmux` で 2 件)。位置はその名前
+            let places: Vec<(String, usize)> = match (&p, value.get_ref()) {
+                (ConditionProblem::Nested, DeValue::Table(t)) if !t.is_empty() => t
+                    .iter()
+                    .map(|(k, _)| (format!("{full}.{}", k.get_ref()), k.span().start))
+                    .collect(),
+                _ => vec![(full, at)],
+            };
+            // 名前に条件を含むので、条件は添えない
+            self.scoped(self.apply, None, |cx| {
+                for (key, at) in places {
+                    cx.diag(Severity::Warning, DiagKind::Condition(p.clone()), key, at);
+                }
+            });
+        }
+    }
+
+    /// 値を使うか (`apply`) と読んでいるセクションの条件 (`condition`) を `f` の間だけ替え、後で元に戻す。
+    fn scoped(
+        &mut self,
+        apply: bool,
+        condition: Option<crate::Condition>,
+        f: impl FnOnce(&mut Self),
+    ) {
+        let saved = (self.apply, self.condition);
+        (self.apply, self.condition) = (apply, condition);
+        f(self);
+        (self.apply, self.condition) = saved;
     }
 
     fn section(&mut self, name: &Spanned<DeString<'_>>, value: &Spanned<DeValue<'_>>) {
         let n: &str = name.get_ref();
-        // 公開前のセクションと、まだ解決しない条件付きセクション (07 §3.4) は、セクションごとに未対応の情報診断にする
-        if crate::reserved::RESERVED_SECTIONS.contains(&n)
-            || crate::reserved::CONDITIONAL_SECTIONS.contains(&n)
-        {
+        // 公開前のセクションは、セクションごとに未対応の情報診断にする
+        if crate::reserved::RESERVED_SECTIONS.contains(&n) {
             self.diag(
                 Severity::Info,
                 DiagKind::Unsupported,
@@ -668,7 +888,7 @@ impl Cx<'_> {
             let full = format!("{prefix}.{}", k.get_ref());
             let nested = format!("{full}.");
             if KEYS.contains(&full.as_str()) {
-                self.value(&full, v);
+                self.value(&full, k.span().start, v);
             } else if let (DeValue::Table(inner), true) =
                 (v.get_ref(), KEYS.iter().any(|key| key.starts_with(&nested)))
             {
@@ -889,6 +1109,26 @@ fn encoding(s: &str) -> Option<DefaultEncoding> {
         "csiso2022jp" => Some(DefaultEncoding::Iso2022Jp),
         _ => None,
     })
+}
+
+/// 知らない条件の名前 (`os.win`) に近い条件の名前 (07 §3.4 の COND-5 (a)): 書いた名前がその名前の接頭辞か、編集距離 2 以下
+/// (どちらも大文字小文字を区別しない。テーマの候補 (`theme::near_builtin_names`) と同じ規則)。当たる名前が 2 つ以上なら、
+/// 編集距離の小さいもの、同じなら重ねる順の先のもの。
+fn near_condition(name: &str) -> Option<&'static str> {
+    let lower = name.to_ascii_lowercase();
+    crate::Condition::ALL
+        .into_iter()
+        .map(crate::Condition::name)
+        .map(|c| (distance(&lower, c), c))
+        .filter(|(d, c)| c.starts_with(&lower) || *d <= 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c)
+}
+
+/// 表の配列 (`[[language]]`) か。
+fn is_table_array(v: &Spanned<DeValue<'_>>) -> bool {
+    matches!(v.get_ref(), DeValue::Array(items)
+        if !items.is_empty() && items.iter().all(|i| matches!(i.get_ref(), DeValue::Table(_))))
 }
 
 /// 公開前のキー (その下の入れ子のキーを含む)。

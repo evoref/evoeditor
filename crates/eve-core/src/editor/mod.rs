@@ -79,6 +79,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::ui_model::help::register(&mut r);
     crate::io::config_reload::register(&mut r);
     crate::ui_model::config_report::register(&mut r);
+    crate::ui_model::config_show::register(&mut r);
     crate::view::view_cmds::register(&mut r);
     crate::view::mouse::register(&mut r);
     crate::command::line_ops::register(&mut r);
@@ -428,7 +429,7 @@ impl Editor {
             // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
             "help" => FOCUS_HELP,
             // バッファ一覧・設定の診断の一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
-            "buffer_list" | "config_diagnostics" => FOCUS_LIST,
+            "buffer_list" | "config_diagnostics" | "config_show" => FOCUS_LIST,
             "search" => FOCUS_SEARCH,
             // ファインダ (v0.5 の M31。横断検索の結果も同じ、07 §7.1)
             "finder" | "workspace_search" => FOCUS_FINDER,

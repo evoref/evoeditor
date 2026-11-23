@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 110 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 111 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -20,6 +20,7 @@
 | `clipboard.copy` | コピー | Ui | — | `!selection.empty` | `-` | `editor`: `Ctrl+C`, `Ctrl+Insert` | 出す |
 | `clipboard.cut` | 切り取り | Edit | — | `!selection.empty && !doc.read_only` | `-` | `editor`: `Ctrl+X`, `Shift+Delete` | 出す |
 | `config.reload` | 設定を読み直す | Ui | — | — | `-` | — | 出す |
+| `config.show` | 設定の値と由来を表示 | Ui | — | — | `ui` | — | 出す |
 | `config.show_diagnostics` | 設定の診断を表示 | Ui | — | — | `ui` | — | 出す |
 | `cursor.doc_end` | 文書の末尾へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+End` | 出す |
 | `cursor.doc_start` | 文書の先頭へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+Home` | 出す |

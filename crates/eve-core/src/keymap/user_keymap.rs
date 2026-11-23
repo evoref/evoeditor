@@ -179,6 +179,7 @@ fn entry_diagnostic(
         value: value.to_owned(),
         line: e.line,
         column: e.column,
+        condition: None,
     }
 }
 
@@ -327,6 +328,7 @@ fn restore_escape_keys(
                         value: cmd.to_owned(),
                         line: 0,
                         column: 0,
+                        condition: None,
                     },
                 };
                 diags.push(d);
