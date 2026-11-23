@@ -159,6 +159,10 @@ pub(crate) struct Settings {
     pub(crate) editorconfig_reported: BTreeMap<String, u64>,
     /// 要約をメッセージ行に出した (`.editorconfig` の絶対パス, 中身の要約)。同じファイルの同じ中身はセッションで 1 回 (EC-6)。
     pub(crate) editorconfig_summarized: BTreeSet<(String, u64)>,
+    /// `config.reload` で `.editorconfig` を読み直した回 (一時の失敗の知らせを、回ごと・ファイルごとに 1 回にする)。
+    pub(crate) editorconfig_round: u64,
+    /// 今の回で出した読み直しの知らせ (文言キー, `.editorconfig` のパス)。
+    pub(crate) editorconfig_round_noted: BTreeSet<(&'static str, String)>,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -449,6 +453,8 @@ impl EditorState {
                 editorconfig_latest: BTreeMap::new(),
                 editorconfig_reported: BTreeMap::new(),
                 editorconfig_summarized: BTreeSet::new(),
+                editorconfig_round: 0,
+                editorconfig_round_noted: BTreeSet::new(),
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
                     eve_view::ColorDepth::TrueColor,
@@ -571,6 +577,8 @@ impl EditorState {
     /// で決め直す。
     pub(crate) fn blank_document(&self) -> Document {
         let mut doc = Document::new_untitled();
+        // 無題・存在しないパスで作った文書の印 (保存するまで、設定が届いたら形を決め直す、07 §3.6 の LAYER-4)
+        doc.new_file = true;
         self.set_new_file_format(&mut doc);
         doc.display = self.display_settings();
         doc.indent = crate::document::IndentSettings {
@@ -603,7 +611,7 @@ impl EditorState {
         doc.format.default_eol = line_ending_of(v.default_line_ending.value);
     }
 
-    /// まだ編集も保存もしていない新しいファイルの文書 (ディスクに無いパスの文書と、標準入力でない無題の文書) の文字コードと
+    /// まだ編集も保存もしていない新しいファイルの文書 (存在しないパスで開いた文書と、標準入力でない無題の文書) の文字コードと
     /// 改行を決め直す (ワークスペース層が届いた後と、`config.reload` の後。07 §3.6 の LAYER-4。編集した後は決め直さない)。
     pub(crate) fn refresh_new_file_formats(&mut self) {
         let ids: Vec<eve_view::DocumentId> = self.docs.documents.keys().copied().collect();
@@ -613,16 +621,21 @@ impl EditorState {
     }
 
     /// 文書 `id` が、まだ編集も保存もしていない新しいファイルの文書 (利用者が改行・文字コードを選んでいない) なら、文字コードと
-    /// 改行を決め直す (07 §3.6 の LAYER-4。`.editorconfig` の値が届いたとき、EC-1)。
+    /// 改行を決め直す (07 §3.6 の LAYER-4。`.editorconfig` の値が届いたとき、EC-1)。新しいファイルの文書かは、作ったときの
+    /// 経路の印 (`Document.new_file`) で決める (外部で消えて「新規として保持」した文書は、Stamp が無くても既存の本文の形を
+    /// 保つ)。その文書の保存を待っている間 (未編集の保存の照合・名前を付けて保存の保存先の照合を含む) も決め直さない
+    /// (保存を頼んだときに見ていた形と、書く形・文書の形が食い違わないように)。
     pub(crate) fn refresh_new_file_format(&mut self, id: DocumentId) {
-        let fresh = self.docs.documents.get(&id).is_some_and(|d| {
-            d.disk_stamp.is_none()
-                && !d.format_chosen
-                && d.stdin.is_none()
-                && d.load_state == crate::document::LoadState::Ready
-                && !d.is_dirty()
-                && !d.history().can_undo()
-        });
+        let fresh = !self.save_in_progress(id)
+            && self.docs.documents.get(&id).is_some_and(|d| {
+                d.new_file
+                    && d.disk_stamp.is_none()
+                    && !d.format_chosen
+                    && d.stdin.is_none()
+                    && d.load_state == crate::document::LoadState::Ready
+                    && !d.is_dirty()
+                    && !d.history().can_undo()
+            });
         if !fresh {
             return;
         }

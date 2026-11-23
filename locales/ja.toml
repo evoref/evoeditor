@@ -840,6 +840,10 @@ text = "設定の問題 ({file}〔:{line}〕): {detail}"
 hint = "一覧は「設定の診断を表示」で見られます"
 text = "設定に {count} 件の問題があります。最初の 1 件: {detail}"
 
+[msg.config.reload_busy_kept]
+hint = "そのプログラムを閉じてから、もう一度読み直してください"
+text = "{file} をほかのプログラムが開いていたため、前の設定のままにしました"
+
 [msg.config.reload_kept]
 hint = "エラーを直してから、もう一度読み直してください"
 text = "{file} にエラーがあるため、前の設定のままにしました"

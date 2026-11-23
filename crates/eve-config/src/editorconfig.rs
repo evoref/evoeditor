@@ -7,7 +7,7 @@
 //!   (`msg.editorconfig.charset_unmapped`、情報)・v0.5 で写さないプロパティ (未対応の情報診断)・資源の上限を超える glob
 //!   (`msg.editorconfig.bad_glob`)。当たるかに依らず、ファイルの中身だけで決まる (同じ中身なら同じ診断)。
 //! - 重ね方 ([`resolve_editorconfig`]、EC-5): 遠いファイルから近いファイルの順に、各ファイルの中は書いた順に、当たる
-//!   セクションのプロパティを重ねる (後が勝つ。`unset` は取り消す)。`tab_width` を書いていなくて `indent_size` が整数なら、
+//!   セクションのプロパティを重ねる (後が勝つ。`unset`・誤った値・写せない `charset` は取り消す)。`tab_width` を書いていなくて `indent_size` が整数なら、
 //!   その値を `tab_width` にも使う。結果は 07 §3.6 の LAYER-1 の (5) の段 ([`EditorConfigValues`])。
 //!
 //! ファイルを集めるのは eve-core の `ReadEditorConfig` のジョブ (所有者の検査、EC-2)。
@@ -66,8 +66,8 @@ impl NotReadReason {
 /// `.editorconfig` の診断の種類 (`msg.editorconfig.*`、07 §10.1 / §10.3 の EC-6)。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditorConfigProblem {
-    /// 写すプロパティの誤った値 (範囲の外・知らない値。警告。その値だけを使わない)。`Diagnostic.key` はプロパティの名前、
-    /// `value` は書かれた値。
+    /// 写すプロパティの誤った値 (範囲の外・知らない値。警告。`unset` と同じく、それまでに重ねた値を取り消す)。
+    /// `Diagnostic.key` はプロパティの名前、`value` は書かれた値。
     InvalidValue {
         /// 許される値 (診断に出す順)。
         allowed: Vec<String>,
@@ -100,7 +100,7 @@ impl EditorConfigProblem {
 pub enum EcWidth {
     /// 整数の幅。
     Width(u8),
-    /// `tab`: `tab_width` (無ければ下の段の `editor.tab_width`) の値を幅にする。
+    /// `tab`: `.editorconfig` の `tab_width` (無ければ文書の最終の `editor.tab_width`) の値を幅にする。
     Tab,
 }
 
@@ -157,7 +157,7 @@ enum Key {
 /// 写すプロパティの、読んだ値。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Value {
-    /// `unset` (それまでに重ねた値を取り消す)。写せない `charset` も同じ扱い。
+    /// `unset` (それまでに重ねた値を取り消す)。写せない `charset` と誤った値も同じ扱い。
     Unset,
     IndentStyle(IndentUnit),
     IndentSize(EcWidth),
@@ -455,6 +455,7 @@ pub fn parse_editorconfig(text: &str) -> EditorConfigFile {
                 ));
                 Value::Unset
             }
+            // 誤った値も `unset` と同じく、それまでに重ねた値を取り消す (§10.1。後勝ちで決めてから使えない値を捨てる)
             Err(allowed) => {
                 out.diagnostics.push(diag(
                     Severity::Warning,
@@ -466,7 +467,7 @@ pub fn parse_editorconfig(text: &str) -> EditorConfigFile {
                     line_no,
                     column,
                 ));
-                continue;
+                Value::Unset
             }
         };
         if let Some(s) = out.sections.last_mut() {

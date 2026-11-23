@@ -47,10 +47,11 @@ fn ワークスペース層の言語定義の正規表現は_主スレッドに�
     h.started();
     let start = eve_config::first_line_compiles();
     for _ in 0..1_000 {
-        let outs = h.run_one_job_held();
-        if outs.is_empty() {
+        // 区切って譲るジョブ (`.editorconfig` の探索など) の 1 区切りは結果を送らないので、待ちの数で終わりを見る
+        if h.pending_jobs() == 0 {
             break;
         }
+        let outs = h.run_one_job_held();
         let before = eve_config::first_line_compiles();
         h.deliver(outs);
         assert_eq!(
@@ -76,10 +77,11 @@ fn ワークスペース層の言語定義の正規表現は_主スレッドに�
     h.cmd("config.reload");
     let mut opened = false;
     for _ in 0..1_000 {
-        let outs = h.run_one_job_held();
-        if outs.is_empty() {
+        // 区切って譲るジョブ (`.editorconfig` の探索など) の 1 区切りは結果を送らないので、待ちの数で終わりを見る
+        if h.pending_jobs() == 0 {
             break;
         }
+        let outs = h.run_one_job_held();
         let workspace_read = outs
             .iter()
             .any(|o| matches!(o.body, eve_core::JobResult::WorkspaceConfigRead(_)));

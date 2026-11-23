@@ -824,6 +824,8 @@ impl EditorState {
                     // 名前を付けて保存のパスは、書けてから文書のパスにする (03 §9.3 手順 7)
                     doc.path = Some(path.clone());
                     doc.finish_save(at, Some(report.new_stamp));
+                    // 保存した: もう新しいファイルの文書ではない (設定が届いても形を決め直さない、07 §3.6 の LAYER-4)
+                    doc.new_file = false;
                 }
                 self.push_event(EditorEvent::DocumentSaved {
                     doc: doc_id,

@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1074 件)。
+/// `locales/en.toml` の文言 (1076 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -449,6 +449,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.config.problem.text"), B("Configuration problem ({file}〔:{line}〕): {detail}")),
     (B("msg.config.problems.hint"), B("See Show Settings Diagnostics for all")),
     (B("msg.config.problems.text"), B("There are {count} problems in the configuration. The first: {detail}")),
+    (B("msg.config.reload_busy_kept.hint"), B("Close that program, then reload again")),
+    (B("msg.config.reload_busy_kept.text"), B("Another program had {file} open, so the previous settings are kept")),
     (B("msg.config.reload_kept.hint"), B("Fix the errors, then reload again")),
     (B("msg.config.reload_kept.text"), B("{file} has errors, so the previous settings are kept")),
     (B("msg.config.syntax.hint"), B("Fix the line shown. Until then the defaults are used")),
@@ -1087,7 +1089,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1074 件)。
+/// `locales/ja.toml` の文言 (1076 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1528,6 +1530,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.config.problem.text"), B("設定の問題 ({file}〔:{line}〕): {detail}")),
     (B("msg.config.problems.hint"), B("一覧は「設定の診断を表示」で見られます")),
     (B("msg.config.problems.text"), B("設定に {count} 件の問題があります。最初の 1 件: {detail}")),
+    (B("msg.config.reload_busy_kept.hint"), B("そのプログラムを閉じてから、もう一度読み直してください")),
+    (B("msg.config.reload_busy_kept.text"), B("{file} をほかのプログラムが開いていたため、前の設定のままにしました")),
     (B("msg.config.reload_kept.hint"), B("エラーを直してから、もう一度読み直してください")),
     (B("msg.config.reload_kept.text"), B("{file} にエラーがあるため、前の設定のままにしました")),
     (B("msg.config.syntax.hint"), B("該当の行を直してください。直すまでは既定値で動きます")),

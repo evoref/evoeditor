@@ -101,12 +101,15 @@ pub enum JobKind {
     },
     /// 文書のディレクトリから上へ `.editorconfig` を所有者の検査つきで集め、解析・glob の照合・重ね合わせまで行う (07 §10.3
     /// の EC-1 / EC-2 / EC-5、02 §9.3 の `ReadEditorConfig`)。文書の読込の完了・名前を付けて保存でパスが変わった・
-    /// `config.reload` で積む。結果は `JobResult::EditorConfigRead`。
+    /// `config.reload` で積む。祖先 1 段ごとに区切って譲り (`JobStep::Continue`。`io` を長く占めない、EC-8)、終われば
+    /// `JobResult::EditorConfigRead`。
     ReadEditorConfig {
         /// 文書の開いたときの絶対パス。
         path: FsPath,
         /// `workspace.safe_directories` (07 §12.1 の OWN-5)。
         safe_dirs: std::sync::Arc<[FsPath]>,
+        /// 積み直しの続き (最初の投入は `None`)。
+        walk: Option<Box<crate::io::editorconfig::EditorConfigWalk>>,
     },
     /// 言語定義の `first_line` の正規表現を組む (07 §9.6 の段 2 の細目)。`ReadLanguages` の結果が届いたときに積む (起動時は
     /// 起動時のパスを開くジョブの後ろになる)。結果は `JobResult::LanguagesPrecompiled`。

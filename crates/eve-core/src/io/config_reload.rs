@@ -489,7 +489,12 @@ impl Editor {
         };
         let diags = self.set_workspace_keymap(file.as_ref());
         if file.is_some() {
-            self.state.report_config(&name, &diags);
+            // ワークスペース層の結果で非同期に届くので、表示中の警告・エラーを置き換えない (07 §12.5 の WSC-3)
+            self.state.report_config_with(
+                &name,
+                &diags,
+                crate::ui_model::config_report::Delivery::Background,
+            );
         }
     }
 }

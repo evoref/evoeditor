@@ -47,10 +47,11 @@ fn 拡張子で決まる起動時の文書の判定では_ユーザー層の先�
         .open_initial_files(&[InitialFile::path("/w/a.rs")], false, None);
     h.started();
     for _ in 0..1_000 {
-        let outs = h.run_one_job_held();
-        if outs.is_empty() {
+        // 区切って譲るジョブ (`.editorconfig` の探索など) の 1 区切りは結果を送らないので、待ちの数で終わりを見る
+        if h.pending_jobs() == 0 {
             break;
         }
+        let outs = h.run_one_job_held();
         let before = eve_config::first_line_compiles();
         h.deliver(outs);
         assert_eq!(

@@ -26,6 +26,15 @@ pub const LOCALE_CLI_SOURCE: &str = "--locale";
 /// 同上 (環境変数)。
 pub const LOCALE_ENV_SOURCE: &str = "EVE_LANG";
 
+/// 診断の要約の出し方 (07 §10.3 の段 6 の細目)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Delivery {
+    /// 表示中のメッセージを置き換える (起動時に同期で出す要約・利用者の操作の結果)。
+    Replace,
+    /// ジョブの結果で非同期に届く要約: 表示中のメッセージが警告・エラーなら置き換えず、履歴にだけ積む。
+    Background,
+}
+
 /// 型の語 (`ui.config.type.*`) のキー。toml の型名から。
 fn type_key(toml_type: &str) -> String {
     let t = match toml_type {
@@ -46,6 +55,17 @@ impl EditorState {
     /// 診断を 1 件または要約 1 件のメッセージ (`warn`) にして出す。0 件なら何もしない。
     /// 最初の Frame の後に呼ぶ (起動を妨げない、FR-703)。
     pub fn report_config(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        self.report_config_with(file, diagnostics, Delivery::Replace);
+    }
+
+    /// `report_config` と同じだが、要約の出し方を選ぶ (ワークスペース層の診断はジョブの結果で非同期に届くので
+    /// `Delivery::Background`、07 §12.5 の WSC-3)。
+    pub(crate) fn report_config_with(
+        &mut self,
+        file: &str,
+        diagnostics: &[Diagnostic],
+        delivery: Delivery,
+    ) {
         // 一覧 (`config.show_diagnostics`) に出す診断は、ファイルごとに最後に読んだときのものに置き換える
         self.ui.config_diagnostics.retain(|(f, _)| f != file);
         if !diagnostics.is_empty() {
@@ -53,7 +73,7 @@ impl EditorState {
                 .config_diagnostics
                 .push((file.to_owned(), diagnostics.to_vec()));
         }
-        self.show_config_problems(file, diagnostics);
+        self.show_config_problems(file, diagnostics, delivery);
     }
 
     /// `report_config` と同じだが、一覧のそのファイルの診断を置き換えずに足す (テーマが無い診断を、`theme.name` を
@@ -87,9 +107,9 @@ impl EditorState {
         if workspace {
             let mut shown = diagnostics.to_vec();
             eve_config::cap_diagnostics(&mut shown);
-            self.show_config_problems(file, &shown);
+            self.show_config_problems(file, &shown, Delivery::Replace);
         } else {
-            self.show_config_problems(file, diagnostics);
+            self.show_config_problems(file, diagnostics, Delivery::Replace);
         }
     }
 
@@ -104,9 +124,10 @@ impl EditorState {
         }
     }
 
-    /// 診断の要約 (1 件か「N 件の問題」) をメッセージ行に出す (一覧は触らない)。
+    /// 診断の要約 (1 件か「N 件の問題」) をメッセージ行に出す (一覧は触らない)。`.editorconfig` の要約はジョブの結果で
+    /// 非同期に届くので、表示中の警告・エラーを置き換えない (07 §10.3 の段 6 の細目)。
     pub(crate) fn summarize_config_diagnostics(&mut self, file: &str, diagnostics: &[Diagnostic]) {
-        self.show_config_problems(file, diagnostics);
+        self.show_config_problems(file, diagnostics, Delivery::Background);
     }
 
     /// 一覧から、テーマが無い診断 (`DiagKind::ThemeNotFound`) を消す (テーマを読み直す前)。
@@ -118,7 +139,7 @@ impl EditorState {
     }
 
     /// 診断を 1 件または要約 1 件のメッセージにする (`report_config` の画面の側)。
-    fn show_config_problems(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+    fn show_config_problems(&mut self, file: &str, diagnostics: &[Diagnostic], delivery: Delivery) {
         // 「このバージョンでは未対応」の情報診断は画面に出さず、件数にも数えない (07 §4.3)
         let shown: Vec<&Diagnostic> = diagnostics
             .iter()
@@ -136,11 +157,15 @@ impl EditorState {
         };
         // 言語ファイル・言語の選択の診断の要約も、補う言語の同梱の文言で出す (07 §17.4)
         let locale = self.uses_builtin_texts(file, first);
-        let show = |st: &mut EditorState, key: &str, args: &[(&str, &str)]| {
-            if locale {
-                st.show_builtin_message(MessageLevel::Warn, key, args);
-            } else {
-                st.show_message(MessageLevel::Warn, key, args);
+        let show = |st: &mut EditorState, key: &str, args: &[(&str, &str)]| match (locale, delivery)
+        {
+            (true, Delivery::Replace) => st.show_builtin_message(MessageLevel::Warn, key, args),
+            (false, Delivery::Replace) => st.show_message(MessageLevel::Warn, key, args),
+            (true, Delivery::Background) => {
+                st.show_builtin_background_message(MessageLevel::Warn, key, args);
+            }
+            (false, Delivery::Background) => {
+                st.show_background_message(MessageLevel::Warn, key, args);
             }
         };
         if shown.len() == 1 {

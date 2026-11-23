@@ -175,13 +175,30 @@ fn 近いファイルと後のセクションが勝ち_unset_は取り消す() {
         ("/a/b/.editorconfig", "[*]\ncharset = latin1\n", "x"),
     ]);
     assert_eq!(c.encoding, None);
-    // 誤った値はその値だけを使わない (前の値のまま)
+    // 誤った値は `unset` と同じく、それまでに重ねた値を取り消す (同じファイルの前のセクションも、遠いファイルも)
     let e = one(
         "[*]\nindent_size = 4\n[*]\nindent_size = 0\nend_of_line = CRLF\n",
         "a",
     );
-    assert_eq!(width(&e), Some(EcWidth::Width(4)));
+    assert_eq!(width(&e), None);
+    assert_eq!(tab(&e), None, "indent_size から決める tab_width も無い");
     assert_eq!(e.line_ending.map(|v| v.0), Some(DefaultLineEnding::Crlf));
+    let f = values(&[
+        (
+            "/a/.editorconfig",
+            "[*]\nindent_style = tab\ntab_width = 8\n",
+            "b/x",
+        ),
+        (
+            "/a/b/.editorconfig",
+            "[*]\nindent_style = tabs\ntab_width = 99\n",
+            "x",
+        ),
+    ]);
+    assert_eq!((unit(&f), tab(&f)), (None, None));
+    // 誤った値の後に正しい値を書けば、その値が効く
+    let g = one("[*]\nindent_size = 0\nindent_size = 3\n", "a");
+    assert_eq!(width(&g), Some(EcWidth::Width(3)));
 }
 
 #[test]

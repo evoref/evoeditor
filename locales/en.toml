@@ -842,6 +842,10 @@ text = "Configuration problem ({file}〔:{line}〕): {detail}"
 hint = "See Show Settings Diagnostics for all"
 text = "There are {count} problems in the configuration. The first: {detail}"
 
+[msg.config.reload_busy_kept]
+hint = "Close that program, then reload again"
+text = "Another program had {file} open, so the previous settings are kept"
+
 [msg.config.reload_kept]
 hint = "Fix the errors, then reload again"
 text = "{file} has errors, so the previous settings are kept"

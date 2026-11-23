@@ -100,6 +100,7 @@ pub(crate) const MSG_CLIPBOARD_FALLBACK: &str = "msg.clipboard.fallback";
 pub(crate) const MSG_CONFIG_PROBLEM: &str = "msg.config.problem";
 pub(crate) const MSG_CONFIG_PROBLEMS: &str = "msg.config.problems";
 pub(crate) const MSG_CONFIG_RELOAD_KEPT: &str = "msg.config.reload_kept";
+pub(crate) const MSG_CONFIG_RELOAD_BUSY_KEPT: &str = "msg.config.reload_busy_kept";
 pub(crate) const MSG_EDIT_READ_ONLY: &str = "msg.edit.read_only";
 pub(crate) const MSG_EDIT_READ_ONLY_BINARY: &str = "msg.edit.read_only_binary";
 pub(crate) const MSG_EDIT_READ_ONLY_INVALID_BYTES: &str = "msg.edit.read_only_invalid_bytes";

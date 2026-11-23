@@ -28,13 +28,13 @@ pub(crate) enum Pending {
         safe_dirs: Vec<String>,
     },
     /// `.editorconfig` の読込 (07 §10.3 の EC-1)。`seq` は文書ごとの読込の番号 (後に積んだものが勝つ)、`path` は積んだときの
-    /// 文書のパス、`safe_dirs` は使った `workspace.safe_directories` (書いた形)、`reload` は `config.reload` の読込。
+    /// 文書のパス、`safe_dirs` は使った `workspace.safe_directories` (書いた形)、`trigger` は積んだ契機。
     EditorConfig {
         doc: DocumentId,
         seq: u64,
         path: FsPath,
         safe_dirs: Vec<String>,
-        reload: bool,
+        trigger: crate::io::editorconfig::EditorConfigTrigger,
     },
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
     LanguagesRead {
@@ -433,8 +433,8 @@ impl EditorState {
                 seq,
                 path,
                 safe_dirs,
-                reload,
-            } => self.finish_editorconfig(doc, seq, &path, safe_dirs, reload, r),
+                trigger,
+            } => self.finish_editorconfig(doc, seq, &path, safe_dirs, trigger, r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

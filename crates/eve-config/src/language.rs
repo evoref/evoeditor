@@ -1145,8 +1145,8 @@ pub struct DocLayers<'a> {
 
 /// 文書ごとの値を決める (07 §3.6 の LAYER-1)。各キーで、強い段から順に、値を持つ最初の段を採る: (8) `--set` →
 /// (7) ワークスペース層の言語定義 → (6) ワークスペース層の一般の値 → (5) `.editorconfig` → (3)(4) 言語定義 → (1)(2) 層の値。
-/// (6)(7) は `layers.workspace` のときだけ見る。`.editorconfig` の `indent_size = tab` は、`.editorconfig` の `tab_width`
-/// (無ければ (1)〜(4) の段の `editor.tab_width`) を幅にする (§10.1)。
+/// (6)(7) は `layers.workspace` のときだけ見る。`.editorconfig` の `indent_size = tab` は、文書の最終の
+/// `editor.tab_width` (表示のタブの幅。`.editorconfig` の `tab_width` も (5) の段として入る) を幅にする (§10.1)。
 #[must_use]
 pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
     type Pick<T> = fn(&Language) -> &Option<(T, LangOrigin)>;
@@ -1202,24 +1202,24 @@ pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
         }
     }
     let ec = layers.editorconfig;
-    let ec_tab = ec.and_then(|e| e.tab_width.clone());
+    let tab_width = pick(
+        layers,
+        "editor.tab_width",
+        |c| c.tab_width,
+        Some((|l| &l.tab_width, |l| &l.ws_tab_width)),
+        ec.and_then(|e| e.tab_width.clone()),
+    );
+    // `indent_size = tab`: 文書の最終のタブの幅 (`.editorconfig` の `tab_width` は (5) の段としてこれに入る。上の段が
+    // 勝てばその値。Tab で入れる空白の数を表示のタブの幅にそろえる)
     let ec_width = ec.and_then(|e| e.indent_width.clone()).map(|(w, at)| {
         let width = match w {
             crate::EcWidth::Width(n) => n,
-            crate::EcWidth::Tab => ec_tab
-                .as_ref()
-                .map_or_else(|| lower_tab_width(layers), |(n, _)| *n),
+            crate::EcWidth::Tab => tab_width.value,
         };
         (width, at)
     });
     DocValues {
-        tab_width: pick(
-            layers,
-            "editor.tab_width",
-            |c| c.tab_width,
-            Some((|l| &l.tab_width, |l| &l.ws_tab_width)),
-            ec_tab,
-        ),
+        tab_width,
         indent_unit: pick(
             layers,
             "editor.indent_unit",
@@ -1249,16 +1249,6 @@ pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
             ec.and_then(|e| e.encoding.clone()),
         ),
     }
-}
-
-/// `.editorconfig` より下の段 ((1)〜(4)) の `editor.tab_width` (`indent_size = tab` の幅、§10.1)。
-fn lower_tab_width(layers: &DocLayers<'_>) -> u8 {
-    if let Some((n, _)) = layers.language.and_then(|l| l.tab_width.as_ref()) {
-        return *n;
-    }
-    layers
-        .user
-        .map_or(layers.config.tab_width, |u| u.config.tab_width)
 }
 
 #[cfg(test)]

@@ -940,13 +940,20 @@ fn 一時の失敗で前の層を保つときは知らせ_安全な場所が変�
         ..Setup::default()
     });
     assert_eq!(tab_width(&h), 2);
-    // 一時の失敗: 前の層を保ち、知らせる
+    // 一時の失敗: 前の層を保ち、一時の失敗の文言で知らせる (エラーの文言 `reload_kept` は使わない)
     h.fs.fail_next(FsOp::ReadChecked, FsErrorKind::Busy);
     h.cmd("config.reload");
     h.run_jobs();
     assert_eq!(tab_width(&h), 2);
     assert!(
-        h.messages().iter().any(|m| m == "msg.config.reload_kept"),
+        h.messages()
+            .iter()
+            .any(|m| m == "msg.config.reload_busy_kept"),
+        "{:?}",
+        h.messages()
+    );
+    assert!(
+        !h.messages().iter().any(|m| m == "msg.config.reload_kept"),
         "{:?}",
         h.messages()
     );
@@ -1023,10 +1030,11 @@ fn 古い起動時の組み立ての結果の判定し直しを_後の_config_re
     // 起動時の `PrecompileLanguages` の結果だけを取り置く
     let mut held = Vec::new();
     for _ in 0..1_000 {
-        let outs = h.run_one_job_held();
-        if outs.is_empty() {
+        // 区切って譲るジョブ (`.editorconfig` の探索など) の 1 区切りは結果を送らないので、待ちの数で終わりを見る
+        if h.pending_jobs() == 0 {
             break;
         }
+        let outs = h.run_one_job_held();
         if outs
             .iter()
             .any(|o| matches!(o.body, eve_core::JobResult::LanguagesPrecompiled { .. }))
@@ -1049,4 +1057,50 @@ fn 古い起動時の組み立ての結果の判定し直しを_後の_config_re
     h.cmd("config.reload");
     h.run_jobs();
     assert_eq!(language(&h), "plain");
+}
+
+/// メッセージの履歴の全件 (`ui.message_history_copy` でクリップボードへ写した文字列)。
+fn history(h: &mut Harness) -> String {
+    h.cmd("ui.message_history");
+    h.cmd("ui.message_history_copy");
+    h.cmd("ui.cancel");
+    h.effects()
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            eve_view::Effect::SetClipboard {
+                content: eve_view::ClipboardText::Inline(t),
+                ..
+            } => Some(t.clone()),
+            _ => None,
+        })
+        .expect("履歴を写した")
+}
+
+// verifies: AC-FR-705-2
+#[test]
+fn ワークスペース層の診断の要約は表示中の警告を置き換えず履歴に積む() {
+    // 親のフォルダが無い新しいファイルを開いた警告の後に、ワークスペース層の診断が届く
+    let mut h = start(&Setup {
+        ws: Some("[editor]\nnope = 1\n"),
+        files: &["/w/repo/nodir/new.txt"],
+        ..Setup::default()
+    });
+    assert!(
+        h.messages().iter().any(|m| m == "msg.open.parent_missing"),
+        "{:?}",
+        h.messages()
+    );
+    assert!(
+        !h.messages().iter().any(|m| m == "msg.config.problem"),
+        "{:?}",
+        h.messages()
+    );
+    let f = h.frame();
+    let current = f.messages.current.expect("警告を出している");
+    assert_eq!(current.level, eve_view::MessageLevel::Warn);
+    assert!(!cell_text(&current.text).contains("nope"));
+    let log = history(&mut h);
+    assert!(log.contains("nope"), "{log}");
+    assert!(diagnostics(&mut h).iter().any(|(t, _)| t.contains("nope")));
 }

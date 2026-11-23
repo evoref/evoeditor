@@ -62,6 +62,11 @@ pub use gitignore::{
     ParseReport, PathKind, RepoIgnore, parse_commondir_file, parse_core_ignorecase,
     parse_gitdir_file,
 };
+/// `.editorconfig` の探索の本体と Windows の名前の直し方 (docs/07 §10.3)。試験と性質の検査 (proptest) が使う。
+#[doc(hidden)]
+pub use io::editorconfig::{
+    EditorConfigRead, EditorConfigReport, align_disk_names, read_editorconfig,
+};
 pub use io::fs::*;
 pub use io::fspath::FsPath;
 pub use io::io_jobs::OpenOptions;
