@@ -156,7 +156,8 @@ enum Outcome {
     Text(String),
     /// 所有者の検査・大きさで読まなかった (診断 1 件)。`dir` は置き場所のディレクトリで落ちた (`.eve` を信用しない)。
     Rejected { diag: Diagnostic, dir: bool },
-    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。`dir` は置き場所 (`.eve`) の階層の失敗 (層を外す)。
+    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。`dir` は OS の失敗 (置き場所の権限・ファイルの読込の失敗など。
+    /// 層を外す)。偽は UTF-8 でない (ファイルの中身の誤りで、`config.reload` では前の層を保つ)。
     Unreadable { diag: Diagnostic, dir: bool },
     /// 一時の失敗。
     Busy,
@@ -237,8 +238,8 @@ pub fn read_workspace_config(
             config_notes.push(diag);
             Fetched::Absent
         }
-        // 置き場所 (`.eve`) の失敗 (権限など) は層を外す (信頼の取り消しを通す)。前の層を保つのはファイルの構文エラー・
-        // UTF-8 でないときだけ
+        // OS の失敗 (置き場所の権限・ファイルの読込の失敗など) は層を外す (信頼の取り消しを通す)。前の層を保つのはファイルの
+        // 構文エラー・UTF-8 でないときだけ
         Outcome::Unreadable { diag, dir } => {
             dir_trusted &= !dir;
             config_notes.push(diag);
@@ -271,8 +272,7 @@ pub fn read_workspace_config(
             keymap_notes.push(diag);
             Fetched::Absent
         }
-        // 置き場所 (`.eve`) の失敗 (権限など) は層を外す (信頼の取り消しを通す)。前の層を保つのはファイルの構文エラー・
-        // UTF-8 でないときだけ
+        // OS の失敗は層を外す (上と同じ)
         Outcome::Unreadable { diag, dir } => {
             dir_trusted &= !dir;
             keymap_notes.push(diag);
@@ -354,6 +354,7 @@ impl EditorState {
         let Some(root) = self.workspace_config_root() else {
             return reload;
         };
+        let safe_dirs_written = safe_dirs.to_vec();
         let safe_dirs: Vec<FsPath> = safe_dirs.iter().map(|s| FsPath::from(s.as_str())).collect();
         let job = self.jobs.spawn(
             None,
@@ -368,6 +369,7 @@ impl EditorState {
             job,
             Pending::WorkspaceConfig {
                 reload: reload.map(Box::new),
+                safe_dirs: safe_dirs_written,
             },
         );
         None
@@ -375,7 +377,12 @@ impl EditorState {
 
     /// ワークスペース層の読込の結果 (07 §12.5 の WSC-3 / WSC-4)。`reload` があれば、層を差し替えた後に `config.reload` を
     /// 続ける (全体を差し替えて要約を 1 回出す)。無ければ (起動の後に届いた) 重ね直して、診断だけを出す (要約は出さない)。
-    pub(crate) fn finish_workspace_config(&mut self, r: JobResult, reload: Option<ReloadPlan>) {
+    pub(crate) fn finish_workspace_config(
+        &mut self,
+        r: JobResult,
+        reload: Option<ReloadPlan>,
+        safe_dirs: Vec<String>,
+    ) {
         let JobResult::WorkspaceConfigRead(read) = r else {
             // ジョブが走らなかった (パニックなど): 層は前のまま
             if let Some(plan) = reload {
@@ -386,11 +393,26 @@ impl EditorState {
         let WorkspaceRead {
             config_path,
             keymap_path,
-            layer,
-            keymap,
+            mut layer,
+            mut keymap,
             config_notes,
             keymap_notes,
         } = read;
+        // 所有者の検査の逃げ道が前回と変わったら、一時の失敗でも前の層を保たない (逃げ道を外したのに、判定の前の `Busy` で
+        // 前の層が残らないように、07 §12.5 の WSC-1)
+        let safe_changed = self
+            .settings
+            .workspace_safe_dirs
+            .replace(safe_dirs)
+            .is_some_and(|before| Some(&before) != self.settings.workspace_safe_dirs.as_ref());
+        if safe_changed {
+            if layer == Fetched::Keep {
+                layer = Fetched::Absent;
+            }
+            if keymap == Fetched::Keep {
+                keymap = Fetched::Absent;
+            }
+        }
         let config_name = config_path.display();
         let keymap_name = keymap_path.display();
         self.settings.workspace_files = vec![config_name.clone(), keymap_name.clone()];
@@ -401,6 +423,13 @@ impl EditorState {
             self.settings.workspace_notes = config_notes;
         }
         let mut kept: Vec<&str> = Vec::new();
+        // 一時の失敗で前の層を保つときも知らせる (知らせなく古い層が残らないように)
+        if layer == Fetched::Keep && self.settings.workspace_layer.is_some() {
+            kept.push(&config_name);
+        }
+        if keymap == Fetched::Keep && self.keys.workspace_keymap_file.is_some() {
+            kept.push(&keymap_name);
+        }
         match layer {
             Fetched::Absent => {
                 self.settings.workspace_layer = None;

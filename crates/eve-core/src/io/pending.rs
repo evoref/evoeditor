@@ -24,9 +24,16 @@ pub(crate) enum Pending {
     /// ワークスペース層の読込 (07 §12.5)。`reload` は届いた後に続ける `config.reload`。
     WorkspaceConfig {
         reload: Option<Box<crate::io::config_reload::ReloadPlan>>,
+        /// 読込に使った `workspace.safe_directories` (前回と変わったかを見る)。
+        safe_dirs: Vec<String>,
     },
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
-    LanguagesRead { startup: bool, workspace_only: bool },
+    LanguagesRead {
+        startup: bool,
+        workspace_only: bool,
+        /// ジョブの中で正規表現まで組んだ。
+        precompiled: bool,
+    },
     /// 言語定義の `first_line` の正規表現を組むジョブ (結果の組めない値を警告する、07 §9.6 の段 2 の細目)。
     LanguagesPrecompile { redetect: bool },
     Open {
@@ -352,9 +359,10 @@ impl EditorState {
             Pending::LanguagesRead {
                 startup,
                 workspace_only,
-            } => self.finish_languages_read(r, startup, workspace_only),
-            Pending::WorkspaceConfig { reload } => {
-                self.finish_workspace_config(r, reload.map(|p| *p));
+                precompiled,
+            } => self.finish_languages_read(r, startup, workspace_only, precompiled),
+            Pending::WorkspaceConfig { reload, safe_dirs } => {
+                self.finish_workspace_config(r, reload.map(|p| *p), safe_dirs);
             }
             Pending::LanguagesPrecompile { redetect } => {
                 self.finish_languages_precompile(r, redetect);

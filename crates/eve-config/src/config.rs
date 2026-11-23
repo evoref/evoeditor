@@ -1554,9 +1554,9 @@ fn read_safe_directories(
             Some(r) if r.is_root(s) => Err(ListItemProblem::TooBroad),
             // ホームディレクトリそのもの (ホームは今の OS のものなので、今の OS で使う値だけを比べる)
             Some(r)
-                if cx
-                    .home
-                    .is_some_and(|h| cx.condition_is_current() && r.same_path(s, h)) =>
+                if cx.home.is_some_and(|h| {
+                    cx.condition_is_current() && r.is_absolute(h) && r.same_path(s, h)
+                }) =>
             {
                 Err(ListItemProblem::TooBroad)
             }

@@ -74,10 +74,13 @@ impl EditorState {
                         eve_config::cap_diagnostics(ds);
                     }
                 }
-                None => self
-                    .ui
-                    .config_diagnostics
-                    .push((file.to_owned(), diagnostics.to_vec())),
+                None => {
+                    let mut ds = diagnostics.to_vec();
+                    if workspace {
+                        eve_config::cap_diagnostics(&mut ds);
+                    }
+                    self.ui.config_diagnostics.push((file.to_owned(), ds));
+                }
             }
         }
         self.show_config_problems(file, diagnostics);

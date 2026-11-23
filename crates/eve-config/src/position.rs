@@ -39,16 +39,33 @@ impl<'a> LineIndex<'a> {
 /// 1 つのファイルの診断の列に上限を掛ける: 「ほか N 件」(`DiagKind::More`) を除いた診断を
 /// [`CONFIG_MAX_DIAGNOSTICS`] 件までにし、超えた分と、元からあった「ほか N 件」の件数を合わせて、最後に 1 件の
 /// 「ほか N 件」にする (読込の診断に分類・検証・言語定義の診断を足した後の、ファイルごとの合計に掛ける、07 §4.3)。
+/// 残すのは、エラー → ワークスペース層の知らせ (保留・無視・効かない・読まなかった理由・使わない割当) → ほか (未知の
+/// キーなど) の順で選び (先頭に未知のキーを並べて保留の知らせを隠せない)、残した診断は元の並びのまま。
 pub fn cap_diagnostics(diags: &mut Vec<crate::Diagnostic>) {
+    let rank = |d: &crate::Diagnostic| {
+        if d.severity == crate::Severity::Error {
+            0
+        } else if matches!(d.kind, crate::DiagKind::Workspace(_)) {
+            1
+        } else {
+            2
+        }
+    };
     let mut omitted = 0;
-    let mut kept = Vec::with_capacity(diags.len().min(CONFIG_MAX_DIAGNOSTICS + 1));
-    for d in diags.drain(..) {
+    let mut items: Vec<(usize, crate::Diagnostic)> = Vec::with_capacity(diags.len());
+    for (i, d) in diags.drain(..).enumerate() {
         match d.kind {
             crate::DiagKind::More { count } => omitted += count,
-            _ if kept.len() < CONFIG_MAX_DIAGNOSTICS => kept.push(d),
-            _ => omitted += 1,
+            _ => items.push((i, d)),
         }
     }
+    if items.len() > CONFIG_MAX_DIAGNOSTICS {
+        items.sort_by_key(|(i, d)| (rank(d), *i));
+        omitted += items.len() - CONFIG_MAX_DIAGNOSTICS;
+        items.truncate(CONFIG_MAX_DIAGNOSTICS);
+        items.sort_by_key(|(i, _)| *i);
+    }
+    let mut kept: Vec<crate::Diagnostic> = items.into_iter().map(|(_, d)| d).collect();
     if omitted > 0 {
         kept.push(more(omitted));
     }

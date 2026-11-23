@@ -892,3 +892,98 @@ fn config_reload_で置き場所を読めなくなったら層を外す() {
         h.messages()
     );
 }
+
+// ---- 再々レビューで直した点 ----
+
+/// 診断の一覧を `query` で絞り込んだ件数 (一覧の下の `{一致}/{全体}` の一致の数)。
+fn matched(h: &mut Harness, query: &str) -> usize {
+    h.cmd("config.show_diagnostics");
+    if h.frame().overlays.is_empty() {
+        return 0;
+    }
+    h.text(query);
+    let f = h.frame();
+    let OverlayModel::List { footer, .. } = &f.overlays[0] else {
+        panic!("一覧が出ていない")
+    };
+    let text = cell_text(footer);
+    h.cmd("ui.cancel");
+    text.split('/')
+        .next()
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or_else(|| panic!("件数が読めない: {text}"))
+}
+
+// verifies: AC-FR-705-2
+#[test]
+fn 言語定義の診断が最初の報告でも_1_つのファイルの上限を超えない() {
+    let ws: String = (0..150)
+        .map(|i| format!("[[language]]\nname = \"l{i}\"\nfirst_line = \"(\"\n"))
+        .collect();
+    let mut h = start(&Setup {
+        ws: Some(&ws),
+        ..Setup::default()
+    });
+    assert_eq!(
+        matched(&mut h, "first_line"),
+        eve_config::CONFIG_MAX_DIAGNOSTICS
+    );
+    assert_eq!(matched(&mut h, "ほかに"), 1);
+}
+
+// verifies: AC-FR-705-3
+#[test]
+fn 一時の失敗で前の層を保つときは知らせ_安全な場所が変わったら外す() {
+    let mut h = start(&Setup {
+        user: "[workspace]\nsafe_directories = [\"/w/repo\"]\n",
+        ws: Some("[editor]\ntab_width = 2\n"),
+        ..Setup::default()
+    });
+    assert_eq!(tab_width(&h), 2);
+    // 一時の失敗: 前の層を保ち、知らせる
+    h.fs.fail_next(FsOp::ReadChecked, FsErrorKind::Busy);
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(tab_width(&h), 2);
+    assert!(
+        h.messages().iter().any(|m| m == "msg.config.reload_kept"),
+        "{:?}",
+        h.messages()
+    );
+    // 逃げ道を外した読み直しでの一時の失敗: 前の層を保たない (信頼の取り消しを黙って止められない)
+    h.fs.set_file(&FsPath::new(CONFIG), b"");
+    h.fs.fail_next(FsOp::ReadChecked, FsErrorKind::Busy);
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(tab_width(&h), 4);
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn 明示的に改行を選んだ新しいファイルは_後から届いたワークスペース層の改行と文字コードを当てない() {
+    let mut h = start(&Setup {
+        files: &["/w/repo/new.txt"],
+        ..Setup::default()
+    });
+    h.cmd_with(
+        "file.set_line_ending",
+        eve_core::Args::new().with_str("eol", "lf"),
+    );
+    // ワークスペース層が後から届く (config.reload で読む)
+    h.fs.add_dir("/w/repo/.eve");
+    h.fs.add_file(
+        WS_CONFIG,
+        b"[file]\ndefault_line_ending = \"crlf\"\ndefault_encoding = \"shift_jis\"\n",
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.text("あ");
+    h.keys("enter");
+    h.cmd("file.save");
+    h.run_jobs();
+    assert_eq!(
+        h.fs.read("/w/repo/new.txt").as_deref(),
+        Some("あ\n".as_bytes()),
+        "改行も文字コードも選んだ時のまま (UTF-8・LF)"
+    );
+}

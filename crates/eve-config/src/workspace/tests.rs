@@ -681,3 +681,40 @@ fn ワークスペース層の診断は分類を足した合計で上限まで()
         Some(DiagKind::More { count: 21 })
     );
 }
+
+#[test]
+fn 上限は保留の知らせを未知のキーより先に残す() {
+    // 先頭に未知のキーを 150 個並べ、最後に準安全と危険の項目を書く: 保留の知らせは「ほか N 件」に回さない
+    let mut text: String = (0..150).map(|i| format!("unknown_{i} = 1\n")).collect();
+    text.push_str("[theme]\nname = \"x\"\n[file.swap]\nexclude_secret_files = false\n");
+    let l = ws(&text, &Config::default());
+    assert_eq!(l.diagnostics.len(), crate::CONFIG_MAX_DIAGNOSTICS + 1);
+    let kinds: Vec<&DiagKind> = l.diagnostics.iter().map(|d| &d.kind).collect();
+    assert!(kinds.contains(&&DiagKind::Workspace(WorkspaceProblem::Pending)));
+    assert!(kinds.contains(&&DiagKind::Workspace(WorkspaceProblem::PendingUnsafe)));
+    assert_eq!(
+        kinds.last(),
+        Some(&&DiagKind::More { count: 52 }),
+        "未知のキー 150 のうち 98 だけ残す"
+    );
+}
+
+#[test]
+fn 相対のホームとは比べない() {
+    let linux = Conditions {
+        os: Some(crate::Os::Linux),
+        ..Conditions::default()
+    };
+    let r = crate::resolve_home(
+        &[crate::Source {
+            name: "config.toml".to_owned(),
+            text: Ok(Some(
+                "[workspace]\nsafe_directories = [\"/me\"]\n".to_owned(),
+            )),
+        }],
+        &[],
+        linux,
+        Some("me"),
+    );
+    assert!(r.reports.is_empty(), "{:?}", r.reports);
+}

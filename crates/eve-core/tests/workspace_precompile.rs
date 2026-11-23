@@ -23,6 +23,7 @@ fn ワークスペース層の言語定義の正規表現は_主スレッドに�
         .file("/evo/config/config.toml", b"")
         .file("/w/repo/.eve/config.toml", ws.as_bytes())
         .file("/w/repo/a.unknown", b"text\n")
+        .file("/w/repo/b.unknown", b"text\n")
         .build();
     let conditions = Conditions {
         os: Some(Os::Linux),
@@ -65,8 +66,48 @@ fn ワークスペース層の言語定義の正規表現は_主スレッドに�
         start,
         eve_config::first_line_compiles()
     );
-    // ワークスペース層が届いた後も、文書の判定 (起動時に開いた文書の判定し直し) で組まない
+    // ワークスペース層が届いた後も、文書の判定 (`lang.set auto` で判定し直す) で組まない
     let before = eve_config::first_line_compiles();
-    h.open("/w/repo/a.unknown");
+    auto(&mut h);
     assert_eq!(eve_config::first_line_compiles(), before);
+
+    // config.reload: ジョブを 1 件ずつ渡すたびに判定し直しても組まない。ワークスペース層が届いた後に、まだ開いていない文書を
+    // 開いても (開くジョブは言語定義の読込より後に並ぶ) 組まない
+    h.cmd("config.reload");
+    let mut opened = false;
+    for _ in 0..1_000 {
+        let outs = h.run_one_job_held();
+        if outs.is_empty() {
+            break;
+        }
+        let workspace_read = outs
+            .iter()
+            .any(|o| matches!(o.body, eve_core::JobResult::WorkspaceConfigRead(_)));
+        let before = eve_config::first_line_compiles();
+        h.deliver(outs);
+        auto(&mut h);
+        if workspace_read && !opened {
+            h.open("/w/repo/b.unknown");
+            opened = true;
+        }
+        assert_eq!(
+            eve_config::first_line_compiles(),
+            before,
+            "config.reload の後に主スレッドで正規表現を組んだ"
+        );
+    }
+    assert!(opened, "config.reload でワークスペース層を読み直した");
+    assert_eq!(
+        h.doc_path().as_deref(),
+        Some("/w/repo/b.unknown"),
+        "まだ開いていない文書を開いた"
+    );
+}
+
+/// フォーカスの文書の言語を判定し直す (`lang.set` の `auto`)。
+fn auto(h: &mut Harness) {
+    h.cmd_with(
+        "lang.set",
+        eve_core::Args::new().with_str("language", "auto"),
+    );
 }

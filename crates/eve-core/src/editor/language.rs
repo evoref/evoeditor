@@ -267,6 +267,9 @@ impl EditorState {
     /// ワークスペース層の言語定義が届いたとき。LANG-7)。
     fn spawn_languages_read(&mut self, redetect: bool, workspace_only: bool) {
         let dir = self.config_sources().languages;
+        // 正規表現はジョブの中で組む (差し替えた集まりで主スレッドが判定するときに組まない)。起動時の 1 回だけは
+        // `PrecompileLanguages` で組む (起動時の文書の読込を待たせない、07 §9.6 の段 2 の細目)
+        let precompile = workspace_only || !redetect;
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
@@ -274,9 +277,7 @@ impl EditorState {
                 dir,
                 config: self.settings.config_languages.clone(),
                 workspace: self.settings.workspace_languages.clone(),
-                // 起動の後のワークスペース層の契機は、届いたらすぐ判定し直すので、ジョブの中で正規表現まで組む (主スレッドで
-                // 組まない)。ほかは `PrecompileLanguages` で組む (起動時の文書の読込を待たせない、07 §9.6 の段 2 の細目)
-                precompile: workspace_only,
+                precompile,
                 workspace_files: self.settings.workspace_files.clone(),
             },
         );
@@ -285,6 +286,7 @@ impl EditorState {
             Pending::LanguagesRead {
                 startup: redetect,
                 workspace_only,
+                precompiled: precompile,
             },
         );
     }
@@ -324,12 +326,14 @@ impl EditorState {
             _ => false,
         };
         if !std::sync::Arc::ptr_eq(&set, &self.settings.languages) || !same_ws {
+            // 古い結果 (間に `config.reload` で差し替えた): 判定し直しの求めは、差し替えた集まりが組み終わったときに持ち越す
+            self.settings.redetect_after_compile |= redetect;
             return;
         }
         for (file, diags) in &reports {
             self.report_config_more(file, diags);
         }
-        if redetect {
+        if redetect || std::mem::take(&mut self.settings.redetect_after_compile) {
             self.redetect_languages();
         }
     }
@@ -341,6 +345,7 @@ impl EditorState {
         r: JobResult,
         startup: bool,
         workspace_only: bool,
+        precompiled: bool,
     ) {
         let JobResult::LanguagesRead {
             set,
@@ -373,9 +378,9 @@ impl EditorState {
             }
         }
         self.refresh_all_doc_settings();
-        if workspace_only {
-            // 正規表現はジョブの中で組んである
-            if startup {
+        if precompiled {
+            // 正規表現はジョブの中で組んである。持ち越した判定し直しの求めもここで済ませる
+            if startup || std::mem::take(&mut self.settings.redetect_after_compile) {
                 self.redetect_languages();
             }
         } else {
