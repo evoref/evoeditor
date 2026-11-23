@@ -70,7 +70,8 @@ impl FsClass {
 
 /// ネットワーク・共有の FS の `f_type` (05 §5.5)。値はカーネルの公開されたヘッダで確かめたものだけ (`linux/magic.h` の
 /// NFS・SMB・CIFS・SMB2・9p (WSL の `DrvFs` を含む)・FUSE・AFS・kAFS・Coda・Ceph・NCP・OCFS2 と、`linux/gfs2_ondisk.h` の
-/// GFS2)。vboxsf・Lustre・GPFS は公開されたヘッダに値が無いので入れない (`Local` になる)。
+/// GFS2)。Lustre・GPFS は公開されたヘッダに値が無いので入れない (`Local` になる)。vboxsf はカーネルのソースの値で、
+/// `FsKind` では `Local` のまま、所有者の検査では判定できない側に入れる (`OWNER_MAPPED_FS`)。
 #[cfg(any(target_os = "linux", test))]
 const NETWORK_FS: [(u32, &str); 13] = [
     (0x6969, "nfs"),
@@ -95,9 +96,10 @@ const REUSED_ID_FS: [u32; 2] = [0x4D44, 0x2011_BAB0];
 /// 所有者と mode をマウントの指定で写す、ローカルの FS の `f_type` (07 §12.1 の OWN-3 の (ii))。値は `linux/magic.h`
 /// (MSDOS (vfat を含む)・`exFAT`・ISO 9660・UDF。NTFS (古いドライバ) は Linux 6.8 までの `linux/magic.h` の
 /// `NTFS_SB_MAGIC`) と、カーネルのソースの定数 (`fs/ntfs3/super.c` の `s_magic`、`fs/vboxsf/super.c` の
-/// `VBOXSF_SUPER_MAGIC`) で確かめた (2026-11-23)。ntfs-3g は FUSE なので `NETWORK_FS` の側で判定できない。
+/// `VBOXSF_SUPER_MAGIC`、`include/linux/hfs_common.h` の `HFS_SUPER_MAGIC`・`HFSPLUS_SUPER_MAGIC` (statfs が返す値)) で
+/// 確かめた (2026-11-23)。ntfs-3g は FUSE なので `NETWORK_FS` の側で判定できない。
 #[cfg(any(target_os = "linux", test))]
-const OWNER_MAPPED_FS: [(u32, &str); 7] = [
+const OWNER_MAPPED_FS: [(u32, &str); 9] = [
     (0x4D44, "vfat"),
     (0x2011_BAB0, "exfat"),
     (0x7366_746E, "ntfs3"),
@@ -105,6 +107,8 @@ const OWNER_MAPPED_FS: [(u32, &str); 7] = [
     (0x9660, "iso9660"),
     (0x1501_3346, "udf"),
     (0x786F_4256, "vboxsf"),
+    (0x4244, "hfs"),
+    (0x482B, "hfsplus"),
 ];
 
 /// 所有者を判定できない FS なら、その名前 (07 §12.1 の OWN-3。05 §5.5 の `FsKind::Network` の FS のすべてと、
@@ -292,6 +296,8 @@ mod tests {
             (0x9660, "iso9660"),
             (0x1501_3346, "udf"),
             (0x786F_4256, "vboxsf"),
+            (0x4244, "hfs"),
+            (0x482B, "hfsplus"),
         ] {
             assert_eq!(owner_unknown_fs(t), Some(name), "{t:#x}");
         }

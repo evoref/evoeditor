@@ -502,15 +502,19 @@ trait FileSystem: Send + Sync {
     fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError>; // v0.5 の M31 (ワークスペースの走査。ファインダ・横断検索、03 §12.7.2。パスの補完は送った)。
                                                                              // dir の直下の項目を max_entries 個まで返す (`.` と `..` は返さない。並びは問わない。追加の stat をしない)。
                                                                              // dir が無い → NotFound (detail なし。dir がダングリングのリンクなら DanglingLink)、ディレクトリでない (ファイルを指すリンクを含む) → InvalidPath (detail なし)、読めない → PermissionDenied。既定は Unsupported
-    fn read_checked(&self, dir: &FsPath, name: &OsStr, max_len: u64, check: OwnerCheck) -> Result<CheckedRead, FsError>; // v0.5 の M33 (ワークスペース設定と .editorconfig、07 §12.1 の OWN-1〜OWN-6)。
-                                                                             // 順: dir を開く → name の有無を開かずに確かめる (無ければ dir の判定に依らず Ok(Missing)) → dir を判定する →
-                                                                             // 通れば dir の中の name を開いて判定し、同じハンドルから max_len + 1 バイトまで読む (判定と読込の間に差し替えられない)。
-                                                                             // check = Skip (workspace.safe_directories の下) なら所有者の判定を省き、ふつうのファイルかだけを確かめる。
-                                                                             // dir が無い・ディレクトリでない・name が無い → Ok(Missing)。dir が読めない → PermissionDenied。共有違反 (Windows) → Busy (一時の失敗)。
-                                                                             // name が 1 つの名前でない (空・`.`・`..`・区切り。Windows は `:` も) → InvalidPath。既定は Unsupported (core は「読まない」として診断する)。
-                                                                             // dir の最後の要素が `.eve` (Windows は大文字小文字を区別しない) のときだけ、dir もリンクを辿らずに開く (07 §12.1 の OWN-6。M33 の段 4 で決めた)
+    fn read_checked(&self, dir: &FsPath, name: &OsStr, max_len: u64, safe_dirs: &[FsPath], links: DirLinks) -> Result<CheckedRead, FsError>; // v0.5 の M33 (ワークスペース設定と .editorconfig、07 §12.1 の OWN-1〜OWN-7)。
+                                                                             // 形は PO の決定 2026-11-23 の A で改めた (11-22 の (6) の `check: OwnerCheck` をやめた。07 §12.6.3)。
+                                                                             // 順: dir を開いて固定する (links = NoFollowFromEve なら、dir の中の最後の `.eve` (WORKSPACE_CONFIG_DIR。全 OS で大文字小文字を区別しない) の要素から
+                                                                             // dir までを 1 つずつリンクを辿らずに開く。`.eve/themes` の `.eve` も辿らない) → name の有無を開かずに確かめる (無ければ dir の判定に依らず Ok(Missing)) →
+                                                                             // 開いた dir の最終のパス (Windows は GetFinalPathNameByHandleW、Linux は /proc/self/fd/N の readlink) が safe_dirs (workspace.safe_directories。
+                                                                             // canonicalize した形) のどれかか、その下なら所有者の判定を省く (OWN-5。ふつうのファイルかとリンクを辿らないことは確かめる)。下でなければ dir を判定する →
+                                                                             // dir の中の name を開いて判定し、同じハンドルから max_len + 1 バイトまで読む (判定と読込の間に差し替えられない)。
+                                                                             // dir が無い・ディレクトリでない・name が無い → Ok(Missing)。dir が読めない → PermissionDenied。共有違反 (Windows)・リース (Linux) → Busy (一時の失敗)。
+                                                                             // name が 1 つの名前でない (空・`.`・`..`・区切り)・dir に `..` がある・NoFollowFromEve で dir に `.eve` が無い・Windows で dir か name の要素の
+                                                                             // 末尾が `.` か空白か要素に `:` がある (Win32 の正規化で `.eve.` が `.eve` を開く) → InvalidPath。既定は Unsupported (core は「読まない」として診断する)
 }
-enum OwnerCheck { Check, Skip }                                              // v0.5 の M33
+const WORKSPACE_CONFIG_DIR: &str = ".eve";                                  // v0.5 の M33。ルートの目印と read_checked のリンクを辿らない要素で共有する
+enum DirLinks { Follow /*.editorconfig の置き場所*/, NoFollowFromEve /*.eve・.eve/themes*/ } // v0.5 の M33 (PO の決定 2026-11-23 の A)
 enum CheckedRead {                                                           // v0.5 の M33
     Missing,                                                                 // ファイルが無い (判定していない)
     Read { bytes: Vec<u8> },                                                 // 判定を通って読んだ (max_len 以下)
@@ -521,9 +525,10 @@ enum OwnerVerdict {                                                          // 
     NotOwner { owner: String /*アカウントの名前。名前に直せなければ SID・uid の文字列*/ },
     OthersCanWrite { who: Vec<String> /*書込を許されたアカウントの名前 (Windows。NULL の DACL は "Everyone"、読めない型の ACE は "ACE type 0x.."。M33 の段 4)。
                                         Unix は o+w なら "others"、拡張 ACL があれば "acl"*/ },
-    Unknown { fs: String /*"exFAT"・"9p" など。問い合わせの失敗と、開いたファイルの親が固定したディレクトリと違うとき (07 §12.1 の OWN-6) は "query_failed"。
-                           Linux 以外の Unix は "unsupported" (所有者を写す FS を見分けていない)*/ },
-    NotRegular,                                                              // ふつうのファイルでない (ディレクトリ・FIFO・デバイス・シンボリックリンク・ジャンクション・名前の代理の再解析点)
+    Unknown { fs: String /*"exFAT"・"FAT32"・"9p" など。Windows の遠くのボリューム (SMB など) は "remote"。問い合わせの失敗と、開いた物が判定した場所と違うとき
+                           (07 §12.1 の OWN-6) は "query_failed"。Linux 以外の Unix は "unsupported" (所有者を写す FS と拡張 ACL を見分けていない)*/ },
+    NotRegular,                                                              // ふつうのファイルでない (ディレクトリ・FIFO・デバイス・シンボリックリンク・ジャンクション・名前の代理の再解析点・許可リストに無い再解析点)
+}
 }
 struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries 個を返した後にまだ項目があったので列挙をやめた*/, incomplete: bool /*列挙そのものが途中で失敗した (SMB の切断・NFS の ESTALE など)。そこまでの項目を返す。項目 1 つの読み取りの失敗はその項目を飛ばすだけで立てない*/ }   // v0.5 の M31
 struct DirEntry  { name: OsString /*最後の要素だけ。UTF-8 で表せない名前もそのまま*/, kind: EntryKind,
@@ -1733,11 +1738,12 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // 名前の順に *.toml を読み (256 ファイル・1 ファイル 256 KiB まで)、本文と読めなかった理由を返す (解析は主スレッド。ユーザー層なので config.reload と同じ)
     ReadWorkspaceConfig { root: FsPath, conditions: Conditions /*07 §3.4 の COND-2*/, user: Arc<ResolvedConfig> /*「方向のみ」の比較に使う*/,
                           safe_dirs: Arc<[FsPath]> /*workspace.safe_directories*/ },
-                                                                      // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み、
+                                                                      // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み
+                                                                      // (dir は <root>/.eve、links = NoFollowFromEve、safe_dirs をそのまま渡す。安全な場所の下かは Port が開いたディレクトリの最終のパスで決める、§4.5)、
                                                                       // 解析・条件の解決・検証・分類までジョブの中で行い (WSC-2)、安全な項目の値・キーの割当・診断を返す。doc は None
     ReadEditorConfig { path: FsPath /*文書の開いたときの絶対パス*/, safe_dirs: Arc<[FsPath]> },
-                                                                      // io。文書の読込の完了・名前を付けて保存・config.reload で積む (07 §10.3 の EC-1)。上へ read_checked で .editorconfig を集めて読み、
-                                                                      // 解析と glob の照合までジョブの中で行い、当たったプロパティ (由来つき) と診断を返す
+                                                                      // io。文書の読込の完了・名前を付けて保存・config.reload で積む (07 §10.3 の EC-1)。上へ read_checked で .editorconfig を集めて読み
+                                                                      // (dir は各祖先、links = Follow、safe_dirs をそのまま渡す)、解析と glob の照合までジョブの中で行い、当たったプロパティ (由来つき) と診断を返す
 }
 struct OpenOptions {               // 開くジョブの指定 (Copy)。確認 (ConfirmAsk) の回答で立てて先頭から再投入する。前の回答で立てたものは引き継ぐ (選択肢の正本は 03 §9.2 の表)
     forced: Option<Encoding>,      // --encoding か「文字コードを指定して開く」(FR-111)。判定とバイナリ・UTF-32 の BOM の確認を行わない

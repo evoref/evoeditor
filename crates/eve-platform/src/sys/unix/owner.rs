@@ -28,7 +28,12 @@ pub(crate) fn mode_at(dir: &File, name: &OsStr) -> io::Result<Option<u32>> {
         )
     };
     if r == 0 {
-        return Ok(Some(st.st_mode));
+        // `mode_t` は Linux で u32、macOS・BSD で u16
+        #[allow(
+            clippy::useless_conversion,
+            reason = "mode_t は OS ごとに u32 か u16 (Linux では同じ型の変換)"
+        )]
+        return Ok(Some(u32::from(st.st_mode)));
     }
     let e = io::Error::last_os_error();
     match e.raw_os_error() {
@@ -54,6 +59,35 @@ pub(crate) fn open_at_nofollow(dir: &File, name: &OsStr) -> io::Result<File> {
     }
     // SAFETY: `fd` は今開いた記述子で、`File` だけが所有する (閉じるのは `File` の Drop)。
     Ok(unsafe { File::from_raw_fd(fd) })
+}
+
+/// `dir` の中のディレクトリ `name` を、リンクを辿らずに開く (`openat(…, O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW)`)。
+/// リンクなら Linux は `ENOTDIR`、ほかは `ELOOP` などで失敗する (呼び側が `mode_at` でリンクかを見分ける)。
+pub(crate) fn open_dir_at_nofollow(dir: &File, name: &OsStr) -> io::Result<File> {
+    let c = c_name(name)?;
+    // SAFETY: `dir` は開いているディレクトリの記述子、`c` は NUL 終端の名前。作らないので mode は渡さない。
+    let fd = unsafe {
+        libc::openat(
+            dir.as_raw_fd(),
+            c.as_ptr(),
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_DIRECTORY | libc::O_NOFOLLOW,
+        )
+    };
+    if fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: `fd` は今開いた記述子で、`File` だけが所有する。
+    Ok(unsafe { File::from_raw_fd(fd) })
+}
+
+/// 開いた物の最終のパス (Linux は `/proc/self/fd/<fd>` の `readlink`。07 §12.1 の OWN-5)。取れなければ `None`
+/// (`/proc` が無い・Linux 以外。呼び側は安全な場所の下でないとみなす)。
+pub(crate) fn final_path(f: &File) -> Option<std::path::PathBuf> {
+    if cfg!(target_os = "linux") {
+        std::fs::read_link(format!("/proc/self/fd/{}", f.as_raw_fd())).ok()
+    } else {
+        None
+    }
 }
 
 /// 開いている物のある FS の `f_type` (`fstatfs`。下位 32 bit)。
@@ -111,18 +145,23 @@ mod tests {
             .custom_flags(libc::O_DIRECTORY)
             .open(&d)
             .unwrap();
+        // POSIX の値 (`mode_t` の型に依らない)
+        let (fmt, reg, lnk) = (0o170_000u32, 0o100_000u32, 0o120_000u32);
         let m = mode_at(&dir, OsStr::new("a")).unwrap().unwrap();
-        assert_eq!(m & libc::S_IFMT, libc::S_IFREG);
+        assert_eq!(m & fmt, reg);
         let l = mode_at(&dir, OsStr::new("l")).unwrap().unwrap();
-        assert_eq!(l & libc::S_IFMT, libc::S_IFLNK);
+        assert_eq!(l & fmt, lnk);
         assert_eq!(mode_at(&dir, OsStr::new("none")).unwrap(), None);
         assert!(open_at_nofollow(&dir, OsStr::new("a")).is_ok());
+        assert!(open_at_nofollow(&dir, OsStr::new("l")).is_err());
+        #[cfg(target_os = "linux")]
         assert_eq!(
             open_at_nofollow(&dir, OsStr::new("l"))
                 .unwrap_err()
                 .raw_os_error(),
             Some(libc::ELOOP)
         );
+        assert!(final_path(&dir).is_some() || !cfg!(target_os = "linux"));
         assert_eq!(user_name(0).as_deref(), Some("root"));
         let _ = std::fs::remove_dir_all(&d);
     }

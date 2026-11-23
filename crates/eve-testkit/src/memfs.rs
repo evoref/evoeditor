@@ -9,10 +9,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use eve_core::{
-    CheckedObject, CheckedRead, ChunkError, Clock, DirEntry, DirListing, EntryKind, Expect, FileId,
-    FileKind, FileMeta, FileStamp, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind,
-    FsKind, FsPath, FsyncLevel, HardlinkPolicy, InflightRecord, LinkInfo, LinkKind, Millis,
-    OwnerCheck, OwnerVerdict, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
+    CheckedObject, CheckedRead, ChunkError, Clock, DirEntry, DirLinks, DirListing, EntryKind,
+    Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime, FsError, FsErrorDetail,
+    FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy, InflightRecord, LinkInfo, LinkKind,
+    Millis, OwnerVerdict, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
+    WORKSPACE_CONFIG_DIR,
 };
 
 use crate::ManualClock;
@@ -941,24 +942,55 @@ impl FileSystem for MemFs {
         dir: &FsPath,
         name: &std::ffi::OsStr,
         max_len: u64,
-        check: OwnerCheck,
+        safe_dirs: &[FsPath],
+        links: DirLinks,
     ) -> Result<CheckedRead, FsError> {
+        use std::path::Component;
         let mut s = self.st();
         injected(&mut s, FsOp::ReadChecked)?;
-        // 1 つの名前だけ (実 FS と同じ規則。Windows は `\` と `:` も区切りとみなす)
-        let bad = |c: char| c == '/' || c == '\0' || (cfg!(windows) && (c == '\\' || c == ':'));
+        let invalid = || Err(FsError::new(FsErrorKind::InvalidPath));
+        // Windows で Win32 の正規化が落とす・別に読む形 (末尾の `.`・空白、`:`) は受け付けない (実 FS と同じ規則)
+        let bad_win =
+            |s: &str| cfg!(windows) && (s.ends_with('.') || s.ends_with(' ') || s.contains(':'));
+        // 1 つの名前だけ (Windows は `\` も区切り)
+        let bad = |c: char| c == '/' || c == '\0' || (cfg!(windows) && c == '\\');
         match name.to_str() {
-            Some(n) if !n.is_empty() && n != "." && n != ".." && !n.contains(bad) => {}
-            _ => return Err(FsError::new(FsErrorKind::InvalidPath)),
+            Some(n)
+                if !n.is_empty() && n != "." && n != ".." && !n.contains(bad) && !bad_win(n) => {}
+            _ => return invalid(),
+        }
+        let comps: Vec<Component<'_>> = dir.as_path().components().collect();
+        if comps.iter().any(|c| match c {
+            Component::ParentDir => true,
+            Component::Normal(n) => bad_win(&n.to_string_lossy()),
+            _ => false,
+        }) {
+            return invalid();
         }
         let rejected = |what, verdict| Ok(CheckedRead::Rejected { what, verdict });
-        // `.eve` はリンクを辿らない。ほかのディレクトリのリンクは辿る
-        let dir = match s.links.get(dir) {
-            Some(_) if dir.as_path().file_name() == Some(std::ffi::OsStr::new(".eve")) => {
-                return rejected(CheckedObject::Dir, OwnerVerdict::NotRegular);
+        let dir = match links {
+            // ディレクトリのリンクは辿る (1 段)
+            DirLinks::Follow => s.links.get(dir).cloned().unwrap_or_else(|| dir.clone()),
+            // 最後の `.eve` (大文字小文字を区別しない) から `dir` までの要素はリンクを辿らない
+            DirLinks::NoFollowFromEve => {
+                let is_eve = |c: &Component<'_>| {
+                    matches!(c, Component::Normal(n)
+                        if n.to_str().is_some_and(|n| n.eq_ignore_ascii_case(WORKSPACE_CONFIG_DIR)))
+                };
+                let Some(i) = comps.iter().rposition(is_eve) else {
+                    return invalid();
+                };
+                // `.eve` より上はリンクを辿る (1 段)
+                let base = FsPath::new(comps[..i].iter().collect::<std::path::PathBuf>());
+                let mut cur = s.links.get(&base).cloned().unwrap_or(base);
+                for c in &comps[i..] {
+                    cur = cur.join(c.as_os_str());
+                    if s.links.contains_key(&cur) {
+                        return rejected(CheckedObject::Dir, OwnerVerdict::NotRegular);
+                    }
+                }
+                cur
             }
-            Some(t) => t.clone(),
-            None => dir.clone(),
         };
         // 無い・ディレクトリでない (`.eve` がファイル) なら、その中のファイルは無い
         if !dir_exists(&s, &dir) || s.files.contains_key(&dir) || s.specials.contains(&dir) {
@@ -975,17 +1007,17 @@ impl FileSystem for MemFs {
         if entry.is_none() && !not_regular {
             return Ok(CheckedRead::Missing);
         }
-        if check == OwnerCheck::Check
-            && let Some(v) = s.owner_verdicts.get(&dir)
-        {
+        // 安全な場所の下か (リンクを辿った後のディレクトリで比べる。実 FS の最終のパスと同じ)
+        let check = !safe_dirs
+            .iter()
+            .any(|sd| dir.as_path().starts_with(sd.as_path()));
+        if check && let Some(v) = s.owner_verdicts.get(&dir) {
             return rejected(CheckedObject::Dir, v.clone());
         }
         let Some(e) = entry.filter(|_| !not_regular) else {
             return rejected(CheckedObject::File, OwnerVerdict::NotRegular);
         };
-        if check == OwnerCheck::Check
-            && let Some(v) = s.owner_verdicts.get(&path)
-        {
+        if check && let Some(v) = s.owner_verdicts.get(&path) {
             return rejected(CheckedObject::File, v.clone());
         }
         if e.data.len() as u64 > max_len {

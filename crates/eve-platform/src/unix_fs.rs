@@ -299,9 +299,10 @@ impl FileSystem for UnixFs {
         dir: &FsPath,
         name: &std::ffi::OsStr,
         max_len: u64,
-        check: eve_core::OwnerCheck,
+        safe_dirs: &[FsPath],
+        links: eve_core::DirLinks,
     ) -> Result<eve_core::CheckedRead, FsError> {
-        crate::read_checked::read_checked(dir, name, max_len, check)
+        crate::read_checked::read_checked(dir, name, max_len, safe_dirs, links)
     }
 
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {

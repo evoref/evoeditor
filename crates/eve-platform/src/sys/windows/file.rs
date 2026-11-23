@@ -240,7 +240,7 @@ fn trusted_id_fs(f: &File) -> bool {
 
 /// ハンドルがネットワーク上のファイルか (`FileRemoteProtocolInfo` はリモートのファイルでだけ成功する)。ドライブの割当て
 /// を通らないパス (シンボリックリンクの先が共有フォルダ) も、パスの文字列の判定 (`is_remote`) と違って見分けられる。
-fn is_remote_handle(f: &File) -> bool {
+pub(crate) fn is_remote_handle(f: &File) -> bool {
     let mut info = FILE_REMOTE_PROTOCOL_INFO::default();
     // SAFETY: `f` は開いているファイルのハンドル。書込先は `FILE_REMOTE_PROTOCOL_INFO` で、渡す大きさはその大きさ。
     let ok = unsafe {
