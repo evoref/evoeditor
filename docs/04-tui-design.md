@@ -883,7 +883,9 @@ TUI では IME は端末/OS が処理し、evoeditor には **確定文字列だ
 
 **v0.5 の M32 で足す割当** (複数カーソル FR-211・対応括弧 FR-308。正本は 07 §11.6 の「複数カーソルと対応括弧」、規則は 03 §4.5.1 / §5.7): 次の一致を足す `select.add_next_match` = `Ctrl+D` (予約していたキー)、一致をすべて選ぶ `select.all_matches` = `Ctrl+Shift+L` [E] / 代替 `Ctrl+K E`、上 / 下の行にカーソルを足す `select.add_cursor_above` / `_below` = `Ctrl+Alt+↑` / `Ctrl+Alt+↓` / 代替 `Ctrl+K Shift+↑` / `Ctrl+K Shift+↓`、対応する括弧へ `cursor.goto_bracket` = `Ctrl+]` / 代替 `Ctrl+K %` (Vim の `%`。`Ctrl+]` は従来の端末で 0x1D として届き §6.2 で正規化している。IME が ON でも届く。VS Code の `Ctrl+Shift+\` は従来の端末で `Ctrl+\` (分割) と同じ符号になるので使わない)。主のカーソル 1 つに戻すのは `Esc` (§7.5)。端末に貼り付けを横取りされない `edit.paste` の代替 `Ctrl+K V` も M32 で足す (Windows Terminal の `Ctrl+V` は端末の貼り付けになり、短い貼り付けは個別のキーとして届いて複数カーソルに分配されない。03 §4.5.3 の MCUR-10)。
 
-**未割当として予約** (将来の衝突を避ける): `Ctrl+L` (v0.5: 行選択、FR-309)、`Ctrl+/` (v0.5: コメント切替、FR-209)、`Ctrl+\` (v0.5: 右への分割 `pane.split_right`、FR-509。07 §11.6 の「ペイン」)、`Ctrl+K` 以下の未使用文字、`Ctrl+B` (**使わない**: tmux プレフィックス)、`Ctrl+T` (v0.5: シンボル/ファイル検索候補)、`Ctrl+J` (レガシーで `Enter`/LF と紛らわしいため使わない)。
+**v0.5 の M33 で足す割当** (行コメント FR-209。正本は 07 §11.6 の「設定と言語」、規則は 03 §15.6): 行コメントの切替 `edit.toggle_comment` = `Ctrl+/` (v0.1 から予約していたキー。Windows のコンソール API では仮想キーで届き、従来の端末では 0x1F として届いて §6.2 で `Ctrl+/` に正規化している) / 代替 `Ctrl+K /` (`/` を送らない配列・端末のため。2 打目は IME を OFF にして打つ)。
+
+**未割当として予約** (将来の衝突を避ける): `Ctrl+L` (v0.5: 行選択、FR-309)、`Ctrl+\` (v0.5: 右への分割 `pane.split_right`、FR-509。07 §11.6 の「ペイン」)、`Ctrl+K` 以下の未使用文字、`Ctrl+B` (**使わない**: tmux プレフィックス)、`Ctrl+T` (v0.5: シンボル/ファイル検索候補)、`Ctrl+J` (レガシーで `Enter`/LF と紛らわしいため使わない)。
 
 > `Ctrl+K` 自体はチョードのプレフィックスとして予約する (VS Code 系と同じ。nano/readline の「行末まで削除」には使わない)。
 

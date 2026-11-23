@@ -109,14 +109,15 @@ fn plan_edits(doc: &Document, lines: &[TargetLine], token: &str) -> Vec<Edit> {
         .map(|&l| indent_width(t, l, tab_width))
         .min()
         .unwrap_or(0);
-    let insert = format!("{token} ");
+    // 全部の行で同じ文字列を共有する (行ごとに確保しない)
+    let insert: std::sync::Arc<str> = format!("{token} ").into();
     lines
         .iter()
         .map(|&l| {
             let p = ByteOff(insert_pos(t, l, m, tab_width));
             Edit {
                 range: ByteRange::new(p, p),
-                insert: insert.as_str().into(),
+                insert: std::sync::Arc::clone(&insert),
             }
         })
         .collect()

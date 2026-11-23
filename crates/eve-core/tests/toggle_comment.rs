@@ -11,7 +11,7 @@
 use eve_config::Conditions;
 use eve_core::{CommandResult, InitialFile, StartupConfig};
 use eve_testkit::Harness;
-use eve_text::{ByteOff, Range, Selection};
+use eve_text::{ByteOff, Range, Selection, TextRead};
 use proptest::prelude::*;
 
 /// 利用者の言語定義 (組込みに `--` の記号の言語が無いので足す)。
@@ -300,6 +300,43 @@ fn cmt5_改行コードは変えない() {
 }
 
 #[test]
+fn cmt4_外して_cr_と_lf_が隣り合うと_1_つの改行になり_undo_で戻る() {
+    // 03 §15.6 の細目 (c): CR で終わる行の次の `#` だけの行 (LF で終わる) を外すと、CR と LF が CRLF の 1 つの改行になる
+    let text = "a\r#\nb";
+    let mut h = open("/w/a.py", text);
+    assert_eq!(
+        h.editor
+            .state()
+            .document(h.doc_id())
+            .unwrap()
+            .text()
+            .len_lines(),
+        3
+    );
+    select(&mut h, &[(2, 2)]);
+    let before = selection(&h);
+    toggle(&mut h);
+    assert_eq!(h.doc_text(), "a\r\nb");
+    assert_eq!(
+        h.editor
+            .state()
+            .document(h.doc_id())
+            .unwrap()
+            .text()
+            .len_lines(),
+        2,
+        "行の数が 1 減る"
+    );
+    let after = selection(&h);
+    h.cmd("edit.undo");
+    assert_eq!(h.doc_text(), text);
+    assert_eq!(selection(&h), before);
+    h.cmd("edit.redo");
+    assert_eq!(h.doc_text(), "a\r\nb");
+    assert_eq!(selection(&h), after);
+}
+
+#[test]
 fn cmt5_行全体の選択は行全体のまま() {
     let mut h = open("/w/a.py", "a\nb\nc\n");
     select(&mut h, &[(0, 4)]);
@@ -539,10 +576,10 @@ proptest! {
         let targets = model_targets(&text, &before);
         let orig = split(&text);
         // CR の行の次の、記号 (と空白) だけで LF で終わる行は、外すと CR と LF が隣り合って CRLF の 1 つの改行になる
-        // (行の数が変わる。手で消したときと同じ)。本文と Undo の性質は保つが、行ごとの比べ方ができないので除く
-        prop_assume!(!orig.windows(2).any(|w| {
+        // (行の数が変わる。03 §15.6 の細目 (c))。そのときは行ごとの比べ方だけを飛ばし、本文と Undo / Redo は確かめる
+        let merges_crlf = orig.windows(2).any(|w| {
             w[0].1 == "\r" && w[1].1 == "\n" && (w[1].0 == token || w[1].0 == format!("{token} "))
-        }));
+        });
         let content: Vec<usize> = targets.iter().copied().filter(|&l| !is_blank(&orig[l].0)).collect();
         h.clear_log();
         prop_assert_eq!(toggle(&mut h), CommandResult::Done);
@@ -554,12 +591,19 @@ proptest! {
         let adding = content.iter().any(|&l| !lead_rest(&orig[l].0).starts_with(token));
         let once = h.doc_text();
         let after = split(&once);
-        prop_assert_eq!(after.len(), orig.len(), "行の数は変わらない");
-        // (c) 空行・空白だけの行・対象でない行と、改行は変わらない
-        for (i, ((ob, oe), (ab, ae))) in orig.iter().zip(&after).enumerate() {
-            prop_assert_eq!(oe, ae, "改行 (行 {})", i);
-            if is_blank(ob) || !targets.contains(&i) {
-                prop_assert_eq!(ob, ab, "行 {} は変わらない", i);
+        if !adding {
+            // 外す向き: 各対象行の記号と、そのすぐ後の空白 1 つを消したもの (CMT-4)
+            prop_assert_eq!(&once, &removed(&orig, &content, token), "外した本文");
+        }
+        let same_lines = after.len() == orig.len();
+        prop_assert!(same_lines || (!adding && merges_crlf), "行の数が変わるのは CR と LF が隣り合うときだけ");
+        if same_lines {
+            // (c) 空行・空白だけの行・対象でない行と、改行は変わらない
+            for (i, ((ob, oe), (ab, ae))) in orig.iter().zip(&after).enumerate() {
+                prop_assert_eq!(oe, ae, "改行 (行 {})", i);
+                if is_blank(ob) || !targets.contains(&i) {
+                    prop_assert_eq!(ob, ab, "行 {} は変わらない", i);
+                }
             }
         }
         // (d) 1 回の Undo で本文と選択が戻り、Redo で後に戻る
@@ -576,7 +620,7 @@ proptest! {
             // (a) もう一度で元に戻る
             toggle(&mut h);
             prop_assert_eq!(h.doc_text(), text, "付けてから外すと元に戻る");
-        } else {
+        } else if same_lines {
             // 外す向き: 外した後に付けると、各行が「最も浅い字下げの位置 + 記号 + 空白」の形になる (外した後もすべての行が
             // 記号で始まっていれば (`###`)、2 回目も外す向きなので調べない)。2 回目の対象は、外した後の選択から決める
             // (選択の端が外した記号の中にあると、消した範囲の始まりへ寄るので、行頭へ寄った終わりの行は対象から外れる)
@@ -590,6 +634,23 @@ proptest! {
             }
         }
     }
+}
+
+/// 参照モデルの外した本文: `lines` の各対象行 (`content`) の行頭の空白の直後の記号と、そのすぐ後の空白 1 つを消す。
+fn removed(lines: &[(String, String)], content: &[usize], token: &str) -> String {
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, (body, eol))| {
+            if !content.contains(&i) {
+                return format!("{body}{eol}");
+            }
+            let ws = lead(body);
+            let rest = &body[ws.len() + token.len()..];
+            let rest = rest.strip_prefix(' ').unwrap_or(rest);
+            format!("{ws}{rest}{eol}")
+        })
+        .collect()
 }
 
 /// 行頭の空白の後ろ。
