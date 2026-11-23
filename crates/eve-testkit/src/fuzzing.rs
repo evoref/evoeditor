@@ -819,6 +819,51 @@ fn bracket_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("bracket {typed:?} + goto_bracket ×{n}")
 }
 
+/// 行コメントの切替 (docs/03 §15.6、docs/09 §3.3 の `fuzz_editor`。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
+/// (`#`・`//`・`;`) か `plain` に替え、フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を
+/// 含む) を置いて `edit.toggle_comment` を 1〜2 回実行し、ときどき Undo する。
+fn toggle_comment_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const LANGS: [&str; 4] = ["python", "rust", "ini", "plain"];
+    let lang = (b.u8() & 1 == 0).then(|| LANGS[usize::from(b.u8()) % LANGS.len()]);
+    if let Some(l) = lang {
+        h.cmd_with("lang.set", Args::new().with_str("language", l));
+    }
+    let st = h.editor.state();
+    let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
+        return "toggle_comment (View なし)".to_owned();
+    };
+    let len = st
+        .view(view)
+        .and_then(|v| st.document(v.doc))
+        .map_or(0, eve_core::Document::len_bytes);
+    let n = 1 + usize::from(b.u8() % 8);
+    // 文書の長さ + 2 までを選ぶ (外の位置は正規化で末尾に収まる)
+    let at = |b: &mut Bytes<'_>| {
+        eve_text::ByteOff(usize::from(u16::from_le_bytes([b.u8(), b.u8()])) % (len + 3))
+    };
+    let ranges: Vec<eve_text::Range> = (0..n)
+        .map(|_| {
+            let anchor = at(b);
+            let head = if b.u8() & 1 == 0 { anchor } else { at(b) };
+            eve_text::Range::new(anchor, head)
+        })
+        .collect();
+    let primary = usize::from(b.u8()) % n;
+    if let Some(sel) = eve_text::Selection::new(ranges, primary) {
+        h.set_selection(sel);
+    }
+    let times = 1 + b.u8() % 2;
+    for _ in 0..times {
+        h.cmd("edit.toggle_comment");
+    }
+    let undo = b.u8().is_multiple_of(4);
+    if undo {
+        h.cmd("edit.undo");
+    }
+    let _ = h.frame();
+    format!("toggle_comment lang {lang:?} ranges {n} ×{times} undo {undo}")
+}
+
 /// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
 /// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
 /// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは `cmd` の一覧の外の操作 26 で選ぶ)。
@@ -1037,7 +1082,8 @@ pub fn editor_sequence(data: &[u8]) {
         .iter()
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
-        // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
+        // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
+        // 行コメントの切替 (M33) は操作 28 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1048,6 +1094,7 @@ pub fn editor_sequence(data: &[u8]) {
                         | "select.add_cursor_above"
                         | "select.add_cursor_below"
                         | "cursor.goto_bracket"
+                        | "edit.toggle_comment"
                 )
         })
         .collect();
@@ -1070,7 +1117,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 28 {
+        match b.u8() % 29 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1232,6 +1279,11 @@ pub fn editor_sequence(data: &[u8]) {
             27 => {
                 // 対応括弧への移動と強調 (v0.5 の M32 の段 4。docs/03 §5.7)
                 let what = bracket_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            28 => {
+                // 行コメントの切替 (v0.5 の M33 の段 3。docs/03 §15.6)
+                let what = toggle_comment_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

@@ -85,6 +85,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::view::view_cmds::register(&mut r);
     crate::view::mouse::register(&mut r);
     crate::command::line_ops::register(&mut r);
+    crate::command::comment::register(&mut r);
     crate::ui_model::overlay::register(&mut r);
     crate::workspace::finder::register(&mut r);
     crate::workspace::ws_search_ui::register(&mut r);

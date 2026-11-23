@@ -152,6 +152,10 @@ title = "Paste"
 description = "Redo the edit that was undone."
 title = "Redo"
 
+[cmd.edit.toggle_comment]
+description = "Add or remove line comments on the target lines"
+title = "Toggle Line Comment"
+
 [cmd.edit.undo]
 description = "Undo the last edit."
 title = "Undo"
@@ -491,6 +495,10 @@ unsupported = "{option} is not available in this version and was ignored"
 no_match = "No matching bracket"
 none = "No bracket next to the cursor"
 too_far = "No matching bracket within {limit}"
+
+[info.comment]
+no_lines = "No lines to comment"
+unsupported = "{language} has no line comment marker"
 
 [info.config]
 diagnostic_no_file = "The diagnostic for {file} was not written in a file, so there is nothing to open"

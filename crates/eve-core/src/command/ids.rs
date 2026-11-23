@@ -43,6 +43,7 @@ pub const EDIT_NEWLINE: &str = "edit.newline";
 pub const EDIT_OUTDENT: &str = "edit.outdent";
 pub const EDIT_PASTE: &str = "edit.paste";
 pub const EDIT_REDO: &str = "edit.redo";
+pub const EDIT_TOGGLE_COMMENT: &str = "edit.toggle_comment";
 pub const EDIT_UNDO: &str = "edit.undo";
 pub const FILE_CHECK_EXTERNAL_CHANGES: &str = "file.check_external_changes";
 pub const FILE_NEW: &str = "file.new";
@@ -117,7 +118,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 112] = [
+pub const ALL: [&str; 113] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -159,6 +160,7 @@ pub const ALL: [&str; 112] = [
     EDIT_OUTDENT,
     EDIT_PASTE,
     EDIT_REDO,
+    EDIT_TOGGLE_COMMENT,
     EDIT_UNDO,
     FILE_CHECK_EXTERNAL_CHANGES,
     FILE_NEW,

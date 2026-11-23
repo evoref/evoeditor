@@ -40,6 +40,7 @@ edit.newline	Edit	Propose	!doc.read_only
 edit.outdent	Edit	Propose	!doc.read_only
 edit.paste	Edit	None	!doc.read_only
 edit.redo	Edit	None	!doc.read_only
+edit.toggle_comment	Edit	Propose	!doc.read_only
 edit.undo	Edit	None	!doc.read_only
 file.check_external_changes	File	None	doc.has_path
 file.new	File	None	—
