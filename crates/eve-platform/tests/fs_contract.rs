@@ -187,6 +187,27 @@ impl Fixture for NativeFixture {
         }
         denied
     }
+
+    fn others_can_write(&self, path: &FsPath) -> bool {
+        let p = path.as_path();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(p).expect("metadata").permissions().mode();
+            fs::set_permissions(p, fs::Permissions::from_mode(mode | 0o002)).expect("chmod o+w");
+        }
+        #[cfg(windows)]
+        {
+            // Everyone (S-1-1-0) に変更 (M) を許す。ディレクトリは中へも継承させる
+            let grant = if p.is_dir() {
+                "*S-1-1-0:(OI)(CI)M"
+            } else {
+                "*S-1-1-0:M"
+            };
+            run(Command::new("icacls").arg(p).args(["/grant", grant])).expect("icacls /grant");
+        }
+        true
+    }
 }
 
 #[cfg(unix)]
@@ -230,6 +251,8 @@ fn caps(state_dir: bool) -> Caps {
         state_dir,
         // Windows は列挙のデータに大きさがある。Unix は stat をしないので返さない (05 §2.1)
         read_dir_len: cfg!(windows),
+        // Linux 以外の Unix は所有者を判定しない (07 §12.1 の OWN-3。どれも Unknown { unsupported })
+        owner_check: cfg!(any(windows, target_os = "linux")),
         ..Caps::default()
     }
 }

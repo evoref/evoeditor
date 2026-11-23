@@ -26,7 +26,8 @@ use crate::ui_model::keys;
 /// ルートの検出の目印の既定 (07 §5.9 の `workspace.root_markers` の既定値)。
 ///
 /// 設定のキーはまだ公開していない (予約のまま。公開は 03 §12.7.9 の段の表)。公開するまでは、この値で探す。
-pub(crate) const DEFAULT_ROOT_MARKERS: [&str; 4] = [".eve", ".git", ".hg", ".svn"];
+pub(crate) const DEFAULT_ROOT_MARKERS: [&str; 4] =
+    [crate::io::fs::WORKSPACE_CONFIG_DIR, ".git", ".hg", ".svn"];
 
 /// どの規則でルートが決まったか (07 §12.1 の 1〜4)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -54,6 +54,32 @@ pub trait FileSystem: Send + Sync {
         Err(FsError::new(FsErrorKind::Unsupported))
     }
 
+    /// ワークスペース設定と `.editorconfig` を、所有者の検査を通して読む (v0.5 の M33。07 §12.1 の OWN-1〜OWN-7)。
+    /// `dir` を開いて固定し、`name` の有無を開かずに確かめ (無ければ `dir` の判定に依らず `Missing`)、`dir` を判定し、通れば
+    /// `dir` の中の `name` を開いて判定し、同じハンドルから `max_len + 1` バイトまで読む (判定と読込の間に差し替えられない)。
+    /// `name` はシンボリックリンク・ジャンクションを辿らない (`NotRegular`)。`dir` は `links` が `NoFollowFromEve` なら、
+    /// `dir` の中の最後の [`WORKSPACE_CONFIG_DIR`] の要素から `dir` までを辿らずに開く (`.eve/themes` の `.eve` も)。
+    /// 開いた `dir` の最終のパス (リンクを解いた後) が `safe_dirs` (`workspace.safe_directories`) のどれかか、その下なら、
+    /// 所有者・他人の書込・FS の判定を省き、ふつうのファイルかとリンクを辿らないことだけを確かめる (OWN-5)。
+    /// 既定は `Unsupported` (core は「読まない」として診断する)。
+    ///
+    /// # Errors
+    ///
+    /// `dir` が読めなければ `PermissionDenied`、共有違反 (Windows)・リース (Linux) は `Busy` (一時の失敗。診断を出さずに次の
+    /// 読込で読み直す)。`name` が 1 つの名前でない (区切りを含む・空・`.`・`..`) か、`dir` に `..` があるか、
+    /// `NoFollowFromEve` で `dir` に `.eve` が無いか、Windows で要素の末尾が `.`・空白か要素に `:` があれば `InvalidPath`。
+    /// ほかの OS の失敗は `Other` など。
+    fn read_checked(
+        &self,
+        _dir: &FsPath,
+        _name: &std::ffi::OsStr,
+        _max_len: u64,
+        _safe_dirs: &[FsPath],
+        _links: DirLinks,
+    ) -> Result<CheckedRead, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// チャンク読込 (既定 1 MiB)。キャンセルは、ジョブが `next_chunk` の間で `CancelToken` を見る。
     ///
     /// # Errors
@@ -451,6 +477,77 @@ pub enum EntryKind {
     Symlink,
     /// FIFO・ソケット・デバイス。
     Other,
+}
+
+// ---------- 所有者の検査つきの読込 (`FileSystem::read_checked`、v0.5 の M33) ----------
+
+/// ワークスペース設定のディレクトリの名前 (07 §12.1。ルートの目印・`read_checked` のリンクを辿らない要素で共有する)。
+/// `read_checked` は全 OS で大文字小文字を区別せずに比べる。
+pub const WORKSPACE_CONFIG_DIR: &str = ".eve";
+
+/// `read_checked` の `dir` のリンクの辿り方 (07 §12.1 の OWN-6)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DirLinks {
+    /// `dir` をリンクを辿って開き、辿った先を判定する (`.editorconfig` の置き場所)。
+    Follow,
+    /// `dir` の中の最後の [`WORKSPACE_CONFIG_DIR`] の要素 (大文字小文字を区別しない) から `dir` までを、リンクを辿らずに開く
+    /// (`.eve`・`.eve/themes`。リンクなら `Rejected { Dir, NotRegular }`)。それより上はリンクを辿る。
+    NoFollowFromEve,
+}
+
+/// `read_checked` の結果。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedRead {
+    /// ファイル (か `dir`) が無い。判定していない (無いのは正常で、診断を出さない)。
+    Missing,
+    /// 判定を通って読んだ (`max_len` バイト以下)。
+    Read {
+        /// ファイルの中身。
+        bytes: Vec<u8>,
+    },
+    /// `max_len` を超えた (読んだ分は捨てた)。
+    TooLarge,
+    /// 判定で読まなかった (07 §12.1 の OWN-7 の診断の材料)。
+    Rejected {
+        /// 判定に落ちた物 (置き場所のディレクトリかファイルか)。
+        what: CheckedObject,
+        /// 読まなかった理由。
+        verdict: OwnerVerdict,
+    },
+}
+
+/// 判定した物 (07 §12.1 の OWN-1)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CheckedObject {
+    /// ファイルを置いたディレクトリ (`.eve`、`.editorconfig` のあるディレクトリ)。
+    Dir,
+    /// 読むファイルそのもの。
+    File,
+}
+
+/// 読まなかった理由 (07 §12.1 の OWN-2 / OWN-3 / OWN-6)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OwnerVerdict {
+    /// 所有者が「自分たち」でない。
+    NotOwner {
+        /// 所有者のアカウントの名前。名前に直せなければ SID (`S-1-…`) か uid の文字列。
+        owner: String,
+    },
+    /// 「自分たち」以外が書ける。
+    OthersCanWrite {
+        /// 書込を許されたアカウントの名前 (Windows。名前に直せなければ SID、NULL の DACL は `Everyone`、読めない型の
+        /// ACE は `ACE type 0x..`)。Unix は `o+w` なら `"others"`、拡張 ACL があれば `"acl"`。
+        who: Vec<String>,
+    },
+    /// 所有者を判定できない FS か、問い合わせが失敗した。
+    Unknown {
+        /// FS の名前 (`exFAT`・`FAT32`・`9p` など)。Windows の遠くのボリューム (SMB など) は `"remote"`、問い合わせの失敗と
+        /// 開いた物が判定した場所と違うときは `"query_failed"`、Linux 以外の Unix は `"unsupported"`。
+        fs: String,
+    },
+    /// ふつうのファイルでない (ディレクトリ・FIFO・デバイス・シンボリックリンク・ジャンクション・名前の代理の再解析点・
+    /// 許可リストに無い再解析点)。
+    NotRegular,
 }
 
 /// 退避ディレクトリ 1 つ (起動時の案内用。中身は読まない)。

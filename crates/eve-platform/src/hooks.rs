@@ -5,6 +5,40 @@
 //!   **後始末なしで強制終了** (Windows は `TerminateProcess`、Unix は `SIGKILL`) する。
 //! - `fail` (Unix): システムコールの失敗の差し替え (errno)。単体試験は `inject_errno`、別プロセスの試験は
 //!   `EVE_TEST_HOOK=fail_<点>=<errno>` (docs/review/v0.3-findings.md の STR-T10)。
+//! - `point`: 単体試験 (`cfg(test)`) が `on_point` で積んだ動作を、呼び出し点で 1 回だけ走らせる (同じプロセスの中で、
+//!   判定と開く間に差し替えを起こす。07 §12.1 の OWN-6)。呼び出し点は `read_checked_before_open` (ディレクトリを判定した後、
+//!   ファイルを開く前)。
+
+/// 呼び出し点 `name` を通った。単体試験がこのスレッドで `on_point` に積んだ動作があれば、ここで 1 回だけ走らせる。
+#[inline]
+pub(crate) fn point(name: &str) {
+    #[cfg(test)]
+    {
+        let f = ACTIONS.with(|v| {
+            let mut v = v.borrow_mut();
+            let i = v.iter().position(|(p, _)| p == name)?;
+            Some(v.remove(i).1)
+        });
+        if let Some(f) = f {
+            f();
+        }
+    }
+    let _ = name;
+}
+
+#[cfg(test)]
+type Action = Box<dyn FnOnce()>;
+
+#[cfg(test)]
+thread_local! {
+    static ACTIONS: std::cell::RefCell<Vec<(String, Action)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// このスレッドで、次に呼び出し点 `name` を通るときに `f` を走らせる (1 回だけ)。
+#[cfg(test)]
+pub(crate) fn on_point(name: &str, f: impl FnOnce() + 'static) {
+    ACTIONS.with(|v| v.borrow_mut().push((name.to_owned(), Box::new(f))));
+}
 
 /// 切断点 `name` に到達した。環境変数が `name` (または `name=<値>`) なら、ここでプロセスを終了する。
 #[inline]

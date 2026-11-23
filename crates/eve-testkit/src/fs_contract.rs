@@ -16,9 +16,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
 use eve_core::{
-    CancelToken, ChunkError, DirEntry, DocSnapshot, EntryKind, Expect, FileKind, FileStamp,
-    FileSystem, FsError, FsErrorDetail, FsErrorKind, FsPath, ReadChunks, SaveMethod, SaveOptions,
-    SaveReport, TextFormat,
+    CancelToken, CheckedObject, CheckedRead, ChunkError, DirEntry, DirLinks, DocSnapshot,
+    EntryKind, Expect, FileKind, FileStamp, FileSystem, FsError, FsErrorDetail, FsErrorKind,
+    FsPath, OwnerVerdict, ReadChunks, SaveMethod, SaveOptions, SaveReport, TextFormat,
+    WORKSPACE_CONFIG_DIR,
 };
 
 use crate::memfs::{BytesSource, MemFs};
@@ -35,6 +36,9 @@ pub struct Caps {
     /// `read_dir` がファイルの大きさ (`DirEntry::len`) を返す (05 §2.1。Windows の実 FS と `MemFs` は `true`、Unix は
     /// `stat` をしないので `false`)。`true` なら正しい値を、`false` なら `None` を求める。
     pub read_dir_len: bool,
+    /// `read_checked` が所有者を判定する (Windows・Linux の実 FS と `MemFs`)。`false` (Linux 以外の Unix。どれも
+    /// `Unknown { unsupported }`) なら、読めること・他人の書込を判定することを求める `read_checked` の検査を飛ばす。
+    pub owner_check: bool,
 }
 
 impl Default for Caps {
@@ -43,6 +47,7 @@ impl Default for Caps {
             state_dir: true,
             recovery_listing_reflects_writes: true,
             read_dir_len: false,
+            owner_check: true,
         }
     }
 }
@@ -89,6 +94,11 @@ pub trait Fixture {
     fn fail_listing_after(&self, _dir: &FsPath, _after: usize) -> bool {
         false
     }
+    /// `path` (ディレクトリかファイル) に他人の書込を許す (`read_checked` の検査の準備。Unix は `o+w`、Windows は
+    /// `Everyone` に変更の許可。`MemFs` は偽の所有者の印)。できなければ `false`。
+    fn others_can_write(&self, _path: &FsPath) -> bool {
+        false
+    }
 }
 
 /// `MemFs` の準備の口で作る `Fixture`。どの項目も作れる (リンク・FIFO の代わり・オフライン・列挙の拒否)。
@@ -131,6 +141,15 @@ impl Fixture for MemFixture {
     }
     fn fail_listing_after(&self, dir: &FsPath, after: usize) -> bool {
         self.0.set_read_dir_fail_after(mem_str(dir), Some(after));
+        true
+    }
+    fn others_can_write(&self, path: &FsPath) -> bool {
+        self.0.set_owner_verdict(
+            mem_str(path),
+            Some(OwnerVerdict::OthersCanWrite {
+                who: vec!["others".to_owned()],
+            }),
+        );
         true
     }
 }
@@ -271,6 +290,26 @@ pub const CHECKS: &[(&str, Check)] = &[
     (
         "open_read_は通常でないファイルで止まらずに_invalidpath",
         open_read_not_regular,
+    ),
+    (
+        "read_checked_は判定を通ったファイルを読む",
+        read_checked_reads,
+    ),
+    (
+        "read_checked_は無いファイルを_missing_で返す",
+        read_checked_missing,
+    ),
+    (
+        "read_checked_はリンクとふつうでないファイルを読まない",
+        read_checked_not_regular,
+    ),
+    (
+        "read_checked_は他人が書けるディレクトリとファイルを読まない",
+        read_checked_others_write,
+    ),
+    (
+        "read_checked_は_1_つの名前だけを受け付ける",
+        read_checked_invalid_name,
     ),
 ];
 
@@ -1033,5 +1072,310 @@ fn open_read_not_regular(s: &Subject) {
         r,
         Err((FsErrorKind::InvalidPath, Some(FsErrorDetail::NotAFile))),
         "{p:?}"
+    );
+}
+
+// ---------- read_checked (v0.5 の M33。02 §4.5、07 §12.1 の OWN-1〜OWN-6) ----------
+// 実 FS では一時ディレクトリ (Windows は NTFS、Unix は ext4 / tmpfs など所有者を判定できる FS) の下で行う。
+
+const CFG: &str = "config.toml";
+
+/// 安全な場所 (`workspace.safe_directories`) に何を渡すか。
+#[derive(Clone, Copy, Debug)]
+enum Safe {
+    /// 渡さない (判定する)。
+    None,
+    /// 対象のディレクトリ (`root`) を渡す (その下は判定を省く)。
+    Root,
+}
+
+fn rc_links(
+    s: &Subject,
+    dir: &FsPath,
+    name: &str,
+    max_len: u64,
+    safe: Safe,
+    links: DirLinks,
+) -> CheckedRead {
+    let safe_dirs = match safe {
+        Safe::None => Vec::new(),
+        Safe::Root => vec![s.root.clone()],
+    };
+    s.fs.read_checked(dir, std::ffi::OsStr::new(name), max_len, &safe_dirs, links)
+        .unwrap_or_else(|e| panic!("read_checked({dir:?}, {name}) が失敗した: {e:?}"))
+}
+
+/// `dir` の最後の要素が `.eve` なら `NoFollowFromEve`、ほかは `Follow` で読む (段 5・段 6 の呼び方)。
+fn rc(s: &Subject, dir: &FsPath, name: &str, max_len: u64, safe: Safe) -> CheckedRead {
+    let links = if dir
+        .as_path()
+        .components()
+        .any(|c| c.as_os_str().eq_ignore_ascii_case(WORKSPACE_CONFIG_DIR))
+    {
+        DirLinks::NoFollowFromEve
+    } else {
+        DirLinks::Follow
+    };
+    rc_links(s, dir, name, max_len, safe, links)
+}
+
+fn not_regular(what: CheckedObject) -> CheckedRead {
+    CheckedRead::Rejected {
+        what,
+        verdict: OwnerVerdict::NotRegular,
+    }
+}
+
+/// 判定を通ると同じ中身を読む。`max_len` ちょうどは読み、超えたら `TooLarge`。`.eve` とその下 (`.eve/themes`) も同じ。
+fn read_checked_reads(s: &Subject) {
+    if !s.caps.owner_check {
+        return;
+    }
+    let d = s.p("ws");
+    s.fx().dir(&d);
+    s.fx().file(&d.join(CFG), b"a = 1\n");
+    let want = CheckedRead::Read {
+        bytes: b"a = 1\n".to_vec(),
+    };
+    for safe in [Safe::None, Safe::Root] {
+        assert_eq!(rc(s, &d, CFG, 1024, safe), want, "{safe:?}");
+        assert_eq!(rc(s, &d, CFG, 6, safe), want, "max_len ちょうど");
+        assert_eq!(rc(s, &d, CFG, 5, safe), CheckedRead::TooLarge);
+    }
+    assert_eq!(rc(s, &d, CFG, 0, Safe::None), CheckedRead::TooLarge);
+    let eve = d.join(".eve");
+    s.fx().dir(&eve.join("themes"));
+    s.fx().file(&eve.join("keymap.toml"), b"");
+    s.fx().file(&eve.join("themes").join("t.toml"), b"t");
+    assert_eq!(
+        rc(s, &eve, "keymap.toml", 1024, Safe::None),
+        CheckedRead::Read { bytes: Vec::new() },
+        "空のファイル"
+    );
+    assert_eq!(
+        rc(s, &eve.join("themes"), "t.toml", 1024, Safe::None),
+        CheckedRead::Read {
+            bytes: b"t".to_vec()
+        },
+        ".eve の下のディレクトリ"
+    );
+}
+
+/// ファイル・ディレクトリ・親が無ければ `Missing` (エラーにしない)。`.eve` がファイルなら、その中は無い。
+fn read_checked_missing(s: &Subject) {
+    let d = s.p("ws");
+    s.fx().dir(&d);
+    for (dir, why) in [
+        (d.clone(), "ファイルが無い"),
+        (s.p("none"), "ディレクトリが無い"),
+        (s.p("none").join(".eve"), "親も無い"),
+        (d.join(".eve").join("themes"), ".eve が無い"),
+    ] {
+        assert_eq!(
+            rc(s, &dir, CFG, 1024, Safe::None),
+            CheckedRead::Missing,
+            "{why}"
+        );
+    }
+    let w = s.p("w2");
+    s.fx().dir(&w);
+    s.fx().file(&w.join(".eve"), b"");
+    for dir in [w.join(".eve"), w.join(".eve").join("themes")] {
+        assert_eq!(
+            rc(s, &dir, CFG, 1024, Safe::None),
+            CheckedRead::Missing,
+            ".eve がファイル ({dir:?})"
+        );
+    }
+}
+
+/// 読むファイルがディレクトリ・シンボリックリンク・FIFO なら `NotRegular` で読まない。`.eve` とその下のディレクトリが
+/// リンク・ジャンクションならディレクトリの側で `NotRegular`。安全な場所の下でも同じ (OWN-5 でもリンクは辿らない)。
+/// `.eve` より上と `.editorconfig` の置き場所のディレクトリのリンクは辿る。
+fn read_checked_not_regular(s: &Subject) {
+    if !s.caps.owner_check {
+        return;
+    }
+    let fx = s.fx();
+    let d = s.p("ws");
+    fx.dir(&d);
+    fx.dir(&d.join(CFG));
+    fx.file(&d.join("target.toml"), b"x");
+    let mut cases = vec![(CFG, "ディレクトリ")];
+    if fx.symlink(&d.join("link.toml"), &d.join("target.toml"), FileKind::File) {
+        cases.push(("link.toml", "シンボリックリンク"));
+    }
+    if fx.special(&d.join("fifo.toml")) {
+        cases.push(("fifo.toml", "FIFO"));
+    }
+    for safe in [Safe::None, Safe::Root] {
+        for (name, why) in &cases {
+            assert_eq!(
+                rc(s, &d, name, 1024, safe),
+                not_regular(CheckedObject::File),
+                "{why} ({safe:?})"
+            );
+        }
+    }
+    let real = s.p("real");
+    fx.dir(&real);
+    fx.file(&real.join(CFG), b"x");
+    // ディレクトリのリンクを作る (シンボリックリンクを作れなければジャンクション)
+    let dir_link =
+        |link: &FsPath| fx.symlink(link, &real, FileKind::Dir) || fx.junction(link, &real);
+    let mut eves = Vec::new();
+    let sym = s.p("w-sym");
+    fx.dir(&sym);
+    if fx.symlink(&sym.join(".eve"), &real, FileKind::Dir) {
+        eves.push((sym.join(".eve"), "シンボリックリンク"));
+    }
+    let jun = s.p("w-jun");
+    fx.dir(&jun);
+    if fx.junction(&jun.join(".eve"), &real) {
+        eves.push((jun.join(".eve"), "ジャンクション"));
+    }
+    // `.eve` の下のディレクトリのリンク (`.eve/themes`)
+    let th = s.p("w-themes");
+    fx.dir(&th.join(".eve"));
+    if dir_link(&th.join(".eve").join("themes")) {
+        eves.push((th.join(".eve").join("themes"), ".eve の下のリンク"));
+    }
+    // `.eve` がリンクなら、その下のディレクトリを読むときも辿らない
+    if let Some((e, _)) = eves.first().cloned() {
+        fx.dir(&real.join("themes"));
+        eves.push((e.join("themes"), "リンクの .eve の下"));
+    }
+    for safe in [Safe::None, Safe::Root] {
+        for (eve, why) in &eves {
+            assert_eq!(
+                rc(s, eve, CFG, 1024, safe),
+                not_regular(CheckedObject::Dir),
+                "{why} ({safe:?})"
+            );
+        }
+    }
+    // `.eve` より上と `.editorconfig` の置き場所のリンクは辿る (判定するのは辿った先のディレクトリ)
+    let up = s.p("up");
+    if dir_link(&up) {
+        assert_eq!(
+            rc(s, &up, CFG, 1024, Safe::None),
+            CheckedRead::Read {
+                bytes: b"x".to_vec()
+            },
+            "ディレクトリのリンク"
+        );
+        fx.dir(&real.join(".eve"));
+        fx.file(&real.join(".eve").join(CFG), b"e");
+        assert_eq!(
+            rc(s, &up.join(".eve"), CFG, 1024, Safe::None),
+            CheckedRead::Read {
+                bytes: b"e".to_vec()
+            },
+            ".eve より上のリンク"
+        );
+    }
+}
+
+fn others_can_write(r: &CheckedRead, what: CheckedObject) -> bool {
+    matches!(r, CheckedRead::Rejected { what: w, verdict: OwnerVerdict::OthersCanWrite { who } }
+        if *w == what && !who.is_empty())
+}
+
+/// 他人が書けるディレクトリ・ファイルは読まない (OWN-1 の (a)(b))。他人が書けるディレクトリに無いファイルは `Missing`
+/// (診断を出さない)。安全な場所の下なら読む。安全な場所の下のリンクは、辿った先 (最終のパス) で比べるので、安全な場所の
+/// 外を指していれば判定する (OWN-5)。
+fn read_checked_others_write(s: &Subject) {
+    if !s.caps.owner_check {
+        return;
+    }
+    let fx = s.fx();
+    let d = s.p("open-dir");
+    fx.dir(&d);
+    fx.file(&d.join(CFG), b"x");
+    let read = CheckedRead::Read {
+        bytes: b"x".to_vec(),
+    };
+    if fx.others_can_write(&d) {
+        let r = rc(s, &d, CFG, 1024, Safe::None);
+        assert!(others_can_write(&r, CheckedObject::Dir), "{r:?}");
+        assert_eq!(
+            rc(s, &d, ".editorconfig", 1024, Safe::None),
+            CheckedRead::Missing
+        );
+        assert_eq!(rc(s, &d, CFG, 1024, Safe::Root), read);
+        // 相対のパス・空のパスの安全な場所は比べない (判定する)
+        let r =
+            s.fs.read_checked(
+                &d,
+                std::ffi::OsStr::new(CFG),
+                1024,
+                &[FsPath::new(""), FsPath::new("open-dir")],
+                DirLinks::Follow,
+            )
+            .expect("read_checked");
+        assert!(
+            others_can_write(&r, CheckedObject::Dir),
+            "相対のパス: {r:?}"
+        );
+        // 安全な場所 `safe` の下のリンク `safe/alias` が、安全な場所の外の `open-dir` を指す
+        let safe = s.p("safe");
+        fx.dir(&safe);
+        let alias = safe.join("alias");
+        if fx.symlink(&alias, &d, FileKind::Dir) || fx.junction(&alias, &d) {
+            let r =
+                s.fs.read_checked(
+                    &alias,
+                    std::ffi::OsStr::new(CFG),
+                    1024,
+                    std::slice::from_ref(&safe),
+                    DirLinks::Follow,
+                )
+                .expect("read_checked");
+            assert!(
+                others_can_write(&r, CheckedObject::Dir),
+                "安全な場所の下のリンクの先は判定する: {r:?}"
+            );
+        }
+    }
+    let f = s.p("open-file");
+    fx.dir(&f);
+    fx.file(&f.join(CFG), b"x");
+    if fx.others_can_write(&f.join(CFG)) {
+        let r = rc(s, &f, CFG, 1024, Safe::None);
+        assert!(others_can_write(&r, CheckedObject::File), "{r:?}");
+        assert_eq!(rc(s, &f, CFG, 1024, Safe::Root), read);
+    }
+}
+
+/// `name` は 1 つの名前だけ (空・`.`・`..`・区切りを含むものは `InvalidPath`)。`dir` に `..` があるか、`NoFollowFromEve` で
+/// `.eve` が無ければ `InvalidPath`。
+fn read_checked_invalid_name(s: &Subject) {
+    let d = s.p("ws");
+    s.fx().dir(&d);
+    s.fx().dir(&d.join("sub"));
+    let kind = |dir: &FsPath, name: &str, links| {
+        s.fs.read_checked(dir, std::ffi::OsStr::new(name), 1024, &[], links)
+            .map_err(|e| e.kind)
+    };
+    for name in ["", ".", "..", "sub/config.toml"] {
+        assert_eq!(
+            kind(&d, name, DirLinks::Follow),
+            Err(FsErrorKind::InvalidPath),
+            "{name:?}"
+        );
+    }
+    assert_eq!(
+        kind(&d, CFG, DirLinks::NoFollowFromEve),
+        Err(FsErrorKind::InvalidPath),
+        ".eve が無い"
+    );
+    assert_eq!(
+        kind(
+            &d.join("sub").join("..").join(".eve"),
+            CFG,
+            DirLinks::NoFollowFromEve
+        ),
+        Err(FsErrorKind::InvalidPath),
+        ".. がある"
     );
 }
