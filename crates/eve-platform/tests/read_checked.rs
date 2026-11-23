@@ -36,6 +36,10 @@ struct Tmp(PathBuf);
 impl Tmp {
     /// 作って、前提 (所有者を判定できる FS で、私的) を確かめる。満たさなければ `None` (CI では panic)。
     fn new(tag: &str) -> Option<Tmp> {
+        if cfg!(all(unix, not(target_os = "linux"))) {
+            eprintln!("所有者を判定しない OS (Unknown {{ unsupported }}): 確かめない");
+            return None;
+        }
         static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let p = std::env::temp_dir().join(format!("eve-owner-{tag}-{}-{n}", std::process::id()));
@@ -420,6 +424,40 @@ fn unc_を指すシンボリックリンクは辿らない() {
         "{:?}",
         start.elapsed()
     );
+}
+
+/// 管理共有 (`\\localhost\C$\…`。SMB のループバック) の向こうは、同じディレクトリでも遠くのボリュームとして判定できない
+/// (`Unknown { remote }`。PO の決定 2026-11-23 の C)。管理共有につながらない (管理者でない・共有を止めている) 環境では
+/// 確かめない。
+#[cfg(windows)]
+#[test]
+fn 管理共有の向こうは遠くのボリュームとして判定できない() {
+    let Some(t) = Tmp::new("unc-local") else {
+        return;
+    };
+    let d = t.dir("ws");
+    fs::write(d.join(CFG), b"x").unwrap();
+    let s = d.to_string_lossy().into_owned();
+    let (Some(drive), Some(rest)) = (s.get(..1), s.get(2..)) else {
+        eprintln!("ドライブ文字の無い一時ディレクトリ: 確かめない");
+        return;
+    };
+    let unc = PathBuf::from(format!(r"\\localhost\{drive}${rest}"));
+    if !unc.join(CFG).exists() {
+        eprintln!("管理共有 {unc:?} につながらない: 確かめない");
+        return;
+    }
+    assert_eq!(
+        rc(&unc, CFG, NO_SAFE),
+        CheckedRead::Rejected {
+            what: CheckedObject::Dir,
+            verdict: OwnerVerdict::Unknown {
+                fs: "remote".to_owned()
+            }
+        }
+    );
+    // 安全な場所 (UNC の形) に書けば読む
+    assert_eq!(rc(&unc, CFG, std::slice::from_ref(&unc)), read(b"x"));
 }
 
 /// ほかのエディタが書込のために開いていても読める (共有違反にしない)。共有を許さずに開かれていれば `Busy` (一時の失敗)。

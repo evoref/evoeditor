@@ -251,6 +251,8 @@ fn caps(state_dir: bool) -> Caps {
         state_dir,
         // Windows は列挙のデータに大きさがある。Unix は stat をしないので返さない (05 §2.1)
         read_dir_len: cfg!(windows),
+        // Linux 以外の Unix は所有者を判定しない (07 §12.1 の OWN-3。どれも Unknown { unsupported })
+        owner_check: cfg!(any(windows, target_os = "linux")),
         ..Caps::default()
     }
 }

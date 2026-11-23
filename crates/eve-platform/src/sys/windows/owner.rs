@@ -590,6 +590,32 @@ pub(crate) fn set_reparse_for_test(path: &Path, tag: u32) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    /// `OpenFileById` の経路 (許可リストの再解析点のファイルを開き直す) を、ふつうのファイルで確かめる: 固定したディレクトリを
+    /// 手掛かりに識別で開き直したハンドルから同じ中身が読め、識別を壊すと開けない。
+    #[test]
+    fn 識別で開き直して同じ中身を読み_壊した識別は開けない() {
+        use std::io::Read;
+        let base = std::env::temp_dir().join(format!("eve-byid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let f = base.join("config.toml");
+        std::fs::write(&f, b"a = 1\n").unwrap();
+        let dh = open_dir(&base, false).unwrap();
+        let fh = open_file(&f, true).unwrap();
+        let id = file_id_128(&fh).expect("NTFS の識別");
+        let mut again = open_by_id(&dh, id).expect("識別で開ける");
+        let mut body = Vec::new();
+        again.read_to_end(&mut body).unwrap();
+        assert_eq!(body, b"a = 1\n");
+        assert_eq!(file_id_128(&again), Some(id), "同じ識別");
+        let mut broken = id;
+        broken[15] ^= 0x5A;
+        broken[0] ^= 0xA5;
+        assert!(open_by_id(&dh, broken).is_err(), "壊した識別");
+        drop((dh, fh, again));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn 形の壊れた_sid_は写さない() {
         // 副権限の数 (2 バイト目) が、読める長さに収まらない

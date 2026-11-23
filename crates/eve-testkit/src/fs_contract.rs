@@ -36,6 +36,9 @@ pub struct Caps {
     /// `read_dir` がファイルの大きさ (`DirEntry::len`) を返す (05 §2.1。Windows の実 FS と `MemFs` は `true`、Unix は
     /// `stat` をしないので `false`)。`true` なら正しい値を、`false` なら `None` を求める。
     pub read_dir_len: bool,
+    /// `read_checked` が所有者を判定する (Windows・Linux の実 FS と `MemFs`)。`false` (Linux 以外の Unix。どれも
+    /// `Unknown { unsupported }`) なら、読めること・他人の書込を判定することを求める `read_checked` の検査を飛ばす。
+    pub owner_check: bool,
 }
 
 impl Default for Caps {
@@ -44,6 +47,7 @@ impl Default for Caps {
             state_dir: true,
             recovery_listing_reflects_writes: true,
             read_dir_len: false,
+            owner_check: true,
         }
     }
 }
@@ -1124,6 +1128,9 @@ fn not_regular(what: CheckedObject) -> CheckedRead {
 
 /// 判定を通ると同じ中身を読む。`max_len` ちょうどは読み、超えたら `TooLarge`。`.eve` とその下 (`.eve/themes`) も同じ。
 fn read_checked_reads(s: &Subject) {
+    if !s.caps.owner_check {
+        return;
+    }
     let d = s.p("ws");
     s.fx().dir(&d);
     s.fx().file(&d.join(CFG), b"a = 1\n");
@@ -1186,6 +1193,9 @@ fn read_checked_missing(s: &Subject) {
 /// リンク・ジャンクションならディレクトリの側で `NotRegular`。安全な場所の下でも同じ (OWN-5 でもリンクは辿らない)。
 /// `.eve` より上と `.editorconfig` の置き場所のディレクトリのリンクは辿る。
 fn read_checked_not_regular(s: &Subject) {
+    if !s.caps.owner_check {
+        return;
+    }
     let fx = s.fx();
     let d = s.p("ws");
     fx.dir(&d);
@@ -1275,6 +1285,9 @@ fn others_can_write(r: &CheckedRead, what: CheckedObject) -> bool {
 /// (診断を出さない)。安全な場所の下なら読む。安全な場所の下のリンクは、辿った先 (最終のパス) で比べるので、安全な場所の
 /// 外を指していれば判定する (OWN-5)。
 fn read_checked_others_write(s: &Subject) {
+    if !s.caps.owner_check {
+        return;
+    }
     let fx = s.fx();
     let d = s.p("open-dir");
     fx.dir(&d);
@@ -1290,6 +1303,20 @@ fn read_checked_others_write(s: &Subject) {
             CheckedRead::Missing
         );
         assert_eq!(rc(s, &d, CFG, 1024, Safe::Root), read);
+        // 相対のパス・空のパスの安全な場所は比べない (判定する)
+        let r =
+            s.fs.read_checked(
+                &d,
+                std::ffi::OsStr::new(CFG),
+                1024,
+                &[FsPath::new(""), FsPath::new("open-dir")],
+                DirLinks::Follow,
+            )
+            .expect("read_checked");
+        assert!(
+            others_can_write(&r, CheckedObject::Dir),
+            "相対のパス: {r:?}"
+        );
         // 安全な場所 `safe` の下のリンク `safe/alias` が、安全な場所の外の `open-dir` を指す
         let safe = s.p("safe");
         fx.dir(&safe);

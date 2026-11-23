@@ -1008,10 +1008,12 @@ impl FileSystem for MemFs {
         if entry.is_none() && !not_regular {
             return Ok(CheckedRead::Missing);
         }
-        // 安全な場所の下か (リンクを辿った後のディレクトリで比べる。実 FS の最終のパスと同じ)
-        let check = !safe_dirs
-            .iter()
-            .any(|sd| dir.as_path().starts_with(sd.as_path()));
+        // 安全な場所の下か (リンクを辿った後のディレクトリで比べる。実 FS の最終のパスと同じ)。相対のパスと空のパスは
+        // 比べない (実 FS の `is_absolute` に当たる。MemFs のパスはどの OS でも `/` から始まる形なので `has_root` で見る)
+        let check = !safe_dirs.iter().any(|sd| {
+            let sd = sd.as_path();
+            sd.has_root() && dir.as_path().starts_with(sd)
+        });
         if check && let Some(v) = s.owner_verdicts.get(&dir) {
             return rejected(CheckedObject::Dir, v.clone());
         }

@@ -11,10 +11,12 @@
 //!
 //! spec: 02 §4.5, 07 §12.1 (OWN-1〜OWN-7), 05 §5.7
 
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use eve_core::{
     CheckedObject, CheckedRead, DirLinks, FsError, FsErrorKind, FsPath, OwnerVerdict,
@@ -90,36 +92,85 @@ fn split_dir(dir: &Path, links: DirLinks) -> Option<(PathBuf, Vec<OsString>)> {
     }
 }
 
-/// 比べるための形 (Windows は `\\?\` と `\\?\UNC\` を外し、`/` を `\` にして小文字にする。UTF-16 として正しくないパスは
-/// 比べない)。
-fn comparable(p: &Path) -> Option<PathBuf> {
-    if cfg!(windows) {
-        let s = p.to_str()?.replace('/', "\\");
-        let s = if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+/// 比べるための要素の列 (Windows は `\\?\` と `\\?\UNC\` を外し、`/` を `\` にしてから分ける。UTF-16 として正しくない
+/// パスは比べない)。大文字小文字は畳まない (比べるときに ASCII だけを畳む、`same_component`)。
+fn comparable(p: &Path) -> Option<Vec<String>> {
+    let s = p.to_str()?;
+    let normalized = if cfg!(windows) {
+        let s = s.replace('/', "\\");
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
             format!(r"\\{rest}")
         } else {
             s.strip_prefix(r"\\?\").unwrap_or(&s).to_owned()
-        };
-        Some(PathBuf::from(s.to_lowercase()))
+        }
     } else {
-        Some(p.to_path_buf())
+        s.to_owned()
+    };
+    Path::new(&normalized)
+        .components()
+        .map(|c| c.as_os_str().to_str().map(str::to_owned))
+        .collect()
+}
+
+/// 要素が同じか。Windows は ASCII の大文字小文字だけを区別しない (NTFS は Unicode の大文字小文字も畳むが、Rust の
+/// `to_lowercase` とは表が違い、KELVIN SIGN (U+212A) と `k` のように NTFS が別の名前とみなすものを同じにしてしまう。
+/// ASCII の外の違いは「違う」とみなし、検査を省かない側に倒す)。
+fn same_component(a: &str, b: &str) -> bool {
+    if cfg!(windows) {
+        a.eq_ignore_ascii_case(b)
+    } else {
+        a == b
     }
 }
 
+/// UNC の形のパスか (Windows。`\\server\share\…`・`\\?\UNC\…`。`\\?\C:\…`・`\\.\…` は違う)。
+fn is_unc(p: &Path) -> bool {
+    let s = p.to_string_lossy();
+    cfg!(windows)
+        && (s.starts_with(r"\\?\UNC\")
+            || (s.starts_with(r"\\") && !s.starts_with(r"\\?\") && !s.starts_with(r"\\.\")))
+}
+
+/// 安全な場所の解いた形を覚える数の上限 (プロセスで)。設定に書く数より十分に大きい。
+const RESOLVED_LIMIT: usize = 256;
+
+/// 安全な場所を `canonicalize` した形 (リンク・ドライブの割当て・短い名前を解いた形。できなければ書いた形)。書いた形ごとに
+/// プロセスで覚える (失敗も)。応答しない共有を安全な場所に書いても、待つのは最初の 1 回だけにする。
+fn resolved(s: &Path) -> PathBuf {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, PathBuf>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(r) = cache
+        .lock()
+        .expect("安全な場所の表の Mutex が壊れた")
+        .get(s)
+    {
+        return r.clone();
+    }
+    // 解く間は表を握らない (ほかのジョブを止めない)
+    let r = std::fs::canonicalize(s).unwrap_or_else(|_| s.to_path_buf());
+    let mut c = cache.lock().expect("安全な場所の表の Mutex が壊れた");
+    if c.len() < RESOLVED_LIMIT {
+        c.insert(s.to_path_buf(), r.clone());
+    }
+    r
+}
+
 /// 開いたディレクトリの最終のパス `final_path` が、安全な場所 (`workspace.safe_directories`) のどれかか、その下か (07 §12.1 の
-/// OWN-5)。安全な場所は `canonicalize` した形 (リンク・ドライブの割当て・短い名前を解いた形。できなければ書いた形) と、
-/// 要素ごとに比べる。相対のパスは比べない。
+/// OWN-5)。安全な場所は解いた形 (`resolved`) と要素ごとに比べる (Windows は ASCII の大文字小文字だけを区別しない)。
+/// 相対のパスは比べない。最終のパスが UNC でなければ、UNC の形で書いた安全な場所は解かずに飛ばす (その共有に問い合わせない)。
 fn under_safe(final_path: &Path, safe_dirs: &[FsPath]) -> bool {
     let Some(fin) = comparable(final_path) else {
         return false;
     };
+    let fin_unc = is_unc(final_path);
     safe_dirs.iter().any(|s| {
         let s = s.as_path();
-        if !s.is_absolute() {
+        if !s.is_absolute() || (!fin_unc && is_unc(s)) {
             return false;
         }
-        let canon = std::fs::canonicalize(s).unwrap_or_else(|_| s.to_path_buf());
-        comparable(&canon).is_some_and(|c| fin.starts_with(c))
+        comparable(&resolved(s)).is_some_and(|c| {
+            c.len() <= fin.len() && c.iter().zip(&fin).all(|(a, b)| same_component(a, b))
+        })
     })
 }
 
@@ -253,12 +304,25 @@ mod imp {
         None
     }
 
+    /// NT の形の最終のパスが、ネットワークの経路 (Multiple UNC Provider、`\Device\Mup\`) の下か (ASCII の大文字小文字を
+    /// 区別しない)。
+    pub(super) fn is_mup(nt_path: &[u16]) -> bool {
+        const MUP: &str = r"\Device\Mup\";
+        let s = String::from_utf16_lossy(nt_path);
+        s.get(..MUP.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(MUP))
+    }
+
     /// 開いたハンドルの判定 (OWN-2 / OWN-3)。通れば `None`。
     fn judge(h: &File) -> Option<OwnerVerdict> {
         let Some((fs, flags)) = crate::sys::volume_info(h) else {
             return Some(unknown(QUERY_FAILED));
         };
-        if let Some(v) = volume_verdict(&fs, flags, crate::sys::is_remote_handle(h)) {
+        // 遠くのボリューム: ハンドルが `FileRemoteProtocolInfo` に答えるか、最終のパス (NT の形) が `\Device\Mup\` の下
+        // (どちらかが答えなくても、もう片方で見つける)
+        let remote =
+            crate::sys::is_remote_handle(h) || owner::final_path(h).is_ok_and(|p| is_mup(&p));
+        if let Some(v) = volume_verdict(&fs, flags, remote) {
             return Some(v);
         }
         let Some(trusted) = owner::trusted() else {
@@ -466,18 +530,13 @@ mod imp {
     /// `O_NOFOLLOW` がリンクで断ったときの errno か (Linux・macOS は `ELOOP`、FreeBSD・DragonFly は `EMLINK`、NetBSD は
     /// `EFTYPE`)。
     fn refused_link(code: i32) -> bool {
-        if code == libc::ELOOP {
-            return true;
-        }
         #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
-        if code == libc::EMLINK {
-            return true;
-        }
+        const OTHER: &[i32] = &[libc::EMLINK];
         #[cfg(target_os = "netbsd")]
-        if code == libc::EFTYPE {
-            return true;
-        }
-        false
+        const OTHER: &[i32] = &[libc::EFTYPE];
+        #[cfg(not(any(target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd")))]
+        const OTHER: &[i32] = &[];
+        code == libc::ELOOP || OTHER.contains(&code)
     }
 
     /// 判定できない FS か (OWN-3)。`fstatfs` の失敗も判定できない。
@@ -757,18 +816,59 @@ mod tests {
             !under_safe(&canon(&base.join("s")), &[FsPath::new("s")]),
             "相対のパス"
         );
-        if cfg!(windows) {
-            // 大文字小文字・`/` の違いは同じとみなす
-            let upper = FsPath::new(base.join("S").to_string_lossy().replace('\\', "/"));
-            assert!(under_safe(&canon(&base.join("s").join("sub")), &[upper]));
-        }
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// 大文字小文字の比べ方 (`canonicalize` が名前を直さない、存在しない場所で確かめる)。Windows は ASCII の違いだけを同じと
+    /// みなし、KELVIN SIGN (U+212A。Rust の `to_lowercase` では `k` になるが、NTFS は別の名前とみなす) は違うとする。
+    /// Unix は大文字小文字を区別する。
+    #[test]
+    fn 安全な場所は_ascii_の大文字小文字だけを畳んで比べる() {
+        let none = std::env::temp_dir().join(format!("eve-none-{}", std::process::id()));
+        assert!(!none.exists());
+        let safe = [FsPath::new(none.join("work"))];
+        assert!(under_safe(&none.join("work").join("sub"), &safe));
+        let upper = none.join("WORK").join("sub");
+        assert_eq!(under_safe(&upper, &safe), cfg!(windows), "ASCII の違い");
+        if cfg!(windows) {
+            let slash = FsPath::new(none.join("Work").to_string_lossy().replace('\\', "/"));
+            assert!(under_safe(&none.join("work"), &[slash]), "`/` の違い");
+            let verbatim = PathBuf::from(format!(r"\\?\{}", none.join("work").display()));
+            assert!(under_safe(&verbatim, &safe), "`\\\\?\\` の形");
+        }
+        let kelvin = none.join("wor\u{212A}").join("sub");
+        assert!(!under_safe(&kelvin, &safe), "U+212A は k でない");
+        let kelvin_safe = [FsPath::new(none.join("wor\u{212A}"))];
+        assert!(!under_safe(&none.join("work"), &kelvin_safe));
+    }
+
+    /// 最終のパスが UNC でなければ、UNC の形の安全な場所は解かずに飛ばす (届かない共有で止まらない)。
+    #[cfg(windows)]
+    #[test]
+    fn 届かない_unc_の安全な場所はローカルの判定で問い合わせない() {
+        let start = std::time::Instant::now();
+        // 文書用の IP アドレス (RFC 5737)。解こうとすれば接続を待つ
+        let unc = [
+            FsPath::new(r"\\192.0.2.1\share\work"),
+            FsPath::new(r"\\?\UNC\192.0.2.1\share\work"),
+        ];
+        assert!(!under_safe(&std::env::temp_dir(), &unc));
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
+        assert!(is_unc(Path::new(r"\\server\share")));
+        assert!(is_unc(Path::new(r"\\?\UNC\server\share")));
+        assert!(!is_unc(Path::new(r"\\?\C:\x")));
+        assert!(!is_unc(Path::new(r"\\.\pipe\x")));
+        assert!(!is_unc(Path::new(r"C:\x")));
     }
 
     #[cfg(windows)]
     mod windows {
         use super::super::imp::{
-            Writer, judge_security, others_writers, readable_reparse, volume_verdict,
+            Writer, is_mup, judge_security, others_writers, readable_reparse, volume_verdict,
         };
         use crate::sys::owner::{Ace, Security, Sid, Trusted};
         use eve_core::OwnerVerdict;
@@ -975,6 +1075,12 @@ mod tests {
             // ACL を持つと名乗っても NTFS・ReFS でない FS (ユーザーモードの FS など) は判定しない
             assert_eq!(volume_verdict("WinFsp", 0x8, false), unk("WinFsp"));
             assert_eq!(volume_verdict("NTFS", 0, false), unk("NTFS"));
+            let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+            assert!(is_mup(&w(r"\Device\Mup\localhost\C$\x")));
+            assert!(is_mup(&w(r"\DEVICE\MUP\server\share")));
+            assert!(!is_mup(&w(r"\Device\HarddiskVolume3\x")));
+            assert!(!is_mup(&w(r"\Device\Mupx\a")));
+            assert!(!is_mup(&w(r"\Device")));
         }
     }
 
@@ -1142,7 +1248,8 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
+    // Linux 以外の Unix は所有者を判定しない (どれも Unknown { unsupported }) ので、読めることを求める試験は Linux だけ
+    #[cfg(target_os = "linux")]
     mod unix_fs {
         use super::{BEFORE_OPEN, CheckedObject, CheckedRead, DirLinks, OwnerVerdict, Tmp, rc};
 
