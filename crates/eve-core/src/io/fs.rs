@@ -54,6 +54,27 @@ pub trait FileSystem: Send + Sync {
         Err(FsError::new(FsErrorKind::Unsupported))
     }
 
+    /// ワークスペース設定と `.editorconfig` を、所有者の検査を通して読む (v0.5 の M33。07 §12.1 の OWN-1〜OWN-7)。
+    /// `dir` を開いて固定し、`name` の有無を開かずに確かめ (無ければ `dir` の判定に依らず `Missing`)、`dir` を判定し、通れば
+    /// `dir` の中の `name` を開いて判定し、同じハンドルから `max_len + 1` バイトまで読む (判定と読込の間に差し替えられない)。
+    /// `name` と、最後の要素が `.eve` の `dir` は、シンボリックリンク・ジャンクションを辿らない (`NotRegular`)。
+    /// `check` が `Skip` (`workspace.safe_directories` の下) なら所有者・他人の書込・FS の判定を省き、ふつうのファイルかと
+    /// リンクを辿らないことだけを確かめる。既定は `Unsupported` (core は「読まない」として診断する)。
+    ///
+    /// # Errors
+    ///
+    /// `dir` が読めなければ `PermissionDenied`、共有違反 (Windows) は `Busy` (一時の失敗。診断を出さずに次の読込で読み直す)、
+    /// `name` が 1 つの名前でない (区切りを含む・空・`.`・`..`) なら `InvalidPath`。ほかの OS の失敗は `Other` など。
+    fn read_checked(
+        &self,
+        _dir: &FsPath,
+        _name: &std::ffi::OsStr,
+        _max_len: u64,
+        _check: OwnerCheck,
+    ) -> Result<CheckedRead, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// チャンク読込 (既定 1 MiB)。キャンセルは、ジョブが `next_chunk` の間で `CancelToken` を見る。
     ///
     /// # Errors
@@ -451,6 +472,70 @@ pub enum EntryKind {
     Symlink,
     /// FIFO・ソケット・デバイス。
     Other,
+}
+
+// ---------- 所有者の検査つきの読込 (`FileSystem::read_checked`、v0.5 の M33) ----------
+
+/// 所有者の検査を掛けるか (07 §12.1 の OWN-5)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OwnerCheck {
+    /// 所有者・他人の書込・FS を判定する (OWN-2 / OWN-3)。
+    Check,
+    /// `workspace.safe_directories` の下: 所有者の判定を省く (ふつうのファイルかとリンクを辿らないことは確かめる)。
+    Skip,
+}
+
+/// `read_checked` の結果。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedRead {
+    /// ファイル (か `dir`) が無い。判定していない (無いのは正常で、診断を出さない)。
+    Missing,
+    /// 判定を通って読んだ (`max_len` バイト以下)。
+    Read {
+        /// ファイルの中身。
+        bytes: Vec<u8>,
+    },
+    /// `max_len` を超えた (読んだ分は捨てた)。
+    TooLarge,
+    /// 判定で読まなかった (07 §12.1 の OWN-7 の診断の材料)。
+    Rejected {
+        /// 判定に落ちた物 (置き場所のディレクトリかファイルか)。
+        what: CheckedObject,
+        /// 読まなかった理由。
+        verdict: OwnerVerdict,
+    },
+}
+
+/// 判定した物 (07 §12.1 の OWN-1)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CheckedObject {
+    /// ファイルを置いたディレクトリ (`.eve`、`.editorconfig` のあるディレクトリ)。
+    Dir,
+    /// 読むファイルそのもの。
+    File,
+}
+
+/// 読まなかった理由 (07 §12.1 の OWN-2 / OWN-3 / OWN-6)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OwnerVerdict {
+    /// 所有者が「自分たち」でない。
+    NotOwner {
+        /// 所有者のアカウントの名前。名前に直せなければ SID (`S-1-…`) か uid の文字列。
+        owner: String,
+    },
+    /// 「自分たち」以外が書ける。
+    OthersCanWrite {
+        /// 書込を許されたアカウントの名前 (Windows。名前に直せなければ SID、NULL の DACL は `Everyone`、読めない型の
+        /// ACE は `ACE type 0x..`)。Unix は `o+w` なら `"others"`、拡張 ACL があれば `"acl"`。
+        who: Vec<String>,
+    },
+    /// 所有者を判定できない FS か、問い合わせが失敗した。
+    Unknown {
+        /// FS の名前 (`exFAT`・`9p` など)。問い合わせの失敗は `"query_failed"`。
+        fs: String,
+    },
+    /// ふつうのファイルでない (ディレクトリ・FIFO・デバイス・シンボリックリンク・ジャンクション・名前の代理の再解析点)。
+    NotRegular,
 }
 
 /// 退避ディレクトリ 1 つ (起動時の案内用。中身は読まない)。

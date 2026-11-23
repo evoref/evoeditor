@@ -187,6 +187,27 @@ impl Fixture for NativeFixture {
         }
         denied
     }
+
+    fn others_can_write(&self, path: &FsPath) -> bool {
+        let p = path.as_path();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(p).expect("metadata").permissions().mode();
+            fs::set_permissions(p, fs::Permissions::from_mode(mode | 0o002)).expect("chmod o+w");
+        }
+        #[cfg(windows)]
+        {
+            // Everyone (S-1-1-0) に変更 (M) を許す。ディレクトリは中へも継承させる
+            let grant = if p.is_dir() {
+                "*S-1-1-0:(OI)(CI)M"
+            } else {
+                "*S-1-1-0:M"
+            };
+            run(Command::new("icacls").arg(p).args(["/grant", grant])).expect("icacls /grant");
+        }
+        true
+    }
 }
 
 #[cfg(unix)]

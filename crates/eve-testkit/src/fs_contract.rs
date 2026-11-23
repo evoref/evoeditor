@@ -16,9 +16,9 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
 use eve_core::{
-    CancelToken, ChunkError, DirEntry, DocSnapshot, EntryKind, Expect, FileKind, FileStamp,
-    FileSystem, FsError, FsErrorDetail, FsErrorKind, FsPath, ReadChunks, SaveMethod, SaveOptions,
-    SaveReport, TextFormat,
+    CancelToken, CheckedObject, CheckedRead, ChunkError, DirEntry, DocSnapshot, EntryKind, Expect,
+    FileKind, FileStamp, FileSystem, FsError, FsErrorDetail, FsErrorKind, FsPath, OwnerCheck,
+    OwnerVerdict, ReadChunks, SaveMethod, SaveOptions, SaveReport, TextFormat,
 };
 
 use crate::memfs::{BytesSource, MemFs};
@@ -89,6 +89,11 @@ pub trait Fixture {
     fn fail_listing_after(&self, _dir: &FsPath, _after: usize) -> bool {
         false
     }
+    /// `path` (ディレクトリかファイル) に他人の書込を許す (`read_checked` の検査の準備。Unix は `o+w`、Windows は
+    /// `Everyone` に変更の許可。`MemFs` は偽の所有者の印)。できなければ `false`。
+    fn others_can_write(&self, _path: &FsPath) -> bool {
+        false
+    }
 }
 
 /// `MemFs` の準備の口で作る `Fixture`。どの項目も作れる (リンク・FIFO の代わり・オフライン・列挙の拒否)。
@@ -131,6 +136,15 @@ impl Fixture for MemFixture {
     }
     fn fail_listing_after(&self, dir: &FsPath, after: usize) -> bool {
         self.0.set_read_dir_fail_after(mem_str(dir), Some(after));
+        true
+    }
+    fn others_can_write(&self, path: &FsPath) -> bool {
+        self.0.set_owner_verdict(
+            mem_str(path),
+            Some(OwnerVerdict::OthersCanWrite {
+                who: vec!["others".to_owned()],
+            }),
+        );
         true
     }
 }
@@ -271,6 +285,26 @@ pub const CHECKS: &[(&str, Check)] = &[
     (
         "open_read_は通常でないファイルで止まらずに_invalidpath",
         open_read_not_regular,
+    ),
+    (
+        "read_checked_は判定を通ったファイルを読む",
+        read_checked_reads,
+    ),
+    (
+        "read_checked_は無いファイルを_missing_で返す",
+        read_checked_missing,
+    ),
+    (
+        "read_checked_はリンクとふつうでないファイルを読まない",
+        read_checked_not_regular,
+    ),
+    (
+        "read_checked_は他人が書けるディレクトリとファイルを読まない",
+        read_checked_others_write,
+    ),
+    (
+        "read_checked_は_1_つの名前だけを受け付ける",
+        read_checked_invalid_name,
     ),
 ];
 
@@ -1034,4 +1068,179 @@ fn open_read_not_regular(s: &Subject) {
         Err((FsErrorKind::InvalidPath, Some(FsErrorDetail::NotAFile))),
         "{p:?}"
     );
+}
+
+// ---------- read_checked (v0.5 の M33。02 §4.5、07 §12.1 の OWN-1〜OWN-6) ----------
+// 実 FS では一時ディレクトリ (Windows は NTFS、Unix は ext4 / tmpfs など所有者を判定できる FS) の下で行う。
+
+const CFG: &str = "config.toml";
+
+fn rc(s: &Subject, dir: &FsPath, name: &str, max_len: u64, check: OwnerCheck) -> CheckedRead {
+    s.fs.read_checked(dir, std::ffi::OsStr::new(name), max_len, check)
+        .unwrap_or_else(|e| panic!("read_checked({dir:?}, {name}) が失敗した: {e:?}"))
+}
+
+fn not_regular(what: CheckedObject) -> CheckedRead {
+    CheckedRead::Rejected {
+        what,
+        verdict: OwnerVerdict::NotRegular,
+    }
+}
+
+/// 判定を通ると同じ中身を読む。`max_len` ちょうどは読み、超えたら `TooLarge`。`.eve` の中も同じ。
+fn read_checked_reads(s: &Subject) {
+    let d = s.p("ws");
+    s.fx().dir(&d);
+    s.fx().file(&d.join(CFG), b"a = 1\n");
+    let want = CheckedRead::Read {
+        bytes: b"a = 1\n".to_vec(),
+    };
+    for check in [OwnerCheck::Check, OwnerCheck::Skip] {
+        assert_eq!(rc(s, &d, CFG, 1024, check), want, "{check:?}");
+        assert_eq!(rc(s, &d, CFG, 6, check), want, "max_len ちょうど");
+        assert_eq!(rc(s, &d, CFG, 5, check), CheckedRead::TooLarge);
+    }
+    assert_eq!(rc(s, &d, CFG, 0, OwnerCheck::Check), CheckedRead::TooLarge);
+    let eve = d.join(".eve");
+    s.fx().dir(&eve);
+    s.fx().file(&eve.join("keymap.toml"), b"");
+    assert_eq!(
+        rc(s, &eve, "keymap.toml", 1024, OwnerCheck::Check),
+        CheckedRead::Read { bytes: Vec::new() },
+        "空のファイル"
+    );
+}
+
+/// ファイル・ディレクトリ・親が無ければ `Missing` (エラーにしない)。`.eve` がファイルなら、その中は無い。
+fn read_checked_missing(s: &Subject) {
+    let d = s.p("ws");
+    s.fx().dir(&d);
+    for (dir, why) in [
+        (d.clone(), "ファイルが無い"),
+        (s.p("none"), "ディレクトリが無い"),
+        (s.p("none").join(".eve"), "親も無い"),
+    ] {
+        assert_eq!(
+            rc(s, &dir, CFG, 1024, OwnerCheck::Check),
+            CheckedRead::Missing,
+            "{why}"
+        );
+    }
+    let w = s.p("w2");
+    s.fx().dir(&w);
+    s.fx().file(&w.join(".eve"), b"");
+    assert_eq!(
+        rc(s, &w.join(".eve"), CFG, 1024, OwnerCheck::Check),
+        CheckedRead::Missing,
+        ".eve がファイル"
+    );
+}
+
+/// 読むファイルがディレクトリ・シンボリックリンク・FIFO なら `NotRegular` で読まない。`.eve` がリンク・ジャンクションなら
+/// ディレクトリの側で `NotRegular`。`Skip` でも同じ (OWN-5 でもリンクは辿らない)。`.eve` でないディレクトリのリンクは辿る。
+fn read_checked_not_regular(s: &Subject) {
+    let fx = s.fx();
+    let d = s.p("ws");
+    fx.dir(&d);
+    fx.dir(&d.join(CFG));
+    fx.file(&d.join("target.toml"), b"x");
+    let mut cases = vec![(CFG, "ディレクトリ")];
+    if fx.symlink(&d.join("link.toml"), &d.join("target.toml"), FileKind::File) {
+        cases.push(("link.toml", "シンボリックリンク"));
+    }
+    if fx.special(&d.join("fifo.toml")) {
+        cases.push(("fifo.toml", "FIFO"));
+    }
+    for check in [OwnerCheck::Check, OwnerCheck::Skip] {
+        for (name, why) in &cases {
+            assert_eq!(
+                rc(s, &d, name, 1024, check),
+                not_regular(CheckedObject::File),
+                "{why} ({check:?})"
+            );
+        }
+    }
+    let real = s.p("real");
+    fx.dir(&real);
+    fx.file(&real.join(CFG), b"x");
+    let mut eves = Vec::new();
+    let sym = s.p("w-sym");
+    fx.dir(&sym);
+    if fx.symlink(&sym.join(".eve"), &real, FileKind::Dir) {
+        eves.push((sym.join(".eve"), "シンボリックリンク"));
+    }
+    let jun = s.p("w-jun");
+    fx.dir(&jun);
+    if fx.junction(&jun.join(".eve"), &real) {
+        eves.push((jun.join(".eve"), "ジャンクション"));
+    }
+    for check in [OwnerCheck::Check, OwnerCheck::Skip] {
+        for (eve, why) in &eves {
+            assert_eq!(
+                rc(s, eve, CFG, 1024, check),
+                not_regular(CheckedObject::Dir),
+                ".eve が{why} ({check:?})"
+            );
+        }
+    }
+    // 祖先や `.editorconfig` の置き場所のリンクは辿る (判定するのは辿った先のディレクトリ)
+    if fx.symlink(&s.p("alias"), &real, FileKind::Dir) {
+        assert_eq!(
+            rc(s, &s.p("alias"), CFG, 1024, OwnerCheck::Check),
+            CheckedRead::Read {
+                bytes: b"x".to_vec()
+            },
+            "ディレクトリのリンク"
+        );
+    }
+}
+
+fn others_can_write(r: &CheckedRead, what: CheckedObject) -> bool {
+    matches!(r, CheckedRead::Rejected { what: w, verdict: OwnerVerdict::OthersCanWrite { who } }
+        if *w == what && !who.is_empty())
+}
+
+/// 他人が書けるディレクトリ・ファイルは読まない (OWN-1 の (a)(b))。他人が書けるディレクトリに無いファイルは `Missing`
+/// (診断を出さない)。`Skip` なら読む。
+fn read_checked_others_write(s: &Subject) {
+    let fx = s.fx();
+    let d = s.p("open-dir");
+    fx.dir(&d);
+    fx.file(&d.join(CFG), b"x");
+    let read = CheckedRead::Read {
+        bytes: b"x".to_vec(),
+    };
+    if fx.others_can_write(&d) {
+        let r = rc(s, &d, CFG, 1024, OwnerCheck::Check);
+        assert!(others_can_write(&r, CheckedObject::Dir), "{r:?}");
+        assert_eq!(
+            rc(s, &d, ".editorconfig", 1024, OwnerCheck::Check),
+            CheckedRead::Missing
+        );
+        assert_eq!(rc(s, &d, CFG, 1024, OwnerCheck::Skip), read);
+    }
+    let f = s.p("open-file");
+    fx.dir(&f);
+    fx.file(&f.join(CFG), b"x");
+    if fx.others_can_write(&f.join(CFG)) {
+        let r = rc(s, &f, CFG, 1024, OwnerCheck::Check);
+        assert!(others_can_write(&r, CheckedObject::File), "{r:?}");
+        assert_eq!(rc(s, &f, CFG, 1024, OwnerCheck::Skip), read);
+    }
+}
+
+/// `name` は 1 つの名前だけ (空・`.`・`..`・区切りを含むものは `InvalidPath`)。
+fn read_checked_invalid_name(s: &Subject) {
+    let d = s.p("ws");
+    s.fx().dir(&d);
+    s.fx().dir(&d.join("sub"));
+    for name in ["", ".", "..", "sub/config.toml"] {
+        let r =
+            s.fs.read_checked(&d, std::ffi::OsStr::new(name), 1024, OwnerCheck::Check);
+        assert_eq!(
+            r.map_err(|e| e.kind),
+            Err(FsErrorKind::InvalidPath),
+            "{name:?}"
+        );
+    }
 }

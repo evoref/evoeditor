@@ -506,7 +506,9 @@ trait FileSystem: Send + Sync {
                                                                              // 順: dir を開く → name の有無を開かずに確かめる (無ければ dir の判定に依らず Ok(Missing)) → dir を判定する →
                                                                              // 通れば dir の中の name を開いて判定し、同じハンドルから max_len + 1 バイトまで読む (判定と読込の間に差し替えられない)。
                                                                              // check = Skip (workspace.safe_directories の下) なら所有者の判定を省き、ふつうのファイルかだけを確かめる。
-                                                                             // dir が無い・name が無い → Ok(Missing)。dir が読めない → PermissionDenied。既定は Unsupported (core は「読まない」として診断する)
+                                                                             // dir が無い・ディレクトリでない・name が無い → Ok(Missing)。dir が読めない → PermissionDenied。共有違反 (Windows) → Busy (一時の失敗)。
+                                                                             // name が 1 つの名前でない (空・`.`・`..`・区切り。Windows は `:` も) → InvalidPath。既定は Unsupported (core は「読まない」として診断する)。
+                                                                             // dir の最後の要素が `.eve` (Windows は大文字小文字を区別しない) のときだけ、dir もリンクを辿らずに開く (07 §12.1 の OWN-6。M33 の段 4 で決めた)
 }
 enum OwnerCheck { Check, Skip }                                              // v0.5 の M33
 enum CheckedRead {                                                           // v0.5 の M33
@@ -517,9 +519,11 @@ enum CheckedRead {                                                           // 
 }
 enum OwnerVerdict {                                                          // 07 §12.1 の OWN-2 / OWN-3 / OWN-7 の診断の材料
     NotOwner { owner: String /*アカウントの名前。名前に直せなければ SID・uid の文字列*/ },
-    OthersCanWrite { who: Vec<String> /*書込を許されたアカウントの名前。Unix は "others"*/ },
-    Unknown { fs: String /*"exFAT"・"9p" など。問い合わせの失敗は "query_failed"*/ },
-    NotRegular,                                                              // ふつうのファイルでない (ディレクトリ・FIFO・デバイス)
+    OthersCanWrite { who: Vec<String> /*書込を許されたアカウントの名前 (Windows。NULL の DACL は "Everyone"、読めない型の ACE は "ACE type 0x.."。M33 の段 4)。
+                                        Unix は o+w なら "others"、拡張 ACL があれば "acl"*/ },
+    Unknown { fs: String /*"exFAT"・"9p" など。問い合わせの失敗と、開いたファイルの親が固定したディレクトリと違うとき (07 §12.1 の OWN-6) は "query_failed"。
+                           Linux 以外の Unix は "unsupported" (所有者を写す FS を見分けていない)*/ },
+    NotRegular,                                                              // ふつうのファイルでない (ディレクトリ・FIFO・デバイス・シンボリックリンク・ジャンクション・名前の代理の再解析点)
 }
 struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries 個を返した後にまだ項目があったので列挙をやめた*/, incomplete: bool /*列挙そのものが途中で失敗した (SMB の切断・NFS の ESTALE など)。そこまでの項目を返す。項目 1 つの読み取りの失敗はその項目を飛ばすだけで立てない*/ }   // v0.5 の M31
 struct DirEntry  { name: OsString /*最後の要素だけ。UTF-8 で表せない名前もそのまま*/, kind: EntryKind,

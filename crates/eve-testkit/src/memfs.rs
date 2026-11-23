@@ -9,10 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use eve_core::{
-    ChunkError, Clock, DirEntry, DirListing, EntryKind, Expect, FileId, FileKind, FileMeta,
-    FileStamp, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath,
-    FsyncLevel, HardlinkPolicy, InflightRecord, LinkInfo, LinkKind, Millis, ReadChunks,
-    RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
+    CheckedObject, CheckedRead, ChunkError, Clock, DirEntry, DirListing, EntryKind, Expect, FileId,
+    FileKind, FileMeta, FileStamp, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind,
+    FsKind, FsPath, FsyncLevel, HardlinkPolicy, InflightRecord, LinkInfo, LinkKind, Millis,
+    OwnerCheck, OwnerVerdict, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
 };
 
 use crate::ManualClock;
@@ -38,6 +38,8 @@ pub enum FsOp {
     DiscardSwap,
     /// ディレクトリの列挙 (`FileSystem::read_dir`)。
     ReadDir,
+    /// 所有者の検査つきの読込 (`FileSystem::read_checked`)。
+    ReadChecked,
 }
 
 /// このプロセスのスワップの鍵 (パス、無題なら文書)。
@@ -124,6 +126,9 @@ struct State {
     swap_entries: Vec<(eve_core::SwapEntry, Option<eve_core::SwapBody>)>,
     /// `metadata` の `file_id_unique` (既定 `true`。`false` で FAT・`exFAT`・ネットワークの FS のふりをする、05 §5.4)。
     file_id_unique: bool,
+    /// 偽の所有者 (09 §3.4 の `FakePathsOwner`): `read_checked` の判定で落とすディレクトリ・ファイルと、その理由。
+    /// 印の無いものは「自分の所有で他人が書けない、判定できる FS」として通す。
+    owner_verdicts: BTreeMap<FsPath, OwnerVerdict>,
 }
 
 /// メモリ上の `FileSystem` (偽 Port)。ファイル・ディレクトリ・シンボリックリンクを持ち、`fail_next` などで障害を注入できる。
@@ -170,6 +175,7 @@ impl MemFs {
                 swap_unsupported: false,
                 swap_entries: Vec::new(),
                 file_id_unique: true,
+                owner_verdicts: BTreeMap::new(),
             }),
         }
     }
@@ -403,6 +409,18 @@ impl MemFs {
         } else {
             s.offline.remove(&p);
         }
+    }
+
+    /// 偽の所有者 (09 §3.4 の `FakePathsOwner`、07 §12.1): `path` (ディレクトリかファイル) を、`read_checked` の判定で
+    /// `verdict` の理由で落とす (`NotOwner`・`OthersCanWrite`・`Unknown`)。`None` で印を外す (通す)。
+    /// `OwnerCheck::Skip` では印を見ない。リンク・ディレクトリ・FIFO の代わりは印に依らず `NotRegular`。
+    pub fn set_owner_verdict(&self, path: &str, verdict: Option<OwnerVerdict>) {
+        let mut s = self.st();
+        let p = FsPath::from(path);
+        match verdict {
+            Some(v) => s.owner_verdicts.insert(p, v),
+            None => s.owner_verdicts.remove(&p),
+        };
     }
 
     /// ディレクトリを列挙できなくする (`read_dir` が `PermissionDenied`)。`false` で戻す。
@@ -916,6 +934,66 @@ impl FileSystem for MemFs {
             });
         }
         Ok(listing)
+    }
+
+    fn read_checked(
+        &self,
+        dir: &FsPath,
+        name: &std::ffi::OsStr,
+        max_len: u64,
+        check: OwnerCheck,
+    ) -> Result<CheckedRead, FsError> {
+        let mut s = self.st();
+        injected(&mut s, FsOp::ReadChecked)?;
+        // 1 つの名前だけ (実 FS と同じ規則。Windows は `\` と `:` も区切りとみなす)
+        let bad = |c: char| c == '/' || c == '\0' || (cfg!(windows) && (c == '\\' || c == ':'));
+        match name.to_str() {
+            Some(n) if !n.is_empty() && n != "." && n != ".." && !n.contains(bad) => {}
+            _ => return Err(FsError::new(FsErrorKind::InvalidPath)),
+        }
+        let rejected = |what, verdict| Ok(CheckedRead::Rejected { what, verdict });
+        // `.eve` はリンクを辿らない。ほかのディレクトリのリンクは辿る
+        let dir = match s.links.get(dir) {
+            Some(_) if dir.as_path().file_name() == Some(std::ffi::OsStr::new(".eve")) => {
+                return rejected(CheckedObject::Dir, OwnerVerdict::NotRegular);
+            }
+            Some(t) => t.clone(),
+            None => dir.clone(),
+        };
+        // 無い・ディレクトリでない (`.eve` がファイル) なら、その中のファイルは無い
+        if !dir_exists(&s, &dir) || s.files.contains_key(&dir) || s.specials.contains(&dir) {
+            return Ok(CheckedRead::Missing);
+        }
+        if s.unreadable.contains(&dir) {
+            return Err(FsError::new(FsErrorKind::PermissionDenied));
+        }
+        let path = dir.join(name);
+        let entry = s.files.get(&path);
+        let not_regular =
+            s.links.contains_key(&path) || s.dirs.contains(&path) || s.specials.contains(&path);
+        // 無ければディレクトリの判定に依らず Missing (診断を出さない)
+        if entry.is_none() && !not_regular {
+            return Ok(CheckedRead::Missing);
+        }
+        if check == OwnerCheck::Check
+            && let Some(v) = s.owner_verdicts.get(&dir)
+        {
+            return rejected(CheckedObject::Dir, v.clone());
+        }
+        let Some(e) = entry.filter(|_| !not_regular) else {
+            return rejected(CheckedObject::File, OwnerVerdict::NotRegular);
+        };
+        if check == OwnerCheck::Check
+            && let Some(v) = s.owner_verdicts.get(&path)
+        {
+            return rejected(CheckedObject::File, v.clone());
+        }
+        if e.data.len() as u64 > max_len {
+            return Ok(CheckedRead::TooLarge);
+        }
+        Ok(CheckedRead::Read {
+            bytes: e.data.clone(),
+        })
     }
 
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {

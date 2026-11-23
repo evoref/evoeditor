@@ -127,6 +127,16 @@ impl FileSystem for WinFs {
         crate::read_dir::read_dir(dir, max_entries)
     }
 
+    fn read_checked(
+        &self,
+        dir: &FsPath,
+        name: &std::ffi::OsStr,
+        max_len: u64,
+        check: eve_core::OwnerCheck,
+    ) -> Result<eve_core::CheckedRead, FsError> {
+        crate::read_checked::read_checked(dir, name, max_len, check)
+    }
+
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
         crate::sys::rename_no_replace(from.as_path(), to.as_path()).map_err(|e| map_io_error(e, to))
     }
