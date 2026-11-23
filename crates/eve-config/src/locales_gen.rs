@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1041 件)。
+/// `locales/en.toml` の文言 (1045 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -93,6 +93,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.edit.paste.title"), B("Paste")),
     (B("cmd.edit.redo.description"), B("Redo the edit that was undone.")),
     (B("cmd.edit.redo.title"), B("Redo")),
+    (B("cmd.edit.toggle_comment.description"), B("Add or remove line comments on the target lines")),
+    (B("cmd.edit.toggle_comment.title"), B("Toggle Line Comment")),
     (B("cmd.edit.undo.description"), B("Undo the last edit.")),
     (B("cmd.edit.undo.title"), B("Undo")),
     (B("cmd.file.check_external_changes.description"), B("Check whether another program changed the file.")),
@@ -255,6 +257,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.bracket.none"), B("No bracket next to the cursor")),
     (B("info.bracket.too_far"), B("No matching bracket within {limit}")),
     (B("info.cli.unsupported"), B("{option} is not available in this version and was ignored")),
+    (B("info.comment.no_lines"), B("No lines to comment")),
+    (B("info.comment.unsupported"), B("{language} has no line comment marker")),
     (B("info.config.diagnostic_no_file"), B("The diagnostic for {file} was not written in a file, so there is nothing to open")),
     (B("info.config.locale_restart"), B("Changes to language files take effect after a restart")),
     (B("info.config.locale_untranslated"), B("{count} keys have no translation (shown in English)")),
@@ -1054,7 +1058,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1041 件)。
+/// `locales/ja.toml` の文言 (1045 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1139,6 +1143,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.edit.paste.title"), B("貼り付け")),
     (B("cmd.edit.redo.description"), B("元に戻した編集をやり直します。")),
     (B("cmd.edit.redo.title"), B("やり直し")),
+    (B("cmd.edit.toggle_comment.description"), B("対象の行に行コメントを付ける・外す")),
+    (B("cmd.edit.toggle_comment.title"), B("行コメントの切替")),
     (B("cmd.edit.undo.description"), B("直前の編集を取り消します。")),
     (B("cmd.edit.undo.title"), B("元に戻す")),
     (B("cmd.file.check_external_changes.description"), B("ファイルが他のプログラムで変更されていないかを確かめます。")),
@@ -1301,6 +1307,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.bracket.none"), B("カーソルの前後に括弧がありません")),
     (B("info.bracket.too_far"), B("対応する括弧は {limit} の範囲に見つかりませんでした")),
     (B("info.cli.unsupported"), B("{option} はこのバージョンでは使えないため無視しました")),
+    (B("info.comment.no_lines"), B("コメントにする行がありません")),
+    (B("info.comment.unsupported"), B("{language} には行コメントの記号がありません")),
     (B("info.config.diagnostic_no_file"), B("{file} の診断は、ファイルに書かれたものではないため開けません")),
     (B("info.config.locale_restart"), B("言語ファイルの変更は、再起動すると有効になります")),
     (B("info.config.locale_untranslated"), B("訳の無いキーが {count} 件あります (英語で出ます)")),

@@ -9,6 +9,8 @@ pub(crate) const INFO_APP_UPDATED: &str = "info.app.updated";
 pub(crate) const INFO_BRACKET_NO_MATCH: &str = "info.bracket.no_match";
 pub(crate) const INFO_BRACKET_NONE: &str = "info.bracket.none";
 pub(crate) const INFO_BRACKET_TOO_FAR: &str = "info.bracket.too_far";
+pub(crate) const INFO_COMMENT_NO_LINES: &str = "info.comment.no_lines";
+pub(crate) const INFO_COMMENT_UNSUPPORTED: &str = "info.comment.unsupported";
 pub(crate) const INFO_CONFIG_DIAGNOSTIC_NO_FILE: &str = "info.config.diagnostic_no_file";
 pub(crate) const INFO_CONFIG_LOCALE_RESTART: &str = "info.config.locale_restart";
 pub(crate) const INFO_CONFIG_NO_DIAGNOSTICS: &str = "info.config.no_diagnostics";
@@ -353,7 +355,7 @@ pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 329] = [
+const ALL: [&str; 331] = [
     UI_CONFIG_ORIGIN_WORKSPACE,
     UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
     HINT_UI_CANCEL,
@@ -362,6 +364,8 @@ const ALL: [&str; 329] = [
     INFO_BRACKET_NO_MATCH,
     INFO_BRACKET_NONE,
     INFO_BRACKET_TOO_FAR,
+    INFO_COMMENT_NO_LINES,
+    INFO_COMMENT_UNSUPPORTED,
     INFO_CONFIG_DIAGNOSTIC_NO_FILE,
     INFO_CONFIG_LOCALE_RESTART,
     INFO_CONFIG_NO_DIAGNOSTICS,

@@ -883,7 +883,9 @@ TUI では IME は端末/OS が処理し、evoeditor には **確定文字列だ
 
 **v0.5 の M32 で足す割当** (複数カーソル FR-211・対応括弧 FR-308。正本は 07 §11.6 の「複数カーソルと対応括弧」、規則は 03 §4.5.1 / §5.7): 次の一致を足す `select.add_next_match` = `Ctrl+D` (予約していたキー)、一致をすべて選ぶ `select.all_matches` = `Ctrl+Shift+L` [E] / 代替 `Ctrl+K E`、上 / 下の行にカーソルを足す `select.add_cursor_above` / `_below` = `Ctrl+Alt+↑` / `Ctrl+Alt+↓` / 代替 `Ctrl+K Shift+↑` / `Ctrl+K Shift+↓`、対応する括弧へ `cursor.goto_bracket` = `Ctrl+]` / 代替 `Ctrl+K %` (Vim の `%`。`Ctrl+]` は従来の端末で 0x1D として届き §6.2 で正規化している。IME が ON でも届く。VS Code の `Ctrl+Shift+\` は従来の端末で `Ctrl+\` (分割) と同じ符号になるので使わない)。主のカーソル 1 つに戻すのは `Esc` (§7.5)。端末に貼り付けを横取りされない `edit.paste` の代替 `Ctrl+K V` も M32 で足す (Windows Terminal の `Ctrl+V` は端末の貼り付けになり、短い貼り付けは個別のキーとして届いて複数カーソルに分配されない。03 §4.5.3 の MCUR-10)。
 
-**未割当として予約** (将来の衝突を避ける): `Ctrl+L` (v0.5: 行選択、FR-309)、`Ctrl+/` (v0.5: コメント切替、FR-209)、`Ctrl+\` (v0.5: 右への分割 `pane.split_right`、FR-509。07 §11.6 の「ペイン」)、`Ctrl+K` 以下の未使用文字、`Ctrl+B` (**使わない**: tmux プレフィックス)、`Ctrl+T` (v0.5: シンボル/ファイル検索候補)、`Ctrl+J` (レガシーで `Enter`/LF と紛らわしいため使わない)。
+**v0.5 の M33 で足す割当** (行コメント FR-209。正本は 07 §11.6 の「設定と言語」、規則は 03 §15.6): 行コメントの切替 `edit.toggle_comment` = `Ctrl+/` (v0.1 から予約していたキー。Windows のコンソール API では仮想キーで届き、従来の端末では 0x1F として届いて §6.2 で `Ctrl+/` に正規化している) / 代替 `Ctrl+K /` (`/` を送らない配列・端末のため。2 打目は IME を OFF にして打つ)。
+
+**未割当として予約** (将来の衝突を避ける): `Ctrl+L` (v0.5: 行選択、FR-309)、`Ctrl+\` (v0.5: 右への分割 `pane.split_right`、FR-509。07 §11.6 の「ペイン」)、`Ctrl+K` 以下の未使用文字、`Ctrl+B` (**使わない**: tmux プレフィックス)、`Ctrl+T` (v0.5: シンボル/ファイル検索候補)、`Ctrl+J` (レガシーで `Enter`/LF と紛らわしいため使わない)。
 
 > `Ctrl+K` 自体はチョードのプレフィックスとして予約する (VS Code 系と同じ。nano/readline の「行末まで削除」には使わない)。
 
@@ -1957,6 +1959,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.bracket.none` (v0.5) | `cursor.goto_bracket` で、主のカーソルの直後と直前の書記素がどちらも対象の括弧でない (03 §5.7 の BRK-2 / BRK-6) | カーソルの前後に括弧がありません |
 | `info.bracket.no_match` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が文書の端まで無い (BRK-3) | 対応する括弧がありません |
 | `info.bracket.too_far` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が探す範囲 (`{limit}` = `1 MiB`) の中に無い (BRK-4) | 対応する括弧は {limit} の範囲に見つかりませんでした |
+| `info.comment.unsupported` (v0.5) | `edit.toggle_comment` で、文書の言語に行コメントの記号 (`comment.line`) が無い (`plain` を含む。03 §15.6 の CMT-6。`{language}` は言語の `display_name`、言語が決まっていなければ `plain`。文書は変えない) | {language} には行コメントの記号がありません |
+| `info.comment.no_lines` (v0.5) | `edit.toggle_comment` で、対象の行が空行と空白だけの行だけ (CMT-1。文書は変えない) | コメントにする行がありません |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |
 | `info.eol.converted` | 改行コードを変換した (01 FR-113 AC-4、03 §8.4。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない) | {count} 個の改行を {eol} に変換しました (元に戻すで戻せます) |
 | `info.eol.unchanged` | 変換する改行が無かった (すべて `{eol}` か、改行が無い。新しく挿入する改行だけを `{eol}` にした) | 改行はすでに {eol} です |

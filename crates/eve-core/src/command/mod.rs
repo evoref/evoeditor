@@ -5,6 +5,7 @@
 
 pub(crate) mod arg_schema;
 pub(crate) mod clipboard;
+pub(crate) mod comment;
 pub(crate) mod context;
 pub(crate) mod edit;
 pub(crate) mod ids;
