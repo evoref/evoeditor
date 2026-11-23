@@ -31,6 +31,7 @@ fn harness(os: Os, ssh: bool, sets: &[&str]) -> Harness {
                     wsl: false,
                 },
             },
+            no_workspace_config: false,
         }),
         ..Default::default()
     });

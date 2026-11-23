@@ -39,6 +39,19 @@ pub struct ConfigSources {
     /// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。起動時に bin が 1 回だけ決め、`config.reload` も同じ値で解く。
     /// `when` の `os` / `frontend` (§7.3) もこの値を返す。既定は、この実行ファイルの OS・TUI・環境の条件なし。
     pub conditions: eve_config::Conditions,
+    /// ワークスペース層 (`.eve/config.toml`・`.eve/keymap.toml`) を読まない (`--no-workspace-config` と `--no-config`、
+    /// 07 §12.5 の WSC-7)。
+    pub no_workspace_config: bool,
+}
+
+/// `config.reload` の途中: ユーザー層の設定ファイルとキーマップを解析した結果 (ワークスペース層を読み直してから当てる、
+/// 07 §6 の「v0.5 の M33 で読み直すもの」)。
+#[derive(Debug)]
+pub(crate) struct ReloadPlan {
+    /// ユーザー層 (と `--set`) を重ねた結果。
+    resolved: eve_config::Resolved,
+    /// 解析したユーザー層のキーマップ。
+    keymap: KeymapFile,
 }
 
 /// 起動時に bin が決めた、ユーザーの言語ファイルの事実 (07 §17.4)。`config.reload` は言語ファイルの中身を読み直さず、
@@ -190,6 +203,7 @@ impl EditorState {
             languages: None,
             locales: Some(dir.join("locales")),
             conditions: eve_config::Conditions::default(),
+            no_workspace_config: false,
         }
     }
 }
@@ -283,15 +297,40 @@ impl EditorState {
                 diagnostics: vec![unreadable(e)],
             },
         };
+        let plan = ReloadPlan { resolved, keymap };
+        // ワークスペース層も所有者の検査を掛け直して読み直す (07 §12.5 の WSC-1)。ユーザー層が誤りで前の設定を保つときは
+        // 読み直さない
+        let plan = if plan.resolved.has_error {
+            Some(plan)
+        } else {
+            let lower = plan.resolved.user.config.clone();
+            self.start_workspace_config_read(&lower, Some(plan))
+        };
+        if let Some(plan) = plan {
+            self.apply_config_reload(plan);
+        }
+    }
+
+    /// 解析した設定を当てる (ワークスペース層を読み直した後)。ユーザー層・ワークスペース層・`--set` を重ね直し、変わった
+    /// 項目を数える。
+    pub(crate) fn apply_config_reload(&mut self, plan: ReloadPlan) {
+        let ReloadPlan {
+            mut resolved,
+            keymap,
+        } = plan;
+        let src = self.config_sources();
         let mut changed: Vec<&'static str> = Vec::new();
         // 一覧 (`config.show_diagnostics`) の設定ファイル (と `--set`) の診断は、読み直した結果に置き換える。
         // キーマップの診断は `finish_reload_keymap` で置き換え、テーマの診断はテーマを読み直すときに置き換える。
         // 言語ファイル・言語の選択の診断は起動時のものを残す (読み直さない、07 §17.4)
+        // ワークスペース層のファイルの診断は、読み直したときに置き換えている
         let locale_reports = self.ui.locale_reports.clone();
+        let workspace_files = self.settings.workspace_files.clone();
         self.forget_config_diagnostics(|f| {
             f != KEYMAP_FILE
                 && !EditorState::is_theme_diagnostic_file(f)
                 && !locale_reports.contains(f)
+                && !workspace_files.iter().any(|w| w == f)
         });
         for (name, diags) in &resolved.reports {
             self.report_config(name, diags);
@@ -309,11 +348,29 @@ impl EditorState {
                 &[("file", &name)],
             );
         } else {
+            // ワークスペース層 (安全な項目) をユーザー層と `--set` の間に重ねる (07 §12.5 の WSC-3)
+            let ws_name = self
+                .settings
+                .workspace_files
+                .first()
+                .cloned()
+                .unwrap_or_default();
+            let ws = self.settings.workspace_layer.clone();
+            let composed = eve_config::compose(
+                &resolved.user,
+                ws.as_deref().map(|l| (ws_name.as_str(), l)),
+                &src.sets,
+                src.conditions,
+            );
+            resolved.config = composed.config;
+            resolved.origins = composed.origins;
             changed = eve_config::changed_keys(self.config(), &resolved.config);
             self.io.theme_name_at = resolved.theme_name_at.clone();
+            self.settings.user_layer = Some(resolved.user.clone());
             self.settings.config_origins = resolved.origins;
             self.set_config_languages(resolved.languages);
             self.apply_reloaded_config(resolved.config);
+            self.refresh_all_doc_settings();
             // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
@@ -326,7 +383,7 @@ impl EditorState {
     }
 
     /// 新しい設定に差し替える。マウスの取得は frontend に伝える (即時に効く)。
-    fn apply_reloaded_config(&mut self, new: Config) {
+    pub(crate) fn apply_reloaded_config(&mut self, new: Config) {
         let (mouse_changed, mouse) = (self.config().mouse != new.mouse, new.mouse);
         self.set_config(new);
         if mouse_changed {
@@ -400,6 +457,20 @@ impl Editor {
             self.state.report_config(KEYMAP_FILE, &diags);
         }
         self.state.report_reload(changed, keymap_changed);
+    }
+}
+
+impl Editor {
+    /// ワークスペース層の読込の結果が届いていれば、キーマップのワークスペース層を差し替えて、`.eve/keymap.toml` の診断を
+    /// 出す (07 §7.4 の WKEY-1 / WKEY-2。`on_job_result` で、ユーザー層の差し替えの後に呼ぶ)。
+    pub(crate) fn finish_workspace_keymap(&mut self) {
+        let Some((file, name)) = self.state.keys.workspace_keymap_pending.take() else {
+            return;
+        };
+        let diags = self.set_workspace_keymap(file.as_ref());
+        if file.is_some() {
+            self.state.report_config(&name, &diags);
+        }
     }
 }
 

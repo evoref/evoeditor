@@ -60,6 +60,8 @@ pub(crate) fn config_sources(
         // ユーザーの言語ファイル (07 §17.4)。`--no-config` では見ない
         locales: (!args.no_config && has_dir).then(|| dir.join("locales")),
         conditions: conditions(),
+        // ワークスペース層 (07 §12.5 の WSC-7)。`--no-config` でも読まない (§18.3)
+        no_workspace_config: args.no_config || args.no_workspace_config,
     }
 }
 

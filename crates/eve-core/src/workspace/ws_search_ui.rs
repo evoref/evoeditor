@@ -18,7 +18,7 @@ use eve_view::{
 };
 
 use super::finder::map_ranges;
-use super::{OpenDocBody, OpenDocRef, WS_MAX_FILE_SIZE, WS_MAX_RESULT_LINES, WsHit, WsProgress};
+use super::{OpenDocBody, OpenDocRef, WS_MAX_RESULT_LINES, WsHit, WsProgress};
 use crate::command::{CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, ids};
 use crate::document::{LoadState, ReadOnlyReason};
 use crate::editor::state::EditorState;
@@ -389,12 +389,7 @@ impl EditorState {
             return;
         };
         let open_docs = self.ws_open_docs(&root);
-        let exclude = std::sync::Arc::new(super::ExcludeConfig {
-            exclude: super::finder::DEFAULT_WORKSPACE_EXCLUDE
-                .map(str::to_owned)
-                .to_vec(),
-            ..super::ExcludeConfig::new()
-        });
+        let exclude = std::sync::Arc::new(self.exclude_config());
         let job = self.jobs.spawn(
             None,
             eve_view::Revision::INITIAL,
@@ -404,7 +399,7 @@ impl EditorState {
                 query,
                 exclude,
                 open_docs,
-                max_file_size: WS_MAX_FILE_SIZE,
+                max_file_size: self.settings.config.ws_max_file_size,
                 max_lines: WS_MAX_RESULT_LINES,
                 state: None,
             },
@@ -433,7 +428,7 @@ impl EditorState {
                 let ident = d.identity_ref();
                 let body = if d.read_only.contains(ReadOnlyReason::Binary) {
                     OpenDocBody::Binary
-                } else if d.text().len_bytes() as u64 > WS_MAX_FILE_SIZE {
+                } else if d.text().len_bytes() as u64 > self.settings.config.ws_max_file_size {
                     OpenDocBody::TooLarge
                 } else {
                     OpenDocBody::Text(d.snapshot())

@@ -214,6 +214,25 @@ v0.2 の Linux の受入は、開発 PC の **WSL2 (Ubuntu)** を **Windows Term
 
 **判定**: 2 端末 × 2 段で K1・K2 が ○ か △ なら合格。
 
+## W. ワークスペース設定と所有者の検査 (v0.5 の M33 の段 5。記録は `acceptance.md`)
+
+ワークスペース設定 (`.eve/config.toml`・`.eve/keymap.toml`) の所有者の検査と読み方 (FR-705) を、実際の FS で確かめる (01 §5.5 の FR-705 AC-1〜AC-3 の M、07 §12.6.1 の「手での確認」、07 §12.1 の OWN-1〜OWN-7、§12.5 の WSC-1〜WSC-7)。CI で走らない場合 (root で動かす・exFAT・クラウドのファイル、07 §12.6.3) もここで確かめる。
+
+**確かめる環境**: Windows 11 (Windows Terminal) と WSL の Ubuntu。準備は、`.git` のあるリポジトリのフォルダに `.eve/config.toml` (`[editor]` の `tab_width = 2` と `[theme]` の `name = "high-contrast-dark"`) を置いたもの。どの手順も、そのリポジトリのファイルを開き、`config.show` と `config.show_diagnostics` で確かめる。
+
+| # | 手順 | 期待 |
+|---|---|---|
+| W1 | 自分のプロファイルの下 (`C:\Users\<名前>\src\repo`・`~/src/repo`) のリポジトリを開く | `editor.tab_width = 2` の由来が `ワークスペース: .eve/config.toml:2`。`theme.name` は使われず、診断の一覧に「準安全」の情報が 1 件ある。メッセージ行には出ない |
+| W2 | 昇格した端末で作ったフォルダ (所有者が Administrators) と、OneDrive の同期フォルダの下のリポジトリを開く | どちらも読む (所有者が「自分たち」。OneDrive はクラウドのファイルを含め読む、07 §12.1 の OWN-6) |
+| W3 | ドライブの直下に作ったフォルダ (`C:\src\repo`。`Authenticated Users` の書込を継承する) のリポジトリを開く。続けて、ユーザーの設定に `[workspace]` の `safe_directories = ['C:\src\repo']` を書いて `config.reload` する | 1 回目は読まず、「ほかのユーザー (Authenticated Users) が書き込めます」の警告が出る。2 回目は読む |
+| W4 | exFAT の USB メモリ・WSL の `/mnt/c`・`\\wsl.localhost\Ubuntu\home\<名前>\repo` (Windows から WSL の中) の上のリポジトリを開く。続けて W3 と同じく `safe_directories` に足して `config.reload` する | 1 回目は読まず、「この FS (exFAT / 9p / remote) では所有者を判定できません」の警告が出る (`\\wsl.localhost` は `remote`)。2 回目は読む |
+| W5 | WSL で `chmod o+w .eve` と `setfacl -m u:nobody:w .eve` (`.eve` を元に戻してから) をそれぞれ試す。`sudo evoeditor` で開く | `o+w` は「ほかのユーザー (others)」、ACL は「(acl)」で読まない。`sudo` では「所有者が <名前> です」で読まない (07 §12.1 の OWN-4) |
+| W6 | `.eve` をシンボリックリンク (Windows はジャンクション、`mklink /J`) にして、ほかのフォルダの `.eve` を指す。`.eve/config.toml` だけをリンクにした場合も試す | どちらも「ふつうのファイルではありません」の警告で読まない。リンクの先が UNC (`\\server\share`) でも、資格情報の確認が出ない (開かない) |
+| W7 | `.eve/config.toml` を別のエディタで開いたまま (Windows)、`config.reload` を数回する | 共有違反でも診断を出さず、前に読んだ値のまま動く。閉じた後の `config.reload` で読み直す |
+| W8 | `.eve/keymap.toml` に `[keys.editor]` の `"ctrl+alt+j" = "cursor.down"` と `"ctrl+s" = "cursor.up"` を書いて開く。起動の引数に `--no-workspace-config` を付けて開き直す | `Ctrl+Alt+J` で下へ動き、`Ctrl+S` は保存のまま (「既にある割当を変えるため」の情報が一覧にある)。`help.keys` で `Ctrl+Alt+J` の由来が `workspace`。`--no-workspace-config` では `tab_width` が既定の 4 で、診断も出ない |
+
+**判定**: W1〜W8 が ○ か △ なら合格。期待どおりに読まない・読めない置き場所があれば、FS と所有者・ACL (`icacls`・`getfacl` の出力) を記録する。
+
 ## M. ADR から持ち越した確認 (v0.4 の RC。記録は `acceptance.md`)
 
 ADR-0005 / 0016 / 0023 を確定に改めたときに、確かめた記録の無かった項目 (docs/10-decisions.md §0 の「条件付き確定の ADR の一覧」)。どの結果でも ADR の決定は変えない。期待どおりでない・確かめられない項目は、01 §4.6 の既知の制約に書く。

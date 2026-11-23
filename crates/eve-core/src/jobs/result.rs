@@ -169,9 +169,13 @@ pub enum JobResult {
         /// 組込みにユーザー層の定義を重ねた定義の集まり (`first_line` の正規表現はまだ組んでいない。組むのは
         /// `PrecompileLanguages`)。
         set: std::sync::Arc<eve_config::LanguageSet>,
+        /// ワークスペース層の定義も重ねた集まり (ワークスペース層に定義が無ければ `None`)。
+        workspace_set: Option<std::sync::Arc<eve_config::LanguageSet>>,
         /// ファイルごとの診断 (表示名 `languages/<file>.toml`・`config.toml` など)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
     },
+    /// `ReadWorkspaceConfig` の結果。
+    WorkspaceConfigRead(crate::io::workspace_config::WorkspaceRead),
     /// `PrecompileLanguages` の結果。
     LanguagesPrecompiled {
         /// 組んだ定義の集まり (古い結果を見分ける)。

@@ -15,6 +15,8 @@ pub struct StartupConfig {
     pub config: Option<eve_config::Config>,
     /// 設定の値の由来 (`config.show`、07 §3.5)。
     pub config_origins: Option<eve_config::Origins>,
+    /// ユーザー層 (設定ファイルだけを重ねたもの。ワークスペース層を重ねる土台と「方向のみ」の比較の下の層、07 §12.3 / §12.5)。
+    pub config_user: Option<eve_config::UserLayer>,
     /// 設定ファイルの `[[language]]` の定義 (`eve_config::Resolved::languages`、07 §9.6)。起動時の言語定義の読込に渡す。
     pub config_languages: Option<Vec<eve_config::LanguageDef>>,
     /// テーマファイルから読んだテーマ (名前、読めなければ `None`。07 §8.6)。
@@ -81,6 +83,9 @@ impl Editor {
             st.settings.config_origins = origins;
             // 文書ごとの値は由来 (`--set` か) で決まる (07 §3.6 の LAYER-1)
             st.refresh_all_doc_settings();
+        }
+        if let Some(user) = c.config_user {
+            st.settings.user_layer = Some(user);
         }
         if let Some(defs) = c.config_languages {
             st.set_config_languages(defs);

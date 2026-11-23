@@ -21,6 +21,10 @@ pub(crate) enum Pending {
     ConfigReload,
     /// テーマファイルの読込 (07 §8.6)。
     ThemeRead,
+    /// ワークスペース層の読込 (07 §12.5)。`reload` は届いた後に続ける `config.reload`。
+    WorkspaceConfig {
+        reload: Option<Box<crate::io::config_reload::ReloadPlan>>,
+    },
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
     LanguagesRead { startup: bool },
     /// 言語定義の `first_line` の正規表現を組むジョブ (結果の組めない値を警告する、07 §9.6 の段 2 の細目)。
@@ -181,6 +185,7 @@ impl EditorState {
                 | Pending::ConfigReload
                 | Pending::ThemeRead
                 | Pending::LanguagesRead { .. }
+                | Pending::WorkspaceConfig { .. }
                 | Pending::LanguagesPrecompile
                 | Pending::RecoveryScan
                 | Pending::LastVersion
@@ -345,6 +350,9 @@ impl EditorState {
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
             Pending::LanguagesRead { startup } => self.finish_languages_read(r, startup),
+            Pending::WorkspaceConfig { reload } => {
+                self.finish_workspace_config(r, reload.map(|p| *p));
+            }
             Pending::LanguagesPrecompile => self.finish_languages_precompile(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),

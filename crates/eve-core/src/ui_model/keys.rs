@@ -218,6 +218,8 @@ pub(crate) const UI_CONFIG_ORIGIN_DEFAULT: &str = "ui.config_origin.default";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_BUILTIN: &str = "ui.config_origin.language_builtin";
 pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_FILE: &str = "ui.config_origin.language_file";
 pub(crate) const UI_CONFIG_ORIGIN_USER: &str = "ui.config_origin.user";
+pub(crate) const UI_CONFIG_ORIGIN_WORKSPACE: &str = "ui.config_origin.workspace";
+pub(crate) const UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE: &str = "ui.config_origin.language_workspace";
 pub(crate) const UI_CONFIG_SHOW_ITEM: &str = "ui.config_show.item";
 pub(crate) const UI_CONFIG_SHOW_NO_MATCH: &str = "ui.config_show.no_match";
 pub(crate) const UI_CONFIG_SHOW_PLACEHOLDER: &str = "ui.config_show.placeholder";
@@ -351,7 +353,9 @@ pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 327] = [
+const ALL: [&str; 329] = [
+    UI_CONFIG_ORIGIN_WORKSPACE,
+    UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,

@@ -1252,7 +1252,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `msg.language.too_many_definitions` | 1 つの層の定義が 256 を超えた (LANG-3。警告。同上) | 言語定義が {count} 個を超えています / 超えた分の定義は使いません | There are more than {count} language definitions / The definitions beyond the limit are not used |
 | `msg.language.file_too_large` | 256 KiB を超える言語定義のファイル (LANG-2。警告。同上) | この言語定義のファイルは大きすぎるため読みません / 256 KiB 以下にしてください | This language definition file is too large and is not read / Keep it at 256 KiB or less |
 | `msg.config.out_of_range_no_default` | 範囲外のうち、既定値を持たない項目 (言語定義の `indent.width` など。同上) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は使いません | The value {value} of {item} is out of range / Specify a value in {range}. This item is not used |
-| `msg.workspace.not_owned` | 所有者が違う (07 §12.1 の OWN-7。警告) | {path} を読みませんでした: 所有者が {owner} です / 自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: it is owned by {owner} / Take ownership (takeown / chown), or add it to workspace.safe_directories in your user settings |
+| `msg.workspace.not_owned` | 所有者が違う (07 §12.1 の OWN-7。警告。M33 の段 5 で足した。ここから `ui.workspace.key_reason.*` までの行と、§15 の目録の `msg.workspace.opened_elsewhere`・`not_regular`・`too_large`・`too_many_keys`・`msg.config.invalid_item`・`broad_safe_directory`・`ui.config.item_reason.*`・`ui.config_origin.workspace`・`language_workspace` も段 5 で足した) | {path} を読みませんでした: 所有者が {owner} です / 自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: it is owned by {owner} / Take ownership (takeown / chown), or add it to workspace.safe_directories in your user settings |
 | `msg.workspace.others_can_write` | 他人が書ける (OWN-7。警告) | {path} を読みませんでした: ほかのユーザー ({who}) が書き込めます / Windows は icacls で継承を切ってそのアカウントを外し、Unix は chmod o-w で外してください | Did not read {path}: other users ({who}) can write to it / On Windows, disable inheritance with icacls and remove that account; on Unix, run chmod o-w |
 | `msg.workspace.owner_unknown` | 判定できない FS (OWN-7。警告) | {path} を読みませんでした: この FS ({fs}) では所有者を判定できません / 読むときは、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: ownership cannot be checked on this file system ({fs}) / To read it, add it to workspace.safe_directories in your user settings |
 | `msg.workspace.item_pending` | 準安全・危険の項目 (07 §12.5 の WSC-4。情報) | {item} はワークスペース設定からは使いません ({class}) / v0.5 では、使うときはユーザーの設定に書いてください | {item} is not applied from workspace settings ({class}) / In v0.5, write it in your user settings instead |
@@ -1754,6 +1754,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config_origin.condition` | 同上。条件付きセクションの値 (`{origin}` は上の由来、`{condition}` は `os.windows` など。07 §3.4 の COND-7)。条件付きセクションの中の設定の診断の本文にも使う (`{origin}` に本文、COND-4) | {origin} [{condition}] |
 | `ui.config_origin.language_builtin` | 同上。文書ごとのキーの値を組込みの言語定義で決めた (07 §3.6。`{language}` は言語 ID。v0.5 の M33 の段 2) | 言語 {language} (組込み) |
 | `ui.config_origin.language_file` | 同上。ユーザー層の言語定義で決めた (`{file}` は `config.toml`・`languages/<file>.toml`、`{line}` は値を書いた行) | 言語 {language}: {file}:{line} |
+| `ui.config_origin.workspace` | 同上。ワークスペース層 (`.eve/config.toml`) で決めた (07 §3.5。`{line}` は値を書いた行。v0.5 の M33 の段 5) | ワークスペース: .eve/config.toml:{line} |
+| `ui.config_origin.language_workspace` | 同上。ワークスペース層の言語定義 (`.eve/config.toml` の `[[language]]`) で決めた (07 §3.6 の LAYER-1 の (7)。同上) | 言語 {language}: .eve/config.toml:{line} |
 | `ui.lang_set.title` | 言語の一覧 (`lang.set`、07 §9.6 の LANG-8。v0.5 の M33 の段 2) の見出し。`{language}` はフォーカスの文書の言語 ID | 言語を選ぶ (今: {language}) |
 | `ui.lang_set.auto` | 同上。先頭の行 (明示の指定を外して判定し直す) | 自動で判定 |
 | `ui.lang_set.current` | 同上。今の言語の行の右の列 (`{language}` は言語 ID) | {language} (今の言語) |
@@ -1989,6 +1991,26 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.finder.not_found` | ファインダ (横断検索も、§8.12) で選んだファイルが走査の後に消えていた (新規の文書にしない、03 §12.7.4。v0.5 の M31 の段 6。hint は M31 の段 7 で、横断検索 (開き直しても探し直さない) にも通じる文にした) | {path} はもうありません / ファイルが移動・削除されていないかを確かめてください |
 | `msg.finder.match_failed` | ファインダの照合のジョブが失敗した (パニックなど。取消しでない。03 §12.7.4 の段 6 の細目 (4)。v0.5 の M31 の段 7。`{reason}` は `panic` など) | ファイルの絞り込みに失敗しました: {reason} / 入力を変えると絞り込み直します |
 | `msg.workspace.search_failed` | 横断検索のジョブが失敗した (パニックなど。ルートを読めないときは `msg.workspace.scan_failed`。03 §12.7.5 の段 7 の細目 (12)) | ワークスペースの検索に失敗しました: {reason} / 検索語を変えると探し直します |
+| `msg.workspace.item_pending` (v0.5) | ワークスペース層の準安全の項目を使わなかった (07 §12.5 の WSC-4。情報。`{class}` は `ui.workspace.class.semi_safe`。M33 の段 5) | {item} はワークスペース設定からは使いません ({class}) / v0.5 では、使うときはユーザーの設定に書いてください |
+| `msg.workspace.item_pending_unsafe` (v0.5) | ワークスペース層の危険の項目を使わなかった (WSC-4。情報。`{value}` は書かれた値。ユーザーの設定へ写すことを勧めない) | {item} = {value} はこのリポジトリが求めた値ですが、安全のため使っていません / 中身を確かめてから決めてください |
+| `msg.workspace.item_ignored` (v0.5) | ワークスペース層の常に無視の項目 (WSC-4。警告。v0.5 は `workspace.safe_directories`) | {item} はワークスペース設定に書けません (常に無視します) / ワークスペース設定は、この項目を変えられません |
+| `msg.workspace.item_no_effect` (v0.5) | ワークスペース層で効かない項目 (WSC-4。情報) | {item} はワークスペース設定では効きません (起動時に決まります) / ユーザーの設定に書いてください |
+| `msg.workspace.key_rejected` (v0.5) | ワークスペース層のキーの割当を使わなかった (07 §7.4 の WKEY-2。情報。`{key}` は書かれたキー、`{reason}` は `ui.workspace.key_reason.*`) | ワークスペースのキー割当 {key} は使いません ({reason}) / ワークスペースのキー割当は、まだ割当の無いキーに足すことだけができます |
+| `msg.workspace.too_many_keys` (v0.5) | `.eve/keymap.toml` の割当が上限を超えた (WKEY-3。警告。`{count}` は上限の 1,000。超えた分は読まない) | ワークスペースのキー割当が {count} 件を超えています / 超えた分の割当は読みません |
+| `msg.workspace.not_owned` (v0.5) | 所有者が「自分たち」でないので読まなかった (07 §12.1 の OWN-7。警告。`{path}` は判定に落ちた物、`{owner}` は所有者の名前か SID) | {path} を読みませんでした: 所有者が {owner} です / 自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください |
+| `msg.workspace.others_can_write` (v0.5) | 他人が書けるので読まなかった (OWN-7。警告。`{who}` は書けるアカウント。Unix は `others` か `acl`) | {path} を読みませんでした: ほかのユーザー ({who}) が書き込めます / Windows は icacls で継承を切ってそのアカウントを外し、Unix は chmod o-w で外してください |
+| `msg.workspace.owner_unknown` (v0.5) | 所有者を判定できない FS で読まなかった (OWN-3 / OWN-7。警告。`{fs}` は `exFAT`・`9p`・`remote` など) | {path} を読みませんでした: この FS ({fs}) では所有者を判定できません / 読むときは、ユーザーの設定の workspace.safe_directories に足してください |
+| `msg.workspace.opened_elsewhere` (v0.5) | 安全な場所の下で、開いたファイルが判定した場所と違った (OWN-6 の `Unknown { query_failed }` のうち、書いた形で `workspace.safe_directories` の下のもの。警告。M33 の段 5 で足した、07 §12.6.3) | {path} を読みませんでした: 開いたファイルが確かめた場所にありません / 途中のリンクやジャンクションの行き先を確かめてから、設定を読み直してください |
+| `msg.workspace.not_regular` (v0.5) | ふつうのファイルでない (`.eve` とファイルのシンボリックリンク・ジャンクション・FIFO など。OWN-6。警告。同上) | {path} を読みませんでした: ふつうのファイルではありません (シンボリックリンク・ジャンクションなど) / リンクにせず、ふつうのファイルとして置いてください |
+| `msg.workspace.too_large` (v0.5) | 256 KiB を超えるワークスペース設定のファイル (WSC-1。警告。同上) | {path} を読みませんでした: 大きすぎます / 256 KiB 以下にしてください |
+| `ui.workspace.class.semi_safe` (v0.5) | `msg.workspace.item_pending` の `{class}` | 準安全 |
+| `ui.workspace.key_reason.bound` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (a) 下の層に割当のあるキー) | 既にある割当を変えるため |
+| `ui.workspace.key_reason.shadows` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (b) 下の層の割当を使えなくするチョード) | 既にある割当を使えなくするため |
+| `ui.workspace.key_reason.text` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (c) 文字入力・取消し・確定のキー) | 文字入力のキーのため |
+| `ui.workspace.key_reason.args` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (d) `args` を持つ割当) | 引数を持つため |
+| `ui.workspace.key_reason.none` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (e) `"none"` の割当) | 割当の解除のため |
+| `ui.workspace.key_reason.exec` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (f) `exec` のコマンド) | 外部コマンドのため |
+| `ui.workspace.key_reason.command` (v0.5) | `msg.workspace.key_rejected` の `{reason}` (07 §7.4 の WKEY-2 の (g) Motion・Ui・Edit でないコマンドと `app.*` (M33 の段 5 で足した)) | ワークスペースからは割り当てられないコマンドのため |
 | `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
 | `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 
@@ -2037,6 +2059,12 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.multi_cursor_always` (v0.5) | 設定の診断 (情報)。設定に `editor.multi_cursor` を書いた (公開しない。複数カーソルは常に有効、07 §5.1。値は使わない。M32 の段 3) | editor.multi_cursor は使えません。複数カーソルは常に有効です / 使わないときは keymap.toml で足す操作のキーを "none" にしてください |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
 | `msg.config.invalid_value_no_default` | 列挙値不正のうち、既定値を持たない項目 (テーマファイルの色 `ui.selection.fg = "nope"` など)。`msg.config.invalid_value` の `{default}` が空になる場面の代わりに出す。該当の値は使わない | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は使いません |
+| `msg.config.invalid_item` (v0.5) | 配列の要素の誤り (`workspace.root_markers` の名前でない要素・`workspace.safe_directories` の相対パスと `*`・空の要素、07 §5.9。警告。その要素を使わない。`{reason}` は `ui.config.item_reason.*`。M33 の段 5) | {item} の要素 {value} は使えません ({reason}) / この要素は使いません |
+| `msg.config.broad_safe_directory` (v0.5) | `workspace.safe_directories` にファイルシステムのルート・ドライブの直下・UNC の共有の直下を書いた (07 §12.1 の OWN-5。警告。使う) | {item} の {value} は広すぎます / その下のすべてで所有者の検査を省きます。リポジトリのフォルダを書いてください |
+| `ui.config.item_reason.empty` (v0.5) | `msg.config.invalid_item` の `{reason}` (空の要素) | 空です |
+| `ui.config.item_reason.not_name` (v0.5) | `msg.config.invalid_item` の `{reason}` (`workspace.root_markers` の区切りを含む要素・`.`・`..`) | フォルダの直下の名前ではありません |
+| `ui.config.item_reason.relative` (v0.5) | `msg.config.invalid_item` の `{reason}` (`workspace.safe_directories` の相対パス (`~` を含む)) | 絶対パスではありません |
+| `ui.config.item_reason.wildcard` (v0.5) | `msg.config.invalid_item` の `{reason}` (`workspace.safe_directories` の `*` を含む要素) | * は書けません |
 | `msg.config.locale_syntax` (v0.4) | 言語ファイル (`locales/<lang>.toml`、07 §17.4) のファイル全体の問題 (エラー。ファイル全体を使わない): TOML の構文エラー・書ける構造の上限を超える (インラインの表・配列、8 段を超えるキー、2 万を超えるキーの段)。`{reason}` は構文エラーならパーサの説明 (無害化したもの)、ほかは理由の語 (`ui.config.locale_reason.*`)。行が分からないこともあるので、hint は行の有無に依らず成り立つ形 | この言語ファイルは書式が正しくないため使っていません: {reason} / 表示された行かファイルを直してください |
 | `msg.config.locale_unreadable` (v0.4) | 同上。読めない (権限・I/O の誤り) か、通常のファイルでない (ディレクトリ・デバイス・FIFO)。`{reason}` は OS の説明 (無害化したもの) か、理由の語 `ui.config.locale_reason.not_regular` | この言語ファイルを読めないため使っていません: {reason} / 読める通常のファイルか確かめてください |
 | `msg.config.locale_not_utf8` (v0.4) | 同上。UTF-8 でない (先頭の BOM は読み飛ばす) | この言語ファイルは UTF-8 で書かれていないため使っていません / UTF-8 で保存し直してください |

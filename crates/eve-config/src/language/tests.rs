@@ -437,7 +437,13 @@ proptest! {
         prop_assert!(r.reports.is_empty(), "{:?}", r.reports);
         let (set, rep) = LanguageSet::build(&defs(&user));
         prop_assert!(rep.is_empty());
-        let v = doc_values(&r.config, &r.origins, set.get(lang));
+        let v = doc_values(&DocLayers {
+            config: &r.config,
+            origins: &r.origins,
+            user: None,
+            language: set.get(lang),
+            workspace: false,
+        });
         // 参照モデル
         let width = |s: &Stages, default: u8| s.set.or(s.user_lang).or(s.general).unwrap_or(default);
         prop_assert_eq!(v.indent_width.value, width(&w, 4));

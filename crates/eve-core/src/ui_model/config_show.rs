@@ -39,6 +39,11 @@ impl EditorState {
                     ("line", &line.to_string()),
                 ],
             ),
+            // ワークスペース層は `.eve/config.toml:<行>` と示す (07 §3.5)。開くのは `source` の絶対パス
+            Origin::Workspace { line, .. } => render(
+                keys::UI_CONFIG_ORIGIN_WORKSPACE,
+                &[("line", &line.to_string())],
+            ),
             Origin::Cli { .. } => render(keys::UI_CONFIG_ORIGIN_CLI, &[]),
         };
         match origin.condition() {
@@ -69,6 +74,10 @@ impl EditorState {
                             ("file", &escape_untrusted(source)),
                             ("line", &line.to_string()),
                         ],
+                    ),
+                    LangOrigin::Workspace { line, .. } => render(
+                        keys::UI_CONFIG_ORIGIN_LANGUAGE_WORKSPACE,
+                        &[("language", &language), ("line", &line.to_string())],
                     ),
                 }
             }
@@ -155,6 +164,31 @@ impl EditorState {
             return CommandResult::Done;
         };
         let rows = self.config_show_rows();
+        // ワークスペース層の由来は、表示名が `.eve/config.toml` の絶対パス (ファイルを直接開く)
+        let workspace = match &rows[i].origin {
+            ValueOrigin::Config(Origin::Workspace {
+                source,
+                line,
+                column,
+                ..
+            })
+            | ValueOrigin::Language {
+                at:
+                    LangOrigin::Workspace {
+                        source,
+                        line,
+                        column,
+                    },
+                ..
+            } => Some((crate::FsPath::from(source.as_str()), *line, *column)),
+            _ => None,
+        };
+        let at = |n: u32| usize::try_from(n).unwrap_or(usize::MAX).max(1);
+        if let Some((path, line, column)) = workspace {
+            self.set_overlay(None);
+            self.mark_dirty_render();
+            return self.open_at(&path, at(line), at(column));
+        }
         let (source, line, column) = match &rows[i].origin {
             ValueOrigin::Config(Origin::User {
                 source,
@@ -176,7 +210,6 @@ impl EditorState {
         let Some(path) = self.config_diagnostic_path(source) else {
             return CommandResult::Done;
         };
-        let at = |n: u32| usize::try_from(n).unwrap_or(usize::MAX).max(1);
         let (line, column) = (at(*line), at(*column));
         self.set_overlay(None);
         self.mark_dirty_render();

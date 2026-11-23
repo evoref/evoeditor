@@ -4,7 +4,7 @@
 //! 起動時 (bin) と `config.reload` (core) が同じ規則で合成するよう、読み込んだ本文を受け取る純関数にしている。
 
 use crate::config::{Config, declared_values, dump_rank, load_str_for};
-use crate::{DiagKind, Diagnostic, Loaded, Severity, Written};
+use crate::{DiagKind, Diagnostic, Loaded, Severity};
 
 /// ユーザー層のファイル 1 つ。`text` は、無ければ `Ok(None)`、読めなければ理由。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +48,8 @@ pub struct Resolved {
     /// 設定ファイル (`config.toml`・`--config`) の `[[language]]` の定義 (重ねた順。`source` はファイルの表示名。07 §9.6 の
     /// LANG-2)。構文エラーのファイルのものは含めない。
     pub languages: Vec<crate::LanguageDef>,
+    /// ユーザー層 (設定ファイルだけを重ねたもの)。ワークスペース層が届いたときに [`compose`] で重ね直す土台。
+    pub user: UserLayer,
 }
 
 /// 公開キーの値の由来 (07 §3.5。`config.show` の右の列)。
@@ -67,6 +69,17 @@ pub enum Origin {
         /// 条件付きセクションの値なら、その条件 (07 §3.4 の COND-7)。
         condition: Option<crate::Condition>,
     },
+    /// ワークスペース層 (`<root>/.eve/config.toml`、07 §12.5)。
+    Workspace {
+        /// ファイルの表示名 (`.eve/config.toml` の絶対パス。一覧の `Enter` で開く)。
+        source: String,
+        /// キーを書いた行 (1 始まり)。
+        line: u32,
+        /// キーを書いた桁 (1 始まり)。
+        column: u32,
+        /// 条件付きセクションの値なら、その条件。
+        condition: Option<crate::Condition>,
+    },
     /// コマンドライン層 (`--set`)。
     Cli {
         /// 条件付きのキー (`--set os.windows.editor.tab_width=2`) なら、その条件。
@@ -80,7 +93,9 @@ impl Origin {
     pub fn condition(&self) -> Option<crate::Condition> {
         match self {
             Origin::Default => None,
-            Origin::User { condition, .. } | Origin::Cli { condition } => *condition,
+            Origin::User { condition, .. }
+            | Origin::Workspace { condition, .. }
+            | Origin::Cli { condition } => *condition,
         }
     }
 }
@@ -219,64 +234,117 @@ pub fn load_set(base: Config, arg: &str, conditions: crate::Conditions) -> Optio
     ))
 }
 
-/// ユーザー層のファイルを順に重ね、最後に `sets` を重ねる。読めないファイル・構文エラーのファイルは重ねない
-/// (既定値または前のファイルまでの値のまま。起動時はそれで動き、`config.reload` は `has_error` を見て前の設定を保つ)。
-/// 条件付きセクションは、ファイルごと (`--set` は値ごと) に `conditions` で解いてから重ねる (07 §3.4 の COND-3。層の間の
-/// 順は変えない)。
-pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Conditions) -> Resolved {
-    let mut config = Config::default();
-    let mut reports = Vec::new();
-    let mut has_error = false;
-    let mut theme_name_at = None;
-    let mut ui_locale_at = None;
-    let mut origins = Origins::default();
-    let mut languages = Vec::new();
-    // 値を使った所を、由来と、テーマ・言語の診断の場所に記録する
-    let mut record = |source: Option<&str>, written: &[Written]| {
-        for w in written {
-            let at = KeyOrigin {
-                source: source.unwrap_or(SET_SOURCE).to_owned(),
-                line: w.line,
-                column: w.column,
-                condition: w.condition,
-            };
-            let at = match source {
-                Some(_) => at,
-                None => KeyOrigin {
-                    line: 0,
-                    column: 0,
-                    ..at
-                },
-            };
-            match w.key {
-                "theme.name" => theme_name_at = Some(at.clone()),
-                "ui.locale" => ui_locale_at = Some((at.clone(), w.text.clone())),
-                _ => {}
-            }
-            let origin = match source {
-                Some(s) => Origin::User {
-                    source: s.to_owned(),
+/// ユーザー層 (設定ファイルを重ねたもの。ワークスペース層とコマンドライン層の下) の値と由来 (07 §3.1 の L0 + L2)。
+/// ワークスペース層の「方向のみ」の比較の下の層 (07 §12.3) と、ワークスペース層を重ね直すときの土台にする。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UserLayer {
+    /// ユーザー層まで重ねた設定。
+    pub config: Config,
+    /// ユーザー層で値を書いた公開キーの由来。
+    pub origins: Origins,
+    /// `theme.name` を最後に書いた所。
+    pub theme_name_at: Option<KeyOrigin>,
+    /// `ui.locale` を最後に書いた所と、書かれた値。
+    pub ui_locale_at: Option<(KeyOrigin, String)>,
+}
+
+/// ユーザー層にワークスペース層とコマンドライン層を重ねた結果 ([`compose`])。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Composed {
+    /// 重ねた設定。
+    pub config: Config,
+    /// 公開キーの値の由来。
+    pub origins: Origins,
+    /// `theme.name` を最後に書いた所。
+    pub theme_name_at: Option<KeyOrigin>,
+    /// `ui.locale` を最後に書いた所と、書かれた値。
+    pub ui_locale_at: Option<(KeyOrigin, String)>,
+    /// `--set` の診断 (書いた順)。
+    pub set_diagnostics: Vec<Diagnostic>,
+}
+
+/// ユーザー層 `user` に、ワークスペース層 (`workspace` の (表示名, 層)。安全な項目だけ、07 §12.5 の WSC-3) と
+/// コマンドライン層 (`sets`) をこの順に重ねる (07 §3.1 の L2 → L3 → L4)。`config.reload` とワークスペース層が届いたときに、
+/// 設定ファイルを読み直さずに重ね直すのに使う。
+#[must_use]
+pub fn compose(
+    user: &UserLayer,
+    workspace: Option<(&str, &crate::WorkspaceLayer)>,
+    sets: &[String],
+    conditions: crate::Conditions,
+) -> Composed {
+    let mut config = user.config.clone();
+    let mut origins = user.origins.clone();
+    let mut theme_name_at = user.theme_name_at.clone();
+    let mut ui_locale_at = user.ui_locale_at.clone();
+    if let Some((source, ws)) = workspace {
+        ws.apply_to(&mut config);
+        for w in &ws.applied {
+            origins.set(
+                w.key,
+                Origin::Workspace {
+                    source: source.to_owned(),
                     line: w.line,
                     column: w.column,
                     condition: w.condition,
                 },
-                None => Origin::Cli {
-                    condition: w.condition,
-                },
-            };
-            origins.set(w.key, origin);
+            );
         }
-    };
+    }
+    let mut set_diagnostics = Vec::new();
+    for arg in sets {
+        if let Some(l) = load_set(config.clone(), arg, conditions) {
+            config = l.config;
+            for w in &l.written {
+                let at = KeyOrigin {
+                    source: SET_SOURCE.to_owned(),
+                    line: 0,
+                    column: 0,
+                    condition: w.condition,
+                };
+                match w.key {
+                    "theme.name" => theme_name_at = Some(at),
+                    "ui.locale" => ui_locale_at = Some((at, w.text.clone())),
+                    _ => {}
+                }
+                origins.set(
+                    w.key,
+                    Origin::Cli {
+                        condition: w.condition,
+                    },
+                );
+            }
+            set_diagnostics.extend(l.diagnostics);
+        }
+    }
+    Composed {
+        config,
+        origins,
+        theme_name_at,
+        ui_locale_at,
+        set_diagnostics,
+    }
+}
+
+/// ユーザー層のファイルを順に重ね、最後に `sets` を重ねる。読めないファイル・構文エラーのファイルは重ねない
+/// (既定値または前のファイルまでの値のまま。起動時はそれで動き、`config.reload` は `has_error` を見て前の設定を保つ)。
+/// 条件付きセクションは、ファイルごと (`--set` は値ごと) に `conditions` で解いてから重ねる (07 §3.4 の COND-3。層の間の
+/// 順は変えない)。ワークスペース層は含めない (起動の後のジョブで届き、[`compose`] で重ねる)。
+pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Conditions) -> Resolved {
+    let mut user = UserLayer::default();
+    let mut reports = Vec::new();
+    let mut has_error = false;
+    let mut languages = Vec::new();
     for s in sources {
         let loaded = match &s.text {
             Ok(None) => continue,
             Ok(Some(t)) => load_str_for(
-                config.clone(),
+                user.config.clone(),
                 t.strip_prefix('\u{feff}').unwrap_or(t),
                 conditions,
             ),
             Err(e) => Loaded {
-                config: config.clone(),
+                config: user.config.clone(),
                 diagnostics: vec![unreadable(e.clone())],
                 written: Vec::new(),
                 languages: Vec::new(),
@@ -288,8 +356,30 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
             .any(|d| d.severity == Severity::Error);
         has_error |= error;
         if !error {
-            config = loaded.config;
-            record(Some(&s.name), &loaded.written);
+            user.config = loaded.config;
+            // 値を使った所を、由来と、テーマ・言語の診断の場所に記録する
+            for w in &loaded.written {
+                let at = KeyOrigin {
+                    source: s.name.clone(),
+                    line: w.line,
+                    column: w.column,
+                    condition: w.condition,
+                };
+                match w.key {
+                    "theme.name" => user.theme_name_at = Some(at.clone()),
+                    "ui.locale" => user.ui_locale_at = Some((at.clone(), w.text.clone())),
+                    _ => {}
+                }
+                user.origins.set(
+                    w.key,
+                    Origin::User {
+                        source: s.name.clone(),
+                        line: w.line,
+                        column: w.column,
+                        condition: w.condition,
+                    },
+                );
+            }
             languages.extend(loaded.languages.into_iter().map(|mut d| {
                 d.source.clone_from(&s.name);
                 d
@@ -299,26 +389,23 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
             reports.push((s.name.clone(), loaded.diagnostics));
         }
     }
-    let mut set_diags = Vec::new();
-    for arg in sets {
-        if let Some(l) = load_set(config.clone(), arg, conditions) {
-            config = l.config;
-            record(None, &l.written);
-            set_diags.extend(l.diagnostics);
-        }
-    }
-    has_error |= set_diags.iter().any(|d| d.severity == Severity::Error);
-    if !set_diags.is_empty() {
-        reports.push((SET_SOURCE.to_owned(), set_diags));
+    let composed = compose(&user, None, sets, conditions);
+    has_error |= composed
+        .set_diagnostics
+        .iter()
+        .any(|d| d.severity == Severity::Error);
+    if !composed.set_diagnostics.is_empty() {
+        reports.push((SET_SOURCE.to_owned(), composed.set_diagnostics));
     }
     Resolved {
-        config,
+        config: composed.config,
         reports,
         has_error,
-        theme_name_at,
-        ui_locale_at,
-        origins,
+        theme_name_at: composed.theme_name_at,
+        ui_locale_at: composed.ui_locale_at,
+        origins: composed.origins,
         languages,
+        user,
     }
 }
 
@@ -591,8 +678,14 @@ mod tests {
                 "search.regex_default",
                 "search.max_matches",
                 "search.count_limit",
+                "search.workspace.respect_gitignore",
+                "search.workspace.follow_symlinks",
+                "search.workspace.max_file_size",
                 "clipboard.osc52",
                 "clipboard.osc52_max_bytes",
+                "workspace.root_markers",
+                "workspace.exclude",
+                "workspace.safe_directories",
             ]
         );
     }

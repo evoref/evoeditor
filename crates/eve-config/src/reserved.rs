@@ -2,7 +2,8 @@
 //! `docs/07-config-extensibility.md` の §5.1〜§5.11・§5.13 の表の `キー` 列から公開キーを除いたもの (§5.12 の `[ai]` 等は
 //! セクションごと予約する)。表との一致は eve-core の試験 `config_reserved` が確かめる。表が変わったら作り直す。
 
-/// 公開前のセクション (公開キーを持つ `editor` / `file` / `view` / `theme` / `ui` / `search` / `clipboard` を除く)。
+/// 公開前のセクション (公開キーを持つ `editor` / `file` / `view` / `theme` / `ui` / `search` / `clipboard` / `workspace` を
+/// 除く)。
 pub const RESERVED_SECTIONS: &[&str] = &[
     "ai",
     "formatter",
@@ -13,7 +14,6 @@ pub const RESERVED_SECTIONS: &[&str] = &[
     "plugins",
     "process",
     "session",
-    "workspace",
 ];
 
 /// 言語定義の表の配列 (`[[language]]`、docs/07 §5.8・§9.6)。公開キーを持たないが、v0.5 の M33 (FR-704) から読む
@@ -82,9 +82,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "process.shell",
     "search.regex_size_limit",
     "search.replace_all_select_result",
-    "search.workspace.follow_symlinks",
-    "search.workspace.max_file_size",
-    "search.workspace.respect_gitignore",
     "session.max_entries",
     "session.remember_cursor",
     "session.restore",
@@ -107,8 +104,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "view.scroll_margin",
     "view.scroll_margin_horizontal",
     "view.width_risky_display",
-    "workspace.exclude",
-    "workspace.root_markers",
     "workspace.trust.default",
     "workspace.trust.remember",
 ];

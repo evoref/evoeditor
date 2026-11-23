@@ -25,6 +25,10 @@ const UNREACHABLE_MARK: &str = "*";
 /// 付ける印 (04 §8.6)。ASCII だけの端末でも描ける字にする。
 const DISABLED_MARK: &str = "!";
 
+/// ヘルプのキー一覧で、ワークスペース層の割当の後ろに添える由来 (07 §7.4 の WKEY-3)。層の名前のまま訳さない
+/// (`--dump-keymap` の層の名前と同じ語)。
+const WORKSPACE_ORIGIN: &str = " (workspace)";
+
 /// 「検索の書き方」の節の表 (書き方, 説明の文言キー)。書き方は正規表現の構文で、言語に依らないのでここに書く
 /// (04 §8.6、03 §12.3.1 の表)。行をまたぐ書き方・またがない書き方・改行の続き・文書の端の順。
 const SEARCH_SYNTAX: [(&str, &str); 6] = [
@@ -111,9 +115,9 @@ impl EditorState {
             // この端末で届かない割当と、ユーザーのチョードに負けて使えない割当には印を付ける (04 §8.6 / §7.8、07 §7.7)
             let keys = seqs
                 .iter()
-                .map(|(s, state)| {
+                .map(|(s, state, origin)| {
                     let k = eve_view::key_notation(s, self.term.caps.ascii_only);
-                    match state {
+                    let k = match state {
                         KeyState::Reachable => k,
                         KeyState::Unreachable => {
                             any_unreachable = true;
@@ -123,6 +127,10 @@ impl EditorState {
                             any_disabled = true;
                             format!("{k}{DISABLED_MARK}")
                         }
+                    };
+                    match origin {
+                        KeyOrigin::Workspace => format!("{k}{WORKSPACE_ORIGIN}"),
+                        KeyOrigin::Other => k,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -455,17 +463,45 @@ pub(crate) enum KeyState {
     Disabled,
 }
 
+/// ヘルプのキー一覧での割当の由来 (07 §7.4 の WKEY-3)。ワークスペース層の割当だけを示す。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyOrigin {
+    /// ワークスペース層 (`.eve/keymap.toml`)。
+    Workspace,
+    /// ほかの層 (既定・ユーザー)。
+    Other,
+}
+
+impl KeyOrigin {
+    /// 層の名前 (`Keymap::listed_bindings` の層) から。
+    pub(crate) fn of_layer(layer: &str) -> KeyOrigin {
+        if layer == crate::keymap::WORKSPACE_LAYER {
+            KeyOrigin::Workspace
+        } else {
+            KeyOrigin::Other
+        }
+    }
+}
+
+/// ヘルプのキー一覧の 1 つの割当 (キー列, 状態, 由来)。
+pub(crate) type KeyEntry = (Vec<KeyStroke>, KeyState, KeyOrigin);
+
 /// すべての割当をコマンドごとに集める (ヘルプのキー一覧用)。層の順で、同じ割当は 1 つにまとめる。
-/// 値は (キー列, 状態)。同じキー列が複数あれば、使える側の状態を採る (どれかが届けば届く)。
+/// 同じキー列が複数あれば、使える側の状態を採り (どれかが届けば届く)、どれかがワークスペース層の外にあれば由来を示さない。
 pub(crate) fn collect_all_bindings(
-    bindings: impl Iterator<Item = (String, Vec<KeyStroke>, KeyState)>,
-) -> BTreeMap<String, Vec<(Vec<KeyStroke>, KeyState)>> {
-    let mut out: BTreeMap<String, Vec<(Vec<KeyStroke>, KeyState)>> = BTreeMap::new();
-    for (cmd, seq, state) in bindings {
+    bindings: impl Iterator<Item = (String, Vec<KeyStroke>, KeyState, KeyOrigin)>,
+) -> BTreeMap<String, Vec<KeyEntry>> {
+    let mut out: BTreeMap<String, Vec<KeyEntry>> = BTreeMap::new();
+    for (cmd, seq, state, origin) in bindings {
         let e = out.entry(cmd).or_default();
-        match e.iter_mut().find(|(s, _)| *s == seq) {
-            Some(x) => x.1 = x.1.min(state),
-            None => e.push((seq, state)),
+        match e.iter_mut().find(|(s, _, _)| *s == seq) {
+            Some(x) => {
+                x.1 = x.1.min(state);
+                if origin == KeyOrigin::Other {
+                    x.2 = KeyOrigin::Other;
+                }
+            }
+            None => e.push((seq, state, origin)),
         }
     }
     out

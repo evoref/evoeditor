@@ -47,6 +47,7 @@ fn start(fs: &[(&str, &[u8])], sets: &[&str], files: &[&str]) -> Harness {
                 frontend: Frontend::Tui,
                 ..Conditions::default()
             },
+            no_workspace_config: false,
         }),
         ..Default::default()
     });

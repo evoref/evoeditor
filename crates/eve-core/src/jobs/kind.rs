@@ -79,6 +79,22 @@ pub enum JobKind {
         dir: Option<FsPath>,
         /// 設定ファイルの `[[language]]` の定義 (重ねる順)。
         config: Vec<eve_config::LanguageDef>,
+        /// ワークスペース層の `[[language]]` の定義 (`.eve/config.toml`、07 §9.6 の LANG-2)。空でなければ、ユーザー層の後に
+        /// 重ねた集まり (ルートの下の文書の判定に使う) も作る。
+        workspace: Vec<eve_config::LanguageDef>,
+    },
+    /// ワークスペース層 (`<root>/.eve/config.toml`・`.eve/keymap.toml`) を所有者の検査つきで読み、解析・分類する (07 §12.5 の
+    /// WSC-1 / WSC-2、02 §9.3 の `ReadWorkspaceConfig`)。起動時はルートが決まったとき、`config.reload` はユーザー層を
+    /// 読み直した後に積む。結果は `JobResult::WorkspaceConfigRead`。
+    ReadWorkspaceConfig {
+        /// ワークスペースのルート。
+        root: FsPath,
+        /// ユーザー層の値 (「方向のみ」の比較の下の層、07 §12.3)。
+        lower: std::sync::Arc<eve_config::Config>,
+        /// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。
+        conditions: eve_config::Conditions,
+        /// `workspace.safe_directories` (07 §12.1 の OWN-5)。
+        safe_dirs: Vec<FsPath>,
     },
     /// 言語定義の `first_line` の正規表現を組む (07 §9.6 の段 2 の細目)。`ReadLanguages` の結果が届いたときに積む (起動時は
     /// 起動時のパスを開くジョブの後ろになる)。結果は `JobResult::LanguagesPrecompiled`。

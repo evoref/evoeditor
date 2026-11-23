@@ -25,27 +25,28 @@ mod sanitize;
 pub mod theme;
 pub mod theme_file;
 mod toml_scan;
+mod workspace;
 
 pub use catalog::{Catalog, CatalogError, base_key, placeholders};
 pub use chars::{CharClass, forbidden_char};
 pub use condition::{Condition, Conditions, EnvConditions, Frontend, Os};
 pub use config::{
     BackspaceUnit, ColorMode, ConditionProblem, Config, DefaultEncoding, DefaultLineEnding,
-    DiagKind, Diagnostic, ExternalChangePolicy, IndentUnit, KeymapProblem, Loaded, Osc52Policy,
-    SearchCase, Severity, ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent, WrapMode,
-    Written, changed_keys, default_display, is_theme_name, load_language_str, load_str,
-    load_str_for, load_str_onto,
+    DiagKind, Diagnostic, ExternalChangePolicy, IndentUnit, KeymapProblem, ListItemProblem, Loaded,
+    Osc52Policy, SearchCase, Severity, ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent,
+    WrapMode, Written, changed_keys, default_display, is_theme_name, load_language_str, load_str,
+    load_str_for, load_str_onto, workspace_policy,
 };
 pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use language::{
-    AUTO, Ambiguity, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection, DocValue,
-    DocValues, FIRST_LINE_BYTES, LANGUAGE_DEFS_MAX, LangOrigin, LangValue, Language, LanguageDef,
-    LanguageLayer, LanguageProblem, LanguageSet, ListValue, PLAIN, ValueOrigin, doc_values,
-    first_line_of, is_language_name, precompile_builtin,
+    AUTO, Ambiguity, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection, DocLayers,
+    DocValue, DocValues, FIRST_LINE_BYTES, LANGUAGE_DEFS_MAX, LangOrigin, LangValue, Language,
+    LanguageDef, LanguageLayer, LanguageProblem, LanguageSet, ListValue, PLAIN, ValueOrigin,
+    doc_values, first_line_of, is_language_name, precompile_builtin,
 };
 pub use layers::{
-    KeyOrigin, Origin, Origins, Resolved, SET_SOURCE, Source, check_ui_locale, declared, dump,
-    load_set, merge_reports, resolve, values,
+    Composed, KeyOrigin, Origin, Origins, Resolved, SET_SOURCE, Source, UserLayer, check_ui_locale,
+    compose, declared, dump, load_set, merge_reports, resolve, values,
 };
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};
 pub use locale_file::{
@@ -55,3 +56,7 @@ pub use locale_file::{
 };
 pub use sanitize::{UNTRUSTED_MAX_CHARS, escape_untrusted, sanitize_untrusted};
 pub use toml_scan::{StructureProblem, TOML_MAX_KEY_DEPTH, TOML_MAX_NESTING};
+pub use workspace::{
+    KeyRejectReason, WorkspaceClass, WorkspaceLayer, WorkspacePolicy, WorkspaceProblem,
+    load_workspace_str,
+};

@@ -1742,8 +1742,8 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // eve-config の禁止事項のとおり主スレッドで組まない)、組めない値の診断を返す (07 §9.6 の段 2 の細目)。正規表現は
                                                                       // OnceLock に置くので、このジョブが組んでいる最中に主スレッドが同じ正規表現で判定すると、組み終わるまで待つ
                                                                       // (1 つにつき 1 ms 未満。組み終わっていなければ主スレッドが組む)
-    ReadWorkspaceConfig { root: FsPath, conditions: Conditions /*07 §3.4 の COND-2*/, user: Arc<ResolvedConfig> /*「方向のみ」の比較に使う*/,
-                          safe_dirs: Arc<[FsPath]> /*workspace.safe_directories*/ },
+    ReadWorkspaceConfig { root: FsPath, lower: Arc<Config> /*ユーザー層の値。「方向のみ」の比較に使う*/, conditions: Conditions /*07 §3.4 の COND-2*/,
+                          safe_dirs: Vec<FsPath> /*workspace.safe_directories*/ },
                                                                       // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み
                                                                       // (dir は <root>/.eve、links = NoFollowFromEve、safe_dirs をそのまま渡す。安全な場所の下かは Port が開いたディレクトリの最終のパスで決める、§4.5)、
                                                                       // 解析・条件の解決・検証・分類までジョブの中で行い (WSC-2)、安全な項目の値・キーの割当・診断を返す。doc は None

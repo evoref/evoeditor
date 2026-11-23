@@ -360,7 +360,11 @@ pub fn run_job(
             reports: set.precompile(),
             set: set.clone(),
         },
-        JobKind::ReadLanguages { dir, config } => {
+        JobKind::ReadLanguages {
+            dir,
+            config,
+            workspace,
+        } => {
             let (mut defs, mut reports) = match dir {
                 Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),
                 None => (Vec::new(), Vec::new()),
@@ -369,11 +373,35 @@ pub fn run_job(
             all.append(&mut defs);
             let (set, more) = eve_config::LanguageSet::build(&all);
             eve_config::merge_reports(&mut reports, more);
+            // ワークスペース層を重ねた集まり。診断はワークスペース層のファイルのものだけ (ユーザー層の分は上と同じ)
+            let workspace_set = (!workspace.is_empty()).then(|| {
+                let (ws, more) = eve_config::LanguageSet::build_layers(&all, workspace);
+                let ws_files: Vec<&str> = workspace.iter().map(|d| d.source.as_str()).collect();
+                eve_config::merge_reports(
+                    &mut reports,
+                    more.into_iter()
+                        .filter(|(f, _)| ws_files.contains(&f.as_str())),
+                );
+                std::sync::Arc::new(ws)
+            });
             JobResult::LanguagesRead {
                 set: std::sync::Arc::new(set),
+                workspace_set,
                 reports,
             }
         }
+        JobKind::ReadWorkspaceConfig {
+            root,
+            lower,
+            conditions,
+            safe_dirs,
+        } => JobResult::WorkspaceConfigRead(crate::io::workspace_config::read_workspace_config(
+            &*ports.fs,
+            root,
+            lower,
+            *conditions,
+            safe_dirs,
+        )),
         JobKind::Metadata {
             path,
             purpose,

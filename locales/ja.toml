@@ -657,6 +657,14 @@ text = "条件付きセクションの中に {item} は書けません"
 hint = 'OS ごとの割当は when = "os == \"windows\"" のように書いてください。このセクションは使いません'
 text = "keymap.toml では条件付きセクション ({item}) を使えません"
 
+[msg.config.invalid_item]
+hint = "この要素は使いません"
+text = "{item} の要素 {value} は使えません ({reason})"
+
+[msg.config.broad_safe_directory]
+hint = "その下のすべてで所有者の検査を省きます。リポジトリのフォルダを書いてください"
+text = "{item} の {value} は広すぎます"
+
 [msg.config.invalid_value]
 hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
 text = "{item} の値 {value} は使えません"
@@ -1065,6 +1073,55 @@ text = "ワークスペース {root} を読めません: {reason}"
 hint = "検索語を変えると探し直します"
 text = "ワークスペースの検索に失敗しました: {reason}"
 
+[msg.workspace.item_pending]
+hint = "v0.5 では、使うときはユーザーの設定に書いてください"
+text = "{item} はワークスペース設定からは使いません ({class})"
+
+[msg.workspace.item_pending_unsafe]
+hint = "中身を確かめてから決めてください"
+text = "{item} = {value} はこのリポジトリが求めた値ですが、安全のため使っていません"
+
+[msg.workspace.item_ignored]
+hint = "ワークスペース設定は、この項目を変えられません"
+text = "{item} はワークスペース設定に書けません (常に無視します)"
+
+[msg.workspace.item_no_effect]
+hint = "ユーザーの設定に書いてください"
+text = "{item} はワークスペース設定では効きません (起動時に決まります)"
+
+[msg.workspace.key_rejected]
+hint = "ワークスペースのキー割当は、まだ割当の無いキーに足すことだけができます"
+text = "ワークスペースのキー割当 {key} は使いません ({reason})"
+
+[msg.workspace.too_many_keys]
+hint = "超えた分の割当は読みません"
+text = "ワークスペースのキー割当が {count} 件を超えています"
+
+[msg.workspace.not_owned]
+hint = "自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください"
+text = "{path} を読みませんでした: 所有者が {owner} です"
+
+[msg.workspace.others_can_write]
+hint = "Windows は icacls で継承を切ってそのアカウントを外し、Unix は chmod o-w で外してください"
+text = "{path} を読みませんでした: ほかのユーザー ({who}) が書き込めます"
+
+[msg.workspace.owner_unknown]
+hint = "読むときは、ユーザーの設定の workspace.safe_directories に足してください"
+text = "{path} を読みませんでした: この FS ({fs}) では所有者を判定できません"
+
+[msg.workspace.opened_elsewhere]
+hint = "途中のリンクやジャンクションの行き先を確かめてから、設定を読み直してください"
+text = "{path} を読みませんでした: 開いたファイルが確かめた場所にありません"
+
+[msg.workspace.not_regular]
+hint = "リンクにせず、ふつうのファイルとして置いてください"
+text = "{path} を読みませんでした: ふつうのファイルではありません (シンボリックリンク・ジャンクションなど)"
+
+[msg.workspace.too_large]
+hint = "256 KiB 以下にしてください"
+text = "{path} を読みませんでした: 大きすぎます"
+
+
 [msg.reload.missing]
 hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"
 text = "{path} が見つからないため読み込み直せません"
@@ -1258,6 +1315,12 @@ os = "OS の言語"
 [ui.config.syntax_reason]
 key_depth = "16 段を超えるキーがあります"
 nesting = "インラインの表と配列の入れ子が 16 段を超えています"
+
+[ui.config.item_reason]
+empty = "空です"
+not_name = "フォルダの直下の名前ではありません"
+relative = "絶対パスではありません"
+wildcard = "* は書けません"
 
 [ui.config.type]
 array = "配列"
@@ -1578,6 +1641,8 @@ cli = "--set"
 condition = "{origin} [{condition}]"
 language_builtin = "言語 {language} (組込み)"
 language_file = "言語 {language}: {file}:{line}"
+workspace = "ワークスペース: .eve/config.toml:{line}"
+language_workspace = "言語 {language}: .eve/config.toml:{line}"
 
 [ui.lang_set]
 title = "言語を選ぶ (今: {language})"
@@ -1594,6 +1659,18 @@ footer_scanning = "{matched}/{total} 走査中…"
 footer_truncated = "{matched}/{total} (ファイルが多いため {limit} 件で打ち切りました)"
 unreadable_suffix = "・読めないフォルダ {dirs}"
 no_match = "一致するファイルはありません"
+
+[ui.workspace.class]
+semi_safe = "準安全"
+
+[ui.workspace.key_reason]
+bound = "既にある割当を変えるため"
+shadows = "既にある割当を使えなくするため"
+text = "文字入力のキーのため"
+args = "引数を持つため"
+none = "割当の解除のため"
+exec = "外部コマンドのため"
+command = "ワークスペースからは割り当てられないコマンドのため"
 
 [ui.workspace_search]
 title = "ワークスペースを検索 {toggles}"

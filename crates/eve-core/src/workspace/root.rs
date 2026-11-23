@@ -23,12 +23,6 @@ use crate::io::pending::Pending;
 use crate::jobs::{JobError, JobKind, JobResult};
 use crate::ui_model::keys;
 
-/// ルートの検出の目印の既定 (07 §5.9 の `workspace.root_markers` の既定値)。
-///
-/// 設定のキーはまだ公開していない (予約のまま。公開は 03 §12.7.9 の段の表)。公開するまでは、この値で探す。
-pub(crate) const DEFAULT_ROOT_MARKERS: [&str; 4] =
-    [crate::io::fs::WORKSPACE_CONFIG_DIR, ".git", ".hg", ".svn"];
-
 /// どの規則でルートが決まったか (07 §12.1 の 1〜4)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RootSource {
@@ -250,7 +244,8 @@ impl EditorState {
             .paths
             .normalize(".")
             .unwrap_or_else(|_| FsPath::from("."));
-        let markers = DEFAULT_ROOT_MARKERS.map(str::to_owned).to_vec();
+        // 目印は `workspace.root_markers` (07 §5.9。v0.5 の M33 の段 5 で公開。起動時のユーザー層と `--set` の値)
+        let markers = self.settings.config.root_markers.clone();
         let job = self.jobs.spawn(
             None,
             eve_view::Revision::INITIAL,
@@ -331,6 +326,9 @@ impl EditorState {
         // 判定し直す (起動時に開いた文書と後で開いた文書で言語が変わらない、07 §9.6 の LANG-7)
         if self.workspace.current.is_some() {
             self.redetect_languages();
+            // ワークスペース層を読む (07 §12.5 の WSC-1)。下の層はユーザー層
+            let lower = self.current_user_layer().config;
+            let _ = self.start_workspace_config_read(&lower, None);
         }
         // ファインダ: 待っていれば走査を始め、`DIR` で決まったら開く (03 §12.7.1、07 §18.2)
         if let Some(source) = self.workspace.current.as_ref().map(Workspace::source) {
