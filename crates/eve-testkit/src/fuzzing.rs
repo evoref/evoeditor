@@ -795,6 +795,30 @@ fn add_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     }
 }
 
+/// 対応括弧の操作 (docs/03 §5.7、§4.7.1 の fuzz。v0.5 の M32 の段 4)。半分は先に括弧を含む文字列を入力し、
+/// `cursor.goto_bracket` を 1〜4 回実行して Frame を作る (強調の経路)。移動は文書を変えない (Motion)。
+fn bracket_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const PIECES: [&str; 8] = ["(", ")", "「", "」", "[", "]", "a", "\n"];
+    let typed = if b.u8() & 1 == 0 {
+        let n = 1 + usize::from(b.u8() % 6);
+        let t: String = (0..n)
+            .map(|_| PIECES[usize::from(b.u8()) % PIECES.len()])
+            .collect();
+        h.text(&t);
+        Some(t)
+    } else {
+        None
+    };
+    let before = h.doc_text();
+    let n = 1 + b.u8() % 4;
+    for _ in 0..n {
+        h.cmd("cursor.goto_bracket");
+    }
+    assert_eq!(h.doc_text(), before, "cursor.goto_bracket は文書を変えない");
+    let _ = h.frame();
+    format!("bracket {typed:?} + goto_bracket ×{n}")
+}
+
 /// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
 /// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
 /// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは `cmd` の一覧の外の操作 26 で選ぶ)。
@@ -1013,7 +1037,7 @@ pub fn editor_sequence(data: &[u8]) {
         .iter()
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
-        // コマンドは操作 26 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
+        // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1023,6 +1047,7 @@ pub fn editor_sequence(data: &[u8]) {
                         | "select.all_matches"
                         | "select.add_cursor_above"
                         | "select.add_cursor_below"
+                        | "cursor.goto_bracket"
                 )
         })
         .collect();
@@ -1045,7 +1070,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 27 {
+        match b.u8() % 28 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1202,6 +1227,11 @@ pub fn editor_sequence(data: &[u8]) {
             26 => {
                 // カーソルを足すコマンド (v0.5 の M32 の段 3。docs/03 §4.5.1)
                 let what = add_cursor_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            27 => {
+                // 対応括弧への移動と強調 (v0.5 の M32 の段 4。docs/03 §5.7)
+                let what = bracket_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

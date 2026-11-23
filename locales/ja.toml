@@ -50,6 +50,10 @@ title = "文書の先頭へ移動"
 description = "カーソルを行の末尾へ動かします。"
 title = "行末へ移動"
 
+[cmd.cursor.goto_bracket]
+description = "カーソルの位置の括弧と対応する括弧へ移ります。"
+title = "対応する括弧へ移動"
+
 [cmd.cursor.goto_line]
 description = "指定した行へカーソルを動かします。"
 title = "行へ移動"
@@ -476,6 +480,11 @@ updated = "evoeditor {version} に更新しました: {summary}"
 
 [info.cli]
 unsupported = "{option} はこのバージョンでは使えないため無視しました"
+
+[info.bracket]
+no_match = "対応する括弧がありません"
+none = "カーソルの前後に括弧がありません"
+too_far = "対応する括弧は {limit} の範囲に見つかりませんでした"
 
 [info.config]
 diagnostic_no_file = "{file} の診断は、ファイルに書かれたものではないため開けません"

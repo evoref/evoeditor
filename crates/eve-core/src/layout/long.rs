@@ -1695,6 +1695,7 @@ mod tests {
                 search_current: Style::with_mods(StyleMods::BOLD),
                 line_number: Style::DEFAULT,
                 line_number_active: Style::DEFAULT,
+                bracket_match: Style::DEFAULT,
             }
         }
 
@@ -1759,6 +1760,7 @@ mod tests {
                 found: &found,
                 current: None,
                 unmappable: &[],
+                bracket: None,
                 styles: &st,
             };
             for &(left, cols) in &x.views {

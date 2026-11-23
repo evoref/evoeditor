@@ -1193,7 +1193,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.14 複数カーソル・対応括弧の文言の案 (v0.5 の M32)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §4.7.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。`status.cursors.*`・`info.paste.multi_too_large` は段 2 の PR で、複数カーソルの文言 (`cmd.select.*`・`info.cursor.limit`・`info.select.*` (`info.select.query_too_long` は段 3 の PR で足した、目録だけにある)・`ui.help.terminal.multi_cursor_paste`・`msg.config.multi_cursor_always`) は段 3 の PR で §15.1 / §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。`{count}` と `info.cursor.limit` の `{limit}` は整数 (千の区切りを付けない、07 §17.3)。`info.bracket.too_far` の `{limit}` は大きさの文言 (`1 MiB`。ほかの文言の大きさと同じ書き方)。`info.*` は情報メッセージ (§8.9) で、`hint` (2 行目の対処) を持たない。`msg.config.multi_cursor_always` は設定の診断 (`config.show_diagnostics`) の文言で、`/` の後ろが対処。タブライン (FR-510) は新しい文言を持たない (タブの項目はステータスバーの文言を使う、03 §9.9 の PANE-12 (c))。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §4.7.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。`status.cursors.*`・`info.paste.multi_too_large` は段 2 の PR で、複数カーソルの文言 (`cmd.select.*`・`info.cursor.limit`・`info.select.*` (`info.select.query_too_long` は段 3 の PR で足した、目録だけにある)・`ui.help.terminal.multi_cursor_paste`・`msg.config.multi_cursor_always`) は段 3 の PR で、対応括弧の文言 (`cmd.cursor.goto_bracket`・`info.bracket.*`) は段 4 の PR で §15.1 / §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。`{count}` と `info.cursor.limit` の `{limit}` は整数 (千の区切りを付けない、07 §17.3)。`info.bracket.too_far` の `{limit}` は大きさの文言 (`1 MiB`。ほかの文言の大きさと同じ書き方)。`info.*` は情報メッセージ (§8.9) で、`hint` (2 行目の対処) を持たない。`msg.config.multi_cursor_always` は設定の診断 (`config.show_diagnostics`) の文言で、`/` の後ろが対処。タブライン (FR-510) は新しい文言を持たない (タブの項目はステータスバーの文言を使う、03 §9.9 の PANE-12 (c))。
 
 | キー (案) | 出す場面 | ja (案) | en (案) |
 |---|---|---|---|
@@ -1934,6 +1934,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.select.no_word` (v0.5) | `select.add_next_match` / `select.all_matches` で、主のカーソルの位置に単語が無い (空白・改行の上。03 §4.5.1 の MCUR-2 / MCUR-3) | カーソルの位置に単語がありません |
 | `info.select.query_too_long` (v0.5) | `select.add_next_match` / `select.all_matches` で、主の選択 (検索語) が 64 KiB を超えるので探さなかった (03 §4.5.1 の MCUR-2 (k)) | 選択が長すぎるため (64 KiB まで)、一致を探しませんでした |
 | `info.select.no_more_matches` (v0.5) | `select.add_next_match` で、足せる一致が無い (一致が無い・全部選んである・既にある選択と重なるか接する一致だけ。03 §4.5.1 の MCUR-2) | ほかに一致はありません |
+| `info.bracket.none` (v0.5) | `cursor.goto_bracket` で、主のカーソルの直後と直前の書記素がどちらも対象の括弧でない (03 §5.7 の BRK-2 / BRK-6) | カーソルの前後に括弧がありません |
+| `info.bracket.no_match` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が文書の端まで無い (BRK-3) | 対応する括弧がありません |
+| `info.bracket.too_far` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が探す範囲 (`{limit}` = `1 MiB`) の中に無い (BRK-4) | 対応する括弧は {limit} の範囲に見つかりませんでした |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |
 | `info.eol.converted` | 改行コードを変換した (01 FR-113 AC-4、03 §8.4。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない) | {count} 個の改行を {eol} に変換しました (元に戻すで戻せます) |
 | `info.eol.unchanged` | 変換する改行が無かった (すべて `{eol}` か、改行が無い。新しく挿入する改行だけを `{eol}` にした) | 改行はすでに {eol} です |

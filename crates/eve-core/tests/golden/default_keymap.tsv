@@ -167,6 +167,8 @@ editor	Ctrl+Alt+Down	select.add_cursor_below	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Shift+Up	select.add_cursor_above	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Shift+Down	select.add_cursor_below	Args({})	ContextExpr(None)	false
 editor	Ctrl+K V	edit.paste	Args({})	ContextExpr(None)	false
+editor	Ctrl+]	cursor.goto_bracket	Args({})	ContextExpr(None)	false
+editor	Ctrl+K %	cursor.goto_bracket	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Left	cursor.home	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Right	cursor.end	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Shift+Left	select.extend_home	Args({})	ContextExpr(None)	false
