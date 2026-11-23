@@ -1417,3 +1417,74 @@ fn 照合の途中で監視を止めて入れ直しても知らせは_1_回() {
     assert_eq!(watch_messages(&h), vec!["info.external.changed"]);
     assert_eq!(h.editor.next_deadline(), None);
 }
+
+// ---------- 最後の確認の直し ----------
+
+/// 行番号の欄の表記 (フォーカスのペインのステータスバー)。
+fn status_line_no(h: &mut Harness) -> String {
+    let t = h.frame_text_with(eve_testkit::AsciiOptions {
+        show_chrome: true,
+        ..eve_testkit::AsciiOptions::default()
+    });
+    let at = t.find("行 ").expect("ステータスバーの位置");
+    t[at..].split(',').next().unwrap_or_default().to_owned()
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 取り消した監視の読み直しの後に横断検索のジャンプを残さない() {
+    let fake = FakeWatcher::new().auto_started();
+    let mut h = Harness::builder()
+        .watcher(fake.clone())
+        .defer_start()
+        .dir("/w/proj/.git")
+        .file("/w/proj/a.txt", b"one\ntwo hit\nthree\nfour\n")
+        .file("/w/proj/b.txt", b"b\n")
+        .build();
+    h.editor
+        .open_initial_files(&[eve_core::InitialFile::path("/w/proj/a.txt")], false, None);
+    h.started();
+    h.run_jobs();
+    h.pump_fs();
+    // 左に a (表示中・未編集)、右に b (フォーカス)
+    h.cmd("pane.split_right");
+    h.cmd_with(
+        "file.open",
+        eve_core::Args::new().with_str("path", "/w/proj/b.txt"),
+    );
+    h.run_jobs();
+    h.pump_fs();
+    h.keys("ctrl+shift+f");
+    h.text("hit");
+    h.run_jobs();
+    h.keys("esc");
+    // a を外で書き換え、照合だけを走らせる (監視の読み直しのジョブが積まれたまま)
+    h.fs.add_file("/w/proj/a.txt", b"one\ntwo hit\nthree\nfour\n\n");
+    fake.changed(id_of(&fake, "/w/proj"), "a.txt");
+    h.pump_fs();
+    h.advance_ms(WATCH_SETTLE.0);
+    assert!(h.run_one_job());
+    assert_eq!(h.pending_jobs(), 1, "監視の読み直しのジョブ");
+    // a の一致を選ぶ (読込中なので移るのを保留する)
+    h.keys("ctrl+shift+f enter");
+    // 打鍵で読み直しを取り消す: 旧本文に戻ったので保留のジャンプが済み、↓ はその後で動く
+    h.keys("down");
+    h.run_jobs();
+    assert_eq!(status_line_no(&mut h), "行 3", "ジャンプの後の ↓");
+    // 5 s の後にもう一度書き換えて読み直しが完了しても、カーソルは一致の位置へ飛ばない
+    h.advance_ms(WATCH_RELOAD_MIN_INTERVAL.0);
+    h.fs.add_file("/w/proj/a.txt", b"one\ntwo hit\nthree\nfour\n\n\n");
+    fake.changed(id_of(&fake, "/w/proj"), "a.txt");
+    h.pump_fs();
+    settle(&mut h);
+    assert_eq!(
+        h.doc_text(),
+        "one\ntwo hit\nthree\nfour\n\n\n",
+        "読み直した"
+    );
+    assert_eq!(
+        status_line_no(&mut h),
+        "行 3",
+        "保留のジャンプが残っていない"
+    );
+}

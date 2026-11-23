@@ -309,6 +309,9 @@ impl EditorState {
             d.load_state = crate::document::LoadState::Ready;
         }
         self.mark_dirty_render();
+        // 横断検索の結果から、この文書へ移ろうとしていた: 旧本文に戻って `Ready` になったので移る (03 §12.7.5 の段 7 の
+        // 細目 (11)。監視の読み直しの取消し・開く前の確認の中止など、旧本文に戻すどの経路でも残さない)
+        self.finish_ws_jump(doc);
     }
 
     pub(crate) fn finish_reopen(
