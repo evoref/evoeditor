@@ -380,6 +380,8 @@ pub fn run_job(
             dir,
             config,
             workspace,
+            precompile,
+            workspace_files,
         } => {
             let (mut defs, mut reports) = match dir {
                 Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),
@@ -400,6 +402,16 @@ pub fn run_job(
                 );
                 std::sync::Arc::new(ws)
             });
+            if *precompile {
+                eve_config::merge_reports(&mut reports, set.precompile());
+                if let Some(ws) = &workspace_set {
+                    let more = ws
+                        .precompile()
+                        .into_iter()
+                        .filter(|(f, _)| workspace_files.contains(f));
+                    eve_config::merge_reports(&mut reports, more);
+                }
+            }
             JobResult::LanguagesRead {
                 set: std::sync::Arc::new(set),
                 workspace_set,

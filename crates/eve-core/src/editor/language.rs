@@ -274,6 +274,10 @@ impl EditorState {
                 dir,
                 config: self.settings.config_languages.clone(),
                 workspace: self.settings.workspace_languages.clone(),
+                // 起動の後のワークスペース層の契機は、届いたらすぐ判定し直すので、ジョブの中で正規表現まで組む (主スレッドで
+                // 組まない)。ほかは `PrecompileLanguages` で組む (起動時の文書の読込を待たせない、07 §9.6 の段 2 の細目)
+                precompile: workspace_only,
+                workspace_files: self.settings.workspace_files.clone(),
             },
         );
         self.io.pending.insert(
@@ -288,7 +292,7 @@ impl EditorState {
     /// 届いた定義の集まりの `first_line` の正規表現を組むジョブを積む (io。起動時は起動時のパスを開くジョブの後ろになる)。
     /// ワークスペース層の集まりも組む (判定で初めて要ったときに主スレッドで組まない)。`workspace_only` なら、診断は
     /// ワークスペース層のファイルの分だけを足す。
-    fn start_languages_precompile(&mut self, workspace_only: bool) {
+    fn start_languages_precompile(&mut self, redetect: bool) {
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
@@ -300,11 +304,12 @@ impl EditorState {
         );
         self.io
             .pending
-            .insert(job, Pending::LanguagesPrecompile { workspace_only });
+            .insert(job, Pending::LanguagesPrecompile { redetect });
     }
 
-    /// 正規表現を組んだ結果: 組めなかった `first_line` の診断を出す (今の定義の集まりのものだけ)。
-    pub(crate) fn finish_languages_precompile(&mut self, r: JobResult, workspace_only: bool) {
+    /// 正規表現を組んだ結果: 組めなかった `first_line` の診断を出す (今の定義の集まりのものだけ)。`redetect` なら、組んだ後で
+    /// 明示の指定の無い文書の言語を判定し直す (起動時の読込。判定で正規表現を主スレッドで組まない)。
+    pub(crate) fn finish_languages_precompile(&mut self, r: JobResult, redetect: bool) {
         let JobResult::LanguagesPrecompiled {
             set,
             workspace,
@@ -322,9 +327,10 @@ impl EditorState {
             return;
         }
         for (file, diags) in &reports {
-            if !workspace_only || self.settings.workspace_files.contains(file) {
-                self.report_config_more(file, diags);
-            }
+            self.report_config_more(file, diags);
+        }
+        if redetect {
+            self.redetect_languages();
         }
     }
 
@@ -366,11 +372,16 @@ impl EditorState {
                 self.report_config_more(file, diags);
             }
         }
-        if startup {
-            self.redetect_languages();
-        }
         self.refresh_all_doc_settings();
-        self.start_languages_precompile(workspace_only);
+        if workspace_only {
+            // 正規表現はジョブの中で組んである
+            if startup {
+                self.redetect_languages();
+            }
+        } else {
+            // 判定し直すのは正規表現を組んだ後 (主スレッドで組まない)
+            self.start_languages_precompile(startup);
+        }
     }
 
     /// 設定ファイルの言語定義を差し替える (起動時の Host と `config.reload`)。

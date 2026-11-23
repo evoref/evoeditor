@@ -43,11 +43,11 @@ pub use language::{
     AUTO, Ambiguity, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection, DocLayers,
     DocValue, DocValues, FIRST_LINE_BYTES, LANGUAGE_DEFS_MAX, LangOrigin, LangValue, Language,
     LanguageDef, LanguageLayer, LanguageProblem, LanguageSet, ListValue, PLAIN, ValueOrigin,
-    doc_values, first_line_of, is_language_name, precompile_builtin,
+    doc_values, first_line_compiles, first_line_of, is_language_name, precompile_builtin,
 };
 pub use layers::{
     Composed, KeyOrigin, Origin, Origins, Resolved, SET_SOURCE, Source, UserLayer, check_ui_locale,
-    compose, declared, dump, load_set, merge_reports, resolve, values,
+    compose, declared, dump, load_set, merge_reports, resolve, resolve_home, values,
 };
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};
 pub use locale_file::{
@@ -55,7 +55,7 @@ pub use locale_file::{
     LOCALE_MAX_MARKS, LOCALE_MAX_TEXT_CHARS, LOCALE_RESERVED_PREFIXES, LocaleFile, LocaleProblem,
     PlaceholderIssue, TextCheck, check_text, hint_width, load_locale_file,
 };
-pub use position::CONFIG_MAX_DIAGNOSTICS;
+pub use position::{CONFIG_MAX_DIAGNOSTICS, cap_diagnostics};
 pub use sanitize::{UNTRUSTED_MAX_CHARS, escape_untrusted, sanitize_untrusted};
 pub use toml_scan::{StructureProblem, TOML_MAX_KEY_DEPTH, TOML_MAX_NESTING};
 pub use workspace::{

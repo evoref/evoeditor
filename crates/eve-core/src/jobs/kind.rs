@@ -82,6 +82,10 @@ pub enum JobKind {
         /// ワークスペース層の `[[language]]` の定義 (`.eve/config.toml`、07 §9.6 の LANG-2)。空でなければ、ユーザー層の後に
         /// 重ねた集まり (ルートの下の文書の判定に使う) も作る。
         workspace: Vec<eve_config::LanguageDef>,
+        /// ジョブの中で `first_line` の正規表現まで組む (起動の後にワークスペース層が届いた契機。届いたらすぐ判定し直すので)。
+        precompile: bool,
+        /// ワークスペース層のファイルの表示名 (ワークスペース層の集まりの診断は、このファイルの分だけ返す)。
+        workspace_files: Vec<String>,
     },
     /// ワークスペース層 (`<root>/.eve/config.toml`・`.eve/keymap.toml`) を所有者の検査つきで読み、解析・分類する (07 §12.5 の
     /// WSC-1 / WSC-2、02 §9.3 の `ReadWorkspaceConfig`)。起動時はルートが決まったとき、`config.reload` はユーザー層を

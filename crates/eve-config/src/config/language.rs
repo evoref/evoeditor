@@ -79,6 +79,7 @@ pub fn load_language_str(source: &str, text: &str) -> (Vec<LanguageDef>, Vec<Dia
         lines: crate::position::LineIndex::new(text),
         dropped: 0,
         stored: false,
+        home: None,
     };
     if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
         return (Vec::new(), vec![d]);

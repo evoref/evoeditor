@@ -219,6 +219,8 @@ pub(super) fn apply_workspace_keymap(
     prefix_diagnostics(keymap, WORKSPACE_LAYER, &origins, file, &mut entry_diags);
     entry_diags.sort_by_key(|(i, _)| at(*i));
     diags.extend(entry_diags.into_iter().map(|(_, d)| d));
+    // 読込の診断と検証の診断を合わせて、1 つのファイルで上限まで (07 §4.3)
+    eve_config::cap_diagnostics(&mut diags);
     diags
 }
 

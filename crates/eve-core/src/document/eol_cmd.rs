@@ -52,6 +52,10 @@ impl EditorState {
         eol: LineEnding,
         count: usize,
     ) {
+        // 明示の選択: 新しいファイルの形を設定から決め直さない (07 §3.6 の LAYER-4)
+        if let Some(d) = self.docs.documents.get_mut(&doc) {
+            d.format_chosen = true;
+        }
         self.start_eol_conversion(EolConvert {
             doc,
             view,

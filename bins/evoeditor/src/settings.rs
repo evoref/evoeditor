@@ -62,7 +62,15 @@ pub(crate) fn config_sources(
         conditions: conditions(),
         // ワークスペース層 (07 §12.5 の WSC-7)。`--no-config` でも読まない (§18.3)
         no_workspace_config: args.no_config || args.no_workspace_config,
+        home: home_dir(),
     }
+}
+
+/// ホームディレクトリ (Windows は `%USERPROFILE%`、Unix は `$HOME`、05 §3.6)。`workspace.safe_directories` にホームディレクトリ
+/// そのものを書いたときの警告に使う (07 §12.1 の OWN-5)。空・不明なら `None`。
+fn home_dir() -> Option<String> {
+    let key = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    std::env::var(key).ok().filter(|v| !v.is_empty())
 }
 
 /// 条件付きセクションの条件の値 (07 §3.4 の COND-2)。起動時に 1 回だけ決める: OS は実行ファイルの対象 OS、frontend は TUI、
@@ -116,7 +124,7 @@ pub(crate) fn load_config(src: &eve_core::ConfigSources) -> eve_config::Resolved
             text: read_source(path.as_path()),
         })
         .collect();
-    eve_config::resolve(&sources, &src.sets, src.conditions)
+    eve_config::resolve_home(&sources, &src.sets, src.conditions, src.home.as_deref())
 }
 
 /// 言語定義を読んで重ねる (07 §9.6): 設定ファイルの `[[language]]` (`config`) と `languages/*.toml` (名前の順)。

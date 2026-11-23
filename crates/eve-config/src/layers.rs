@@ -3,7 +3,7 @@
 //!
 //! 起動時 (bin) と `config.reload` (core) が同じ規則で合成するよう、読み込んだ本文を受け取る純関数にしている。
 
-use crate::config::{Config, declared_values, dump_rank, load_str_for};
+use crate::config::{Config, declared_values, dump_rank, load_str_in};
 use crate::{DiagKind, Diagnostic, Loaded, Severity};
 
 /// ユーザー層のファイル 1 つ。`text` は、無ければ `Ok(None)`、読めなければ理由。
@@ -212,13 +212,28 @@ fn unreadable(message: String) -> Diagnostic {
 /// (`--set view.wrap=soft` と書ける)。`=` が無ければ `None` (使い方の誤り)。条件付きのキー
 /// (`--set os.windows.editor.tab_width=2`) は、`conditions` で条件が真のときだけ効く (07 §3.4 の COND-1)。
 pub fn load_set(base: Config, arg: &str, conditions: crate::Conditions) -> Option<Loaded> {
+    load_set_in(base, arg, conditions, None)
+}
+
+/// `load_set` と同じだが、ホームディレクトリ `home` を知っている (`resolve_home`)。
+fn load_set_in(
+    base: Config,
+    arg: &str,
+    conditions: crate::Conditions,
+    home: Option<&str>,
+) -> Option<Loaded> {
     let (key, value) = arg.split_once('=')?;
     let key = key.trim();
     if key.is_empty() {
         return None;
     }
     let value = value.trim();
-    let as_toml = load_str_for(base.clone(), &format!("{key} = {value}\n"), conditions);
+    let as_toml = load_str_in(
+        base.clone(),
+        &format!("{key} = {value}\n"),
+        conditions,
+        home,
+    );
     let syntax = as_toml
         .diagnostics
         .iter()
@@ -227,10 +242,11 @@ pub fn load_set(base: Config, arg: &str, conditions: crate::Conditions) -> Optio
         return Some(as_toml);
     }
     let quoted = value.replace('\\', "\\\\").replace('"', "\\\"");
-    Some(load_str_for(
+    Some(load_str_in(
         base,
         &format!("{key} = \"{quoted}\"\n"),
         conditions,
+        home,
     ))
 }
 
@@ -275,6 +291,16 @@ pub fn compose(
     sets: &[String],
     conditions: crate::Conditions,
 ) -> Composed {
+    compose_in(user, workspace, sets, conditions, None)
+}
+
+fn compose_in(
+    user: &UserLayer,
+    workspace: Option<(&str, &crate::WorkspaceLayer)>,
+    sets: &[String],
+    conditions: crate::Conditions,
+    home: Option<&str>,
+) -> Composed {
     let mut config = user.config.clone();
     let mut origins = user.origins.clone();
     let mut theme_name_at = user.theme_name_at.clone();
@@ -298,7 +324,7 @@ pub fn compose(
     }
     let mut set_diagnostics = Vec::new();
     for arg in sets {
-        if let Some(l) = load_set(config.clone(), arg, conditions) {
+        if let Some(l) = load_set_in(config.clone(), arg, conditions, home) {
             config = l.config;
             for w in &l.written {
                 let at = KeyOrigin {
@@ -337,6 +363,17 @@ pub fn compose(
 /// 条件付きセクションは、ファイルごと (`--set` は値ごと) に `conditions` で解いてから重ねる (07 §3.4 の COND-3。層の間の
 /// 順は変えない)。ワークスペース層は含めない (起動の後のジョブで届き、[`compose`] で重ねる)。
 pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Conditions) -> Resolved {
+    resolve_home(sources, sets, conditions, None)
+}
+
+/// `resolve` と同じだが、ホームディレクトリ `home` を知っている: `workspace.safe_directories` にホームディレクトリそのものを
+/// 書いたら、広すぎる場所の警告を書いた所に出す (07 §12.1 の OWN-5。起動時・`config.reload`・`--check-config` で同じ)。
+pub fn resolve_home(
+    sources: &[Source],
+    sets: &[String],
+    conditions: crate::Conditions,
+    home: Option<&str>,
+) -> Resolved {
     let mut user = UserLayer::default();
     let mut reports = Vec::new();
     let mut has_error = false;
@@ -344,10 +381,11 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
     for s in sources {
         let loaded = match &s.text {
             Ok(None) => continue,
-            Ok(Some(t)) => load_str_for(
+            Ok(Some(t)) => load_str_in(
                 user.config.clone(),
                 t.strip_prefix('\u{feff}').unwrap_or(t),
                 conditions,
+                home,
             ),
             Err(e) => Loaded {
                 config: user.config.clone(),
@@ -395,7 +433,7 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Condition
             reports.push((s.name.clone(), loaded.diagnostics));
         }
     }
-    let composed = compose(&user, None, sets, conditions);
+    let composed = compose_in(&user, None, sets, conditions, home);
     has_error |= composed
         .set_diagnostics
         .iter()

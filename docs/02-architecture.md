@@ -1737,11 +1737,13 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     ReadConfig { files: Vec<FsPath>, keymap: Option<FsPath>, locales: Option<(FsPath, Locale)> },        // io (v0.2)。config.reload の設定ファイルとキーマップの読込 (07 §6)
     ReadTheme { dir: FsPath, name: String },                          // io (v0.2)。テーマファイルを inherits の親までたどって読む (07 §8.6)
     // ── 設定と言語 (v0.5 の M33。07 §9.6 / §12.5 / §10.3) ──
-    ReadLanguages { dir: Option<FsPath> /*<config_dir>/languages。--no-config は None*/, config: Vec<LanguageDef> /*config.toml の [[language]]*/ },
+    ReadLanguages { dir: Option<FsPath> /*<config_dir>/languages。--no-config は None*/, config: Vec<LanguageDef> /*config.toml の [[language]]*/,
+                    workspace: Vec<LanguageDef> /*.eve/config.toml の [[language]]*/, precompile: bool /*ワークスペース層が届いた契機はジョブで正規表現まで組む*/,
+                    workspace_files: Vec<String> },
                                                                       // io。起動時に、起動時のパスを開くジョブより前に積む (07 §9.6 の LANG-2)。config.reload でも積む。
                                                                       // 名前の順に *.toml を読み (256 ファイル・1 ファイル 256 KiB まで)、解析し、config の後に重ね、file_globs の glob を
                                                                       // 組んで、定義の集まり (Arc<LanguageSet>) と診断を返す (M33 の段 2 で決めた: 主スレッドで解析しない。WSC-2 と同じ形)
-    PrecompileLanguages { set: Arc<LanguageSet> },                    // io。ReadLanguages の結果が届いたら積む (起動時はパスを開くジョブの後ろ)。first_line の正規表現を組み (§12.1 の
+    PrecompileLanguages { set: Arc<LanguageSet>, workspace: Option<Arc<LanguageSet>>, workspace_files: Vec<String> },
                                                                       // eve-config の禁止事項のとおり主スレッドで組まない)、組めない値の診断を返す (07 §9.6 の段 2 の細目)。正規表現は
                                                                       // OnceLock に置くので、このジョブが組んでいる最中に主スレッドが同じ正規表現で判定すると、組み終わるまで待つ
                                                                       // (1 つにつき 1 ms 未満。組み終わっていなければ主スレッドが組む)

@@ -42,6 +42,9 @@ pub struct ConfigSources {
     /// ワークスペース層 (`.eve/config.toml`・`.eve/keymap.toml`) を読まない (`--no-workspace-config` と `--no-config`、
     /// 07 §12.5 の WSC-7)。
     pub no_workspace_config: bool,
+    /// ホームディレクトリ (起動時に bin が環境変数から決める)。`workspace.safe_directories` にホームディレクトリそのものを
+    /// 書いたときの警告に使う (07 §12.1 の OWN-5。`None` は知らない)。
+    pub home: Option<String>,
 }
 
 /// `config.reload` の途中: ユーザー層の設定ファイルとキーマップを解析した結果 (ワークスペース層を読み直してから当てる、
@@ -204,6 +207,7 @@ impl EditorState {
             locales: Some(dir.join("locales")),
             conditions: eve_config::Conditions::default(),
             no_workspace_config: false,
+            home: None,
         }
     }
 }
@@ -287,7 +291,8 @@ impl EditorState {
                 text: text_of(f),
             })
             .collect();
-        let mut resolved = eve_config::resolve(&sources, &src.sets, src.conditions);
+        let mut resolved =
+            eve_config::resolve_home(&sources, &src.sets, src.conditions, src.home.as_deref());
         eve_config::check_ui_locale(&mut resolved, &available, &dir, self.locale());
         let keymap: KeymapFile = match keymap.as_ref().map(text_of) {
             None | Some(Ok(None)) => KeymapFile::default(),

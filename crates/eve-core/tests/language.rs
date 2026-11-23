@@ -48,6 +48,7 @@ fn start(fs: &[(&str, &[u8])], sets: &[&str], files: &[&str]) -> Harness {
                 ..Conditions::default()
             },
             no_workspace_config: false,
+            home: None,
         }),
         ..Default::default()
     });
@@ -574,6 +575,8 @@ fn 開くジョブの結果が定義より先に届いたら_定義が届いた�
     h.run_one_job();
     assert_eq!(language(&h), "plain", "定義が届く前は組込みで判定");
     h.deliver(languages);
+    // 判定し直すのは正規表現を組んだ (`PrecompileLanguages` の結果が届いた) 後 (主スレッドで組まない、M33 の段 5 の再レビュー)
+    h.run_jobs();
     assert_eq!(language(&h), "foo");
 }
 

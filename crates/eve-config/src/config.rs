@@ -835,6 +835,17 @@ pub fn load_str_onto(base: Config, text: &str) -> Loaded {
 /// `load_str_onto` と同じだが、条件付きセクション (07 §3.4) を `conditions` で解く。1 つのファイルの中で、条件の無い表、
 /// 真の条件のセクション (COND-3 の順) の順にキーごとに重ねる。偽の条件のセクションも検証して診断を出す (COND-4)。
 pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> Loaded {
+    load_str_in(base, text, conditions, None)
+}
+
+/// `load_str_for` と同じだが、ホームディレクトリ `home` を知っている (`workspace.safe_directories` にホームディレクトリ
+/// そのものを書いたら、広すぎる場所の警告を出す、07 §12.1 の OWN-5)。
+pub(crate) fn load_str_in(
+    base: Config,
+    text: &str,
+    conditions: crate::Conditions,
+    home: Option<&str>,
+) -> Loaded {
     let mut cx = Cx {
         text,
         out: Loaded {
@@ -849,6 +860,7 @@ pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> 
         lines: crate::position::LineIndex::new(text),
         dropped: 0,
         stored: false,
+        home,
     };
     // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
     if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
@@ -908,6 +920,8 @@ struct Cx<'a> {
     dropped: usize,
     /// 直前の診断を残したか (書かれた値を記録する先)。
     stored: bool,
+    /// ホームディレクトリ (広すぎる安全な場所の判定。知らなければ `None`)。
+    home: Option<&'a str>,
 }
 
 impl Cx<'_> {
@@ -1397,20 +1411,28 @@ impl Cx<'_> {
         Some(out)
     }
 
-    /// パスの形の規則に使う OS (07 §3.4 の COND-4): `os.*` のセクションはその OS (`os.unix` は Unix)、条件の無い表と OS の
-    /// 決まらないセクション (`frontend.*`・`env.*`) は、この実行ファイルの OS (真になるのは今の OS だけなので)。対象の 3 つの
-    /// OS でない実行ファイルでは `None` (形を確かめない)。
+    /// パスの形の規則に使う OS (07 §3.4 の COND-4): `os.*` のセクションはその OS (`os.unix` は Unix。偽の条件でも確かめる)。
+    /// 条件の無い表と、OS の決まらないセクション (`frontend.*`・`env.*`) のうち今の環境で真のものは、この実行ファイルの OS
+    /// (そのセクションの値を使うのはこの OS)。今の環境で偽の `frontend.*`・`env.*` は `None` (別の環境 (WSL の中など) で使う
+    /// 値なので、今の OS の規則で誤りにしない)。対象の 3 つの OS でない実行ファイルでも `None`。
     fn path_rules(&self) -> Option<PathRules> {
         use crate::Condition as K;
+        let current = || match self.conditions.os {
+            Some(crate::Os::Windows) => Some(PathRules::Windows),
+            Some(_) => Some(PathRules::Unix),
+            None => None,
+        };
         match self.condition {
             Some(K::OsWindows) => Some(PathRules::Windows),
             Some(K::OsUnix | K::OsMacos | K::OsLinux) => Some(PathRules::Unix),
-            _ => match self.conditions.os {
-                Some(crate::Os::Windows) => Some(PathRules::Windows),
-                Some(_) => Some(PathRules::Unix),
-                None => None,
-            },
+            Some(c) if !self.conditions.holds(c) => None,
+            _ => current(),
         }
+    }
+
+    /// 読んでいるセクションが今の環境で使われるか (条件の無い表か、真の条件のセクション)。
+    fn condition_is_current(&self) -> bool {
+        self.condition.is_none_or(|c| self.conditions.holds(c))
     }
 
     /// `<キー>+ = [...]`: 下の層 (同じファイルの前の値を含む) の配列に足す (07 §3.3)。
@@ -1464,6 +1486,25 @@ impl PathRules {
         }
     }
 
+    /// `a` と `b` が同じパスか (区切りの違い・末尾の区切りを畳む。Windows は `\` と `/` を同じにし、ASCII の大文字小文字を
+    /// 区別しない)。
+    fn same_path(self, a: &str, b: &str) -> bool {
+        let parts = |s: &str| -> Vec<String> {
+            let sep = |c: char| c == '/' || (self == PathRules::Windows && c == '\\');
+            s.split(sep)
+                .filter(|p| !p.is_empty() && *p != ".")
+                .map(|p| {
+                    if self == PathRules::Windows {
+                        p.to_ascii_lowercase()
+                    } else {
+                        p.to_owned()
+                    }
+                })
+                .collect()
+        };
+        parts(a) == parts(b)
+    }
+
     /// ファイルシステムのルート・ドライブの直下・UNC の共有の直下か (広すぎる安全な場所、07 §12.1 の OWN-5)。
     fn is_root(self, s: &str) -> bool {
         let sep = |c: char| c == '/' || (self == PathRules::Windows && c == '\\');
@@ -1511,6 +1552,14 @@ fn read_safe_directories(
         match cx.path_rules() {
             Some(r) if !r.is_absolute(s) => Err(ListItemProblem::Relative),
             Some(r) if r.is_root(s) => Err(ListItemProblem::TooBroad),
+            // ホームディレクトリそのもの (ホームは今の OS のものなので、今の OS で使う値だけを比べる)
+            Some(r)
+                if cx
+                    .home
+                    .is_some_and(|h| cx.condition_is_current() && r.same_path(s, h)) =>
+            {
+                Err(ListItemProblem::TooBroad)
+            }
             _ => Ok(()),
         }
     })

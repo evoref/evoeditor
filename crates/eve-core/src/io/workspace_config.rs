@@ -47,7 +47,7 @@ pub enum Fetched<T> {
     Absent,
     /// 読んだ。
     Got(T),
-    /// 構文エラー・読めない (起動時は層を持たない。`config.reload` では前に読んだ層を保つ、07 §6 の規則 1)。
+    /// 構文エラー・UTF-8 でない (起動時は層を持たない。`config.reload` では前に読んだ層を保つ、07 §6 の規則 1)。
     Broken,
     /// 一時の失敗 (`Busy`): 前に読んだ層と診断を使い続ける。
     Keep,
@@ -156,7 +156,7 @@ enum Outcome {
     Text(String),
     /// 所有者の検査・大きさで読まなかった (診断 1 件)。`dir` は置き場所のディレクトリで落ちた (`.eve` を信用しない)。
     Rejected { diag: Diagnostic, dir: bool },
-    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。
+    /// 読めない (UTF-8 でない・OS の失敗。診断 1 件、エラー)。`dir` は置き場所 (`.eve`) の階層の失敗 (層を外す)。
     Unreadable { diag: Diagnostic, dir: bool },
     /// 一時の失敗。
     Busy,
@@ -237,10 +237,16 @@ pub fn read_workspace_config(
             config_notes.push(diag);
             Fetched::Absent
         }
+        // 置き場所 (`.eve`) の失敗 (権限など) は層を外す (信頼の取り消しを通す)。前の層を保つのはファイルの構文エラー・
+        // UTF-8 でないときだけ
         Outcome::Unreadable { diag, dir } => {
             dir_trusted &= !dir;
             config_notes.push(diag);
-            Fetched::Broken
+            if dir {
+                Fetched::Absent
+            } else {
+                Fetched::Broken
+            }
         }
         Outcome::Text(text) => {
             let mut l = eve_config::load_workspace_str(&text, conditions);
@@ -265,10 +271,16 @@ pub fn read_workspace_config(
             keymap_notes.push(diag);
             Fetched::Absent
         }
+        // 置き場所 (`.eve`) の失敗 (権限など) は層を外す (信頼の取り消しを通す)。前の層を保つのはファイルの構文エラー・
+        // UTF-8 でないときだけ
         Outcome::Unreadable { diag, dir } => {
             dir_trusted &= !dir;
             keymap_notes.push(diag);
-            Fetched::Broken
+            if dir {
+                Fetched::Absent
+            } else {
+                Fetched::Broken
+            }
         }
         Outcome::Text(text) => {
             let file = eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text));
@@ -339,7 +351,6 @@ impl EditorState {
         safe_dirs: &[String],
         reload: Option<ReloadPlan>,
     ) -> Option<ReloadPlan> {
-        self.warn_home_safe_directories(safe_dirs);
         let Some(root) = self.workspace_config_root() else {
             return reload;
         };
@@ -360,56 +371,6 @@ impl EditorState {
             },
         );
         None
-    }
-
-    /// `workspace.safe_directories` にホームディレクトリそのものを書いていたら、書いた所に広すぎる場所の警告を足す (07 §12.1 の
-    /// OWN-5。ルート・ドライブの直下は eve-config が読むときに見る)。ホームは `Paths` の `~` の展開で求める。
-    fn warn_home_safe_directories(&mut self, safe_dirs: &[String]) {
-        let Ok(home) = self.paths.normalize("~") else {
-            return;
-        };
-        let home = components(&home);
-        let hits: Vec<&String> = safe_dirs
-            .iter()
-            .filter(|s| {
-                let p = FsPath::from(s.as_str());
-                let mut c = components(&p);
-                // 末尾の区切り (`C:\Users\me\`) は同じものとみなす
-                while c.last().is_some_and(String::is_empty) {
-                    c.pop();
-                }
-                c == home
-            })
-            .collect();
-        if hits.is_empty() {
-            return;
-        }
-        let (source, line, column, condition) = match self
-            .current_user_layer()
-            .origins
-            .of("workspace.safe_directories")
-        {
-            eve_config::Origin::User {
-                source,
-                line,
-                column,
-                condition,
-            } => (source.clone(), *line, *column, *condition),
-            _ => (eve_config::SET_SOURCE.to_owned(), 0, 0, None),
-        };
-        let diags: Vec<Diagnostic> = hits
-            .into_iter()
-            .map(|s| Diagnostic {
-                severity: Severity::Warning,
-                kind: DiagKind::ListItem(eve_config::ListItemProblem::TooBroad),
-                key: "workspace.safe_directories".to_owned(),
-                value: s.clone(),
-                line,
-                column,
-                condition,
-            })
-            .collect();
-        self.report_config_more(&source, &diags);
     }
 
     /// ワークスペース層の読込の結果 (07 §12.5 の WSC-3 / WSC-4)。`reload` があれば、層を差し替えた後に `config.reload` を
@@ -506,6 +467,7 @@ impl EditorState {
         };
         let mut diags = self.settings.workspace_notes.clone();
         diags.extend(classified.iter().cloned());
+        eve_config::cap_diagnostics(&mut diags);
         self.report_config(&name, &diags);
     }
 

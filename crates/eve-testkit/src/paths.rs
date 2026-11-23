@@ -2,10 +2,7 @@
 
 use eve_core::{FsError, FsErrorKind, FsPath, Paths};
 
-/// `FixedPaths` のホームディレクトリ (`~` の展開の先)。
-pub const FIXED_HOME: &str = "/home/u";
-
-/// ルートの下に `config` / `state` / `data` / `run` を置く。相対パスは `cwd` 基準。`~` は [`FIXED_HOME`]。
+/// ルートの下に `config` / `state` / `data` / `run` を置く。相対パスは `cwd` 基準。
 #[derive(Clone, Debug)]
 pub struct FixedPaths {
     root: FsPath,
@@ -46,10 +43,7 @@ impl Paths for FixedPaths {
         if raw.is_empty() || raw.contains('\0') {
             return Err(FsError::new(FsErrorKind::InvalidPath));
         }
-        // チルダ展開 (`~` と `~/`。05 §3.2 の手順 1)。ホームは固定の `/home/u`
-        let joined = if raw == "~" || raw.starts_with("~/") {
-            FsPath::from(format!("{FIXED_HOME}{}", &raw[1..]).as_str())
-        } else if raw.starts_with('/') {
+        let joined = if raw.starts_with('/') {
             FsPath::from(raw)
         } else {
             self.cwd.join(raw)

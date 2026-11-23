@@ -59,6 +59,8 @@ impl EditorState {
     /// `report_config` と同じだが、一覧のそのファイルの診断を置き換えずに足す (テーマが無い診断を、`theme.name` を
     /// 書いた設定ファイルの名前で出すとき。07 §8.7)。
     pub(crate) fn report_config_more(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        // ワークスペース層のファイルは、足した後の合計で 1 つのファイルの上限を掛ける (07 §4.3)
+        let workspace = self.settings.workspace_files.iter().any(|w| w == file);
         if !diagnostics.is_empty() {
             match self
                 .ui
@@ -66,7 +68,12 @@ impl EditorState {
                 .iter_mut()
                 .find(|(f, _)| f == file)
             {
-                Some((_, ds)) => ds.extend(diagnostics.iter().cloned()),
+                Some((_, ds)) => {
+                    ds.extend(diagnostics.iter().cloned());
+                    if workspace {
+                        eve_config::cap_diagnostics(ds);
+                    }
+                }
                 None => self
                     .ui
                     .config_diagnostics

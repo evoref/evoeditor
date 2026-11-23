@@ -503,7 +503,18 @@ fn anchored_prefix(source: &str) -> String {
     out.into_iter().collect()
 }
 
+/// `first_line` の正規表現を組んだ回数 (プロセスの通算)。
+static FIRST_LINE_COMPILES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// `first_line` の正規表現を組んだ回数 (プロセスの通算。試験が、主スレッドの処理の前後で組まなかったことを確かめる)。
+#[doc(hidden)]
+#[must_use]
+pub fn first_line_compiles() -> usize {
+    FIRST_LINE_COMPILES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn compile_first_line(source: &str) -> Result<Regex, regex::Error> {
+    FIRST_LINE_COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     regex::RegexBuilder::new(source)
         .size_limit(REGEX_SIZE_LIMIT)
         .dfa_size_limit(REGEX_SIZE_LIMIT)

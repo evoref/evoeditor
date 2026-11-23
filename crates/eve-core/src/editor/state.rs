@@ -591,6 +591,7 @@ impl EditorState {
             .iter()
             .filter(|(_, d)| {
                 d.disk_stamp.is_none()
+                    && !d.format_chosen
                     && d.stdin.is_none()
                     && d.load_state == crate::document::LoadState::Ready
                     && !d.is_dirty()
@@ -766,6 +767,8 @@ impl EditorState {
     pub fn set_default_eol(&mut self, doc: DocumentId, eol: eve_text::LineEnding) {
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.format.default_eol = eol;
+            // 明示の選択: 新しいファイルの形を設定から決め直さない (07 §3.6 の LAYER-4)
+            d.format_chosen = true;
             self.out.needs_render = true;
         }
     }

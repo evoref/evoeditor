@@ -56,7 +56,7 @@ pub use harness::{Harness, HarnessBuilder};
 pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;
 pub use memfs::{BytesSource, FsOp, MEMFS_STATE_DIR, MemFs, SourceFailure, WriteStep};
-pub use paths::{FIXED_HOME, FixedPaths};
+pub use paths::FixedPaths;
 pub use stdin::{FakeStdin, StdinStep};
 pub use virtual_screen::{Attr, VirtualScreen, WidthConfig};
 pub use watcher::{FakeWatcher, WatchRequest};

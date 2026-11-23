@@ -28,7 +28,7 @@ pub(crate) enum Pending {
     /// 言語定義の読込 (07 §9.6 の LANG-2)。`startup` は起動時の 1 回。
     LanguagesRead { startup: bool, workspace_only: bool },
     /// 言語定義の `first_line` の正規表現を組むジョブ (結果の組めない値を警告する、07 §9.6 の段 2 の細目)。
-    LanguagesPrecompile { workspace_only: bool },
+    LanguagesPrecompile { redetect: bool },
     Open {
         doc: DocumentId,
         view: ViewId,
@@ -356,8 +356,8 @@ impl EditorState {
             Pending::WorkspaceConfig { reload } => {
                 self.finish_workspace_config(r, reload.map(|p| *p));
             }
-            Pending::LanguagesPrecompile { workspace_only } => {
-                self.finish_languages_precompile(r, workspace_only);
+            Pending::LanguagesPrecompile { redetect } => {
+                self.finish_languages_precompile(r, redetect);
             }
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),

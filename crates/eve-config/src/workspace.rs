@@ -306,9 +306,10 @@ impl WorkspaceLayer {
                 condition: w.condition,
             });
         }
-        // 「ほか N 件」は最後に置く
+        // 書いた所の順に並べ、ファイルの合計で上限を掛ける (「ほか N 件」は最後)
         out.diagnostics
             .sort_by_key(|d| (matches!(d.kind, DiagKind::More { .. }), d.line, d.column));
+        crate::cap_diagnostics(&mut out.diagnostics);
         out
     }
 

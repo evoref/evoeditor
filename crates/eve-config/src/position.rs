@@ -36,6 +36,25 @@ impl<'a> LineIndex<'a> {
     }
 }
 
+/// 1 つのファイルの診断の列に上限を掛ける: 「ほか N 件」(`DiagKind::More`) を除いた診断を
+/// [`CONFIG_MAX_DIAGNOSTICS`] 件までにし、超えた分と、元からあった「ほか N 件」の件数を合わせて、最後に 1 件の
+/// 「ほか N 件」にする (読込の診断に分類・検証・言語定義の診断を足した後の、ファイルごとの合計に掛ける、07 §4.3)。
+pub fn cap_diagnostics(diags: &mut Vec<crate::Diagnostic>) {
+    let mut omitted = 0;
+    let mut kept = Vec::with_capacity(diags.len().min(CONFIG_MAX_DIAGNOSTICS + 1));
+    for d in diags.drain(..) {
+        match d.kind {
+            crate::DiagKind::More { count } => omitted += count,
+            _ if kept.len() < CONFIG_MAX_DIAGNOSTICS => kept.push(d),
+            _ => omitted += 1,
+        }
+    }
+    if omitted > 0 {
+        kept.push(more(omitted));
+    }
+    *diags = kept;
+}
+
 /// 省いた件数の診断 (「ほか N 件」)。位置は無い。
 pub(crate) fn more(count: usize) -> crate::Diagnostic {
     crate::Diagnostic {

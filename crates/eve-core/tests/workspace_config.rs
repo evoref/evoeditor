@@ -27,6 +27,8 @@ struct Setup<'a> {
     no_workspace_config: bool,
     /// 起動の前にファインダを開く (ルートとワークスペース層が届く前)。
     finder: bool,
+    /// ホームディレクトリ (bin が環境変数から決める値)。
+    home: Option<&'a str>,
     /// 起動の前に偽 FS に手を加える。
     before: Option<&'a dyn Fn(&Harness)>,
     files: &'a [&'a str],
@@ -71,13 +73,14 @@ fn start(s: &Setup<'_>) -> Harness {
         f(&h);
     }
     let sets: Vec<String> = s.sets.iter().map(|x| (*x).to_owned()).collect();
-    let resolved = eve_config::resolve(
+    let resolved = eve_config::resolve_home(
         &[eve_config::Source {
             name: "config.toml".to_owned(),
             text: Ok(Some(s.user.to_owned())),
         }],
         &sets,
         linux(),
+        s.home,
     );
     h.editor.configure(StartupConfig {
         config: Some(resolved.config),
@@ -93,6 +96,7 @@ fn start(s: &Setup<'_>) -> Harness {
             locales: None,
             conditions: linux(),
             no_workspace_config: s.no_workspace_config,
+            home: s.home.map(str::to_owned),
         }),
         workspace: Some("/w/repo".to_owned()),
         ..Default::default()
@@ -314,6 +318,11 @@ fn 準安全と危険と常に無視と効かないは使わず_項目ごとに�
 }
 
 // verifies: AC-NFR-502-1
+/// ワークスペース設定に書いた外部コマンド (`clipboard.provider = "command"`・`clipboard.command.*`・`[formatter.*]`・
+/// `[language-server.*]`) は未対応の情報診断で使われず、コピー・貼り付け・保存の結果は frontend へのクリップボードの
+/// Effect と偽 FS への書込だけ (Effect の種類の検査)。回帰の見張り: Harness (core) にはプロセスを起動する経路がそもそも
+/// 無いので、印のファイルの検査は、後の版で core に起動の経路 (`ProcessRunner`) を足したときに初めて検出力を持つ。今の版で
+/// 主張できるのは「設定の値が使われない」ことと「Effect にプロセスの起動が無い」ことまで。
 #[test]
 fn ワークスペース設定の外部コマンドは使われず_コピーと保存でプロセスを起動しない() {
     // 記録する偽のコマンド: 実行されると、実際の一時ディレクトリの印のファイルに 1 行足す (07 §12.6.1)
@@ -656,8 +665,13 @@ fn 一時の失敗では層と一緒に診断の一覧も保つ() {
 fn キーの割当の上限は書いた位置の順で数える() {
     // 表のキーの順 (名前の順) では後に来るキーを先に書き、上限の 1,000 件の内に入れる
     let mut text = String::from("[keys.editor]\n\"ctrl+alt+shift+f12\" = \"cursor.move_down\"\n");
+    // どれも使える割当 (3 打のチョード。2 打目以降は文字のキーでよい) にして、上限の警告が診断の上限に隠れないようにする
+    let keys: Vec<char> = ('0'..='9').chain('a'..='z').collect();
     for i in 0..1_000 {
-        text.push_str(&format!("\"ctrl+alt+shift+a {i}\" = \"cursor.move_up\"\n"));
+        let (a, b) = (keys[i / keys.len()], keys[i % keys.len()]);
+        text.push_str(&format!(
+            "\"ctrl+alt+shift+a {a} {b}\" = \"cursor.move_up\"\n"
+        ));
     }
     let mut h = start(&Setup {
         keymap: Some(&text),
@@ -710,24 +724,6 @@ fn ワークスペース層の先頭行の正規表現は_io_のジョブで組�
     assert!(
         d.iter()
             .any(|(t, f)| t.contains("first_line") && *f == ws_file(3)),
-        "{d:?}"
-    );
-}
-
-// verifies: AC-FR-705-3
-#[test]
-fn ホームディレクトリそのものを安全な場所に書くと広すぎると知らせる() {
-    let mut h = start(&Setup {
-        user: &format!(
-            "[workspace]\nsafe_directories = [\"{}\"]\n",
-            eve_testkit::FIXED_HOME
-        ),
-        ..Setup::default()
-    });
-    let d = diagnostics(&mut h);
-    assert!(
-        d.iter()
-            .any(|(t, f)| t.contains("広すぎます") && f == "config.toml:2"),
         "{d:?}"
     );
 }
@@ -786,5 +782,113 @@ fn ワークスペース層のキーの割当は確認のダイアログに足�
         d.iter()
             .any(|(t, _)| t.contains("pagedown") && t.contains("確認のダイアログ")),
         "{d:?}"
+    );
+}
+
+// ---- 再レビューで直した点 ----
+
+// verifies: AC-FR-705-3
+#[test]
+fn ホームディレクトリそのものを安全な場所に書くと_起動時も読み直した後も_1_件知らせる() {
+    let user = "[workspace]\nsafe_directories = [\"/home/u\"]\n";
+    let mut h = start(&Setup {
+        user,
+        home: Some("/home/u"),
+        ..Setup::default()
+    });
+    let count = |h: &mut Harness| {
+        list(h, "config.show_diagnostics", "広すぎます")
+            .into_iter()
+            .filter(|(_, f)| f == "config.toml:2")
+            .count()
+    };
+    // 起動時の診断は bin が resolve_home の結果を渡す (ここでは同じ関数の結果を報告する)
+    let resolved = eve_config::resolve_home(
+        &[eve_config::Source {
+            name: "config.toml".to_owned(),
+            text: Ok(Some(user.to_owned())),
+        }],
+        &[],
+        linux(),
+        Some("/home/u"),
+    );
+    for (file, diags) in &resolved.reports {
+        h.editor.report(eve_core::HostReport::ConfigDiagnostics {
+            file,
+            diagnostics: diags,
+        });
+    }
+    assert_eq!(count(&mut h), 1);
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(count(&mut h), 1);
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn 明示的に選んだ改行は_読み直しとワークスペース層で決め直さない() {
+    let mut h = start(&Setup {
+        ws: Some("[file]\ndefault_line_ending = \"crlf\"\n"),
+        files: &["/w/repo/new.txt"],
+        ..Setup::default()
+    });
+    h.cmd_with(
+        "file.set_line_ending",
+        eve_core::Args::new().with_str("eol", "lf"),
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.keys("x");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "x\n");
+    // 無題の文書も同じ
+    h.cmd("file.new");
+    h.cmd_with(
+        "file.set_line_ending",
+        eve_core::Args::new().with_str("eol", "lf"),
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.keys("y");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "y\n");
+}
+
+// verifies: AC-FR-705-1
+#[test]
+fn ワークスペース層のキーの割当の診断は_1_つのファイルで上限まで() {
+    let mut text = String::from("[keys.editor]\n");
+    for i in 0..150 {
+        text.push_str(&format!(
+            "\"ctrl+alt+shift+f12 {i}\" = {{ command = \"cursor.move_down\", args = {{ x = 1 }} }}\n"
+        ));
+    }
+    let mut h = Harness::new();
+    let d = h
+        .editor
+        .set_workspace_keymap(Some(&eve_config::load_keymap_str(&text)));
+    assert_eq!(d.len(), eve_config::CONFIG_MAX_DIAGNOSTICS + 1);
+    assert!(matches!(
+        d.last().map(|d| &d.kind),
+        Some(eve_config::DiagKind::More { count: 50 })
+    ));
+}
+
+// verifies: AC-FR-705-3
+#[test]
+fn config_reload_で置き場所を読めなくなったら層を外す() {
+    let mut h = start(&Setup {
+        ws: Some("[editor]\ntab_width = 2\n"),
+        ..Setup::default()
+    });
+    assert_eq!(tab_width(&h), 2);
+    h.fs.set_unreadable("/w/repo/.eve", true);
+    h.cmd("config.reload");
+    h.run_jobs();
+    assert_eq!(tab_width(&h), 4, "信頼の取り消し (権限を外した) を通す");
+    assert!(
+        !h.messages().iter().any(|m| m == "msg.config.reload_kept"),
+        "{:?}",
+        h.messages()
     );
 }

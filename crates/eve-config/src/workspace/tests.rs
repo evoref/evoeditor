@@ -242,7 +242,7 @@ fn 目印と安全な場所の要素を確かめる() {
         ]
     );
     assert_eq!(l.diagnostics[0].value, "a/b");
-    // 安全な場所: 絶対パスの形は条件の OS の規則で確かめる (COND-4)。OS の決まらないセクションは今の OS の規則
+    // 安全な場所: 絶対パスの形は条件の OS の規則で確かめる (COND-4)。OS の決まらないセクションは、真なら今の OS の規則
     let src = "[os.windows.workspace]\nsafe_directories = [\"C:\\\\src\", \"/mnt/c\", \"D:\\\\\", \"*\"]\n\
                [os.linux.workspace]\nsafe_directories = [\"/mnt/c/src\", \"C:\\\\src\", \"/\", \"~/x\"]\n\
                [env.wsl.workspace]\nsafe_directories = [\"anything\"]\n";
@@ -255,16 +255,11 @@ fn 目印と安全な場所の要素を確かめる() {
             other => panic!("{other:?}"),
         })
         .collect();
-    // 並びは表の中の名前の順 (`env` が `os` の前、`linux` が `windows` の前)。OS の決まらない `env.*` のセクションは、今の
-    // OS の規則で確かめる
+    // 並びは表の中の名前の順 (`linux` が `windows` の前)。今の環境で偽の `env.*` のセクションは、パスの形を確かめない
+    // (WSL の中で使う値を Windows の規則で誤りにしない)
     assert_eq!(
         got,
         [
-            (
-                Some("env.wsl"),
-                ListItemProblem::Relative,
-                "anything".to_owned()
-            ),
             (
                 Some("os.linux"),
                 ListItemProblem::Relative,
@@ -598,4 +593,91 @@ fn 診断は_1_つのファイルで上限までにして_ほか_n_件にまと�
         k.diagnostics.last().map(|d| &d.kind),
         Some(DiagKind::More { count: 200 })
     ));
+}
+
+#[test]
+fn 今の環境で真の_env_のセクションの安全な場所は今の_os_の規則で確かめる() {
+    let text = "[env.wsl.workspace]\nsafe_directories = [\"anything\", \"/home/me/src\"]\n";
+    // WSL の中の Linux: 真なので Unix の規則
+    let wsl = Conditions {
+        os: Some(crate::Os::Linux),
+        env: crate::EnvConditions {
+            wsl: true,
+            ..crate::EnvConditions::default()
+        },
+        ..Conditions::default()
+    };
+    let l = crate::load_str_for(Config::default(), text, wsl);
+    let probs: Vec<(String, DiagKind)> = l
+        .diagnostics
+        .iter()
+        .map(|d| (d.value.clone(), d.kind.clone()))
+        .collect();
+    assert_eq!(
+        probs,
+        [(
+            "anything".to_owned(),
+            DiagKind::ListItem(ListItemProblem::Relative)
+        )]
+    );
+    assert_eq!(l.config.safe_directories, ["/home/me/src"]);
+    // Windows (偽): WSL の中で使う値なので、Windows の規則で「相対パス」にしない
+    let windows = Conditions {
+        os: Some(crate::Os::Windows),
+        ..Conditions::default()
+    };
+    let l = crate::load_str_for(Config::default(), text, windows);
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+}
+
+// verifies: AC-FR-705-3
+#[test]
+fn ホームディレクトリそのものは広すぎると知らせて使う() {
+    let linux = Conditions {
+        os: Some(crate::Os::Linux),
+        ..Conditions::default()
+    };
+    let src = |text: &str| crate::Source {
+        name: "config.toml".to_owned(),
+        text: Ok(Some(text.to_owned())),
+    };
+    let r = crate::resolve_home(
+        &[src(
+            "[workspace]\nsafe_directories = [\"/home/me/\", \"/home/me/src\"]\n",
+        )],
+        &["workspace.\"safe_directories+\"=[\"/home/me\"]".to_owned()],
+        linux,
+        Some("/home/me"),
+    );
+    let broad: Vec<(&str, &str)> = r
+        .reports
+        .iter()
+        .flat_map(|(f, ds)| ds.iter().map(move |d| (f.as_str(), d)))
+        .filter(|(_, d)| d.kind == DiagKind::ListItem(ListItemProblem::TooBroad))
+        .map(|(f, d)| (f, d.value.as_str()))
+        .collect();
+    assert_eq!(broad, [("config.toml", "/home/me/"), ("--set", "/home/me")]);
+    assert_eq!(
+        r.config.safe_directories,
+        ["/home/me/", "/home/me/src", "/home/me"]
+    );
+    // ホームを知らなければ知らせない
+    let r = crate::resolve(
+        &[src("[workspace]\nsafe_directories = [\"/home/me\"]\n")],
+        &[],
+        linux,
+    );
+    assert!(r.reports.is_empty(), "{:?}", r.reports);
+}
+
+#[test]
+fn ワークスペース層の診断は分類を足した合計で上限まで() {
+    let mut text: String = (0..120).map(|i| format!("unknown_{i} = 1\n")).collect();
+    text.push_str("[theme]\nname = \"x\"\n");
+    let l = ws(&text, &Config::default());
+    assert_eq!(l.diagnostics.len(), crate::CONFIG_MAX_DIAGNOSTICS + 1);
+    assert_eq!(
+        l.diagnostics.last().map(|d| d.kind.clone()),
+        Some(DiagKind::More { count: 21 })
+    );
 }
