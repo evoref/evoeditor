@@ -335,6 +335,14 @@ const DEFAULT_ROLES: &[Role] = &[
         ansi16: st(D, D, REVERSE),
         mono: REVERSE,
     },
+    // 対応括弧の強調 (v0.5 の M32、FR-308。07 §8.2 の表の v0.5 の行。重ねるロール。値は ui.overlay.match と同じ)
+    Role {
+        name: "ui.bracket_match",
+        truecolor: st(D, D, UNDERLINE | BOLD),
+        ansi256: st(D, D, UNDERLINE | BOLD),
+        ansi16: st(D, D, UNDERLINE | BOLD),
+        mono: UNDERLINE | BOLD,
+    },
 ];
 
 const fn role(
@@ -568,6 +576,14 @@ const HIGH_CONTRAST_DARK_ROLES: &[Role] = &[
         st(BLACK, BRIGHT_WHITE, NONE),
         REVERSE,
     ),
+    // 対応括弧の強調 (v0.5 の M32、FR-308。値は ui.overlay.match と同じ。16 の段は bold を使わない (h9))
+    role(
+        "ui.bracket_match",
+        attrs(UNDERLINE | BOLD),
+        attrs(UNDERLINE | BOLD),
+        attrs(UNDERLINE),
+        UNDERLINE | BOLD,
+    ),
 ];
 
 /// 組込みテーマ `high-contrast-light` (07 §8.7.2 の表。4 段とも明示値。背景を塗る)。
@@ -767,6 +783,14 @@ const HIGH_CONTRAST_LIGHT_ROLES: &[Role] = &[
         st(BRIGHT_WHITE, BLACK, NONE),
         REVERSE,
     ),
+    // 対応括弧の強調 (v0.5 の M32、FR-308。値は ui.overlay.match と同じ。16 の段は bold を使わない (h9))
+    role(
+        "ui.bracket_match",
+        attrs(UNDERLINE | BOLD),
+        attrs(UNDERLINE | BOLD),
+        attrs(UNDERLINE),
+        UNDERLINE | BOLD,
+    ),
 ];
 
 /// 組込みテーマの名前 (07 §5.4 `theme.name`)。
@@ -796,11 +820,12 @@ pub fn near_builtin_names(name: &str) -> Vec<&'static str> {
 
 /// ほかのロールの上に重ねて使うロール (07 §8.6 の 3 本目の「重ねるロール」)。背景を塗るテーマでも、端末の既定色を
 /// 本文の色に置き換えず、既定色のまま下のロールの色を通す。
-pub const LAYERED_ROLES: [&str; 4] = [
+pub const LAYERED_ROLES: [&str; 5] = [
     "ui.status_bar.chord",
     "ui.line_number.active",
     "ui.overlay.match",
     "ui.search_bar.toggle_on",
+    "ui.bracket_match",
 ];
 
 /// 組込みテーマ (07 §8.6)。
@@ -1014,7 +1039,7 @@ mod tests {
             assert!(t.paints, "{name}");
             let names: Vec<&str> = t.roles.iter().map(|r| r.name).collect();
             let default: Vec<&str> = DEFAULT_ROLES.iter().map(|r| r.name).collect();
-            assert_eq!(names, default, "{name}: ロールは default と同じ 31 個");
+            assert_eq!(names, default, "{name}: ロールは default と同じ 32 個");
             for r in &t.roles {
                 for m in [r.truecolor.mods, r.ansi256.mods, r.ansi16.mods, r.mono] {
                     assert_eq!(m & DIM, 0, "{name} {}", r.name);

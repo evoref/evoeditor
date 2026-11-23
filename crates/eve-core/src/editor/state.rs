@@ -52,6 +52,8 @@ pub struct View {
     /// 「単語の一致」の印 (03 §4.5.1 の MCUR-2。`select.add_next_match` が単語から始めたとき立て、選択を変えるほかの操作で
     /// 無効になる)。
     pub(crate) word_match: Option<crate::view::multi_cursor::WordMark>,
+    /// 対応括弧の強調 (03 §5.7 の BRK-5)。Frame を作る前に求め、鍵 (Revision・head など) が同じ間は探し直さない。
+    pub(crate) bracket: Option<crate::view::bracket::BracketMark>,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
@@ -707,6 +709,7 @@ impl EditorState {
                 wrap: self.config_wrap(),
                 cursor_affinity: Default::default(),
                 word_match: None,
+                bracket: None,
             },
         );
         id

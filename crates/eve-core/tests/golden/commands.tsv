@@ -15,6 +15,7 @@ config.show_diagnostics	Ui	Ui	—
 cursor.doc_end	Motion	Read	—
 cursor.doc_start	Motion	Read	—
 cursor.end	Motion	Read	—
+cursor.goto_bracket	Motion	Read	—
 cursor.goto_line	Motion	Read	—
 cursor.home	Motion	Read	—
 cursor.move_down	Motion	Read	—

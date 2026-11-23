@@ -70,6 +70,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::command::edit::register(&mut r);
     crate::view::motion::register(&mut r);
     crate::view::multi_cursor::register(&mut r);
+    crate::view::bracket::register(&mut r);
     crate::io::file_cmds::register(&mut r);
     crate::io::external::register(&mut r);
     buffer::register(&mut r);
@@ -546,6 +547,8 @@ impl Editor {
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
         // タブラインの出し入れを今の文書の数に合わせてから作る (03 §9.9 の PANE-12 (b))
         self.state.sync_tab_line();
+        // 対応括弧の強調を、表示中の各ペインの主のカーソルについて求め直す (03 §5.7 の BRK-5。鍵が同じ間は探さない)
+        self.state.sync_bracket_marks(window);
         let mut f = crate::layout::build_frame(&self.state, window, self.keymap.pending());
         if let Some(f) = f.as_mut() {
             f.which_key = self.which_key_model();

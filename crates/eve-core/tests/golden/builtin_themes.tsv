@@ -1,4 +1,5 @@
 # theme	depth	role	fg	bg	mods
+default	TrueColor	ui.bracket_match	Default	Default	0x03
 default	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
 default	TrueColor	ui.cursor_line	Rgb(232, 232, 232)	Rgb(58, 61, 74)	0x00
 default	TrueColor	ui.dialog.button	Default	Default	0x00
@@ -30,6 +31,7 @@ default	TrueColor	ui.tab_line	Default	Default	0x00
 default	TrueColor	ui.tab_line.active	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default	TrueColor	ui.text	Default	Default	0x00
 default	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Default	0x00
+default	Ansi256	ui.bracket_match	Default	Default	0x03
 default	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
 default	Ansi256	ui.cursor_line	Ansi(254)	Ansi(236)	0x00
 default	Ansi256	ui.dialog.button	Default	Default	0x00
@@ -61,6 +63,7 @@ default	Ansi256	ui.tab_line	Default	Default	0x00
 default	Ansi256	ui.tab_line.active	Ansi(254)	Ansi(237)	0x00
 default	Ansi256	ui.text	Default	Default	0x00
 default	Ansi256	ui.whitespace	Ansi(244)	Default	0x00
+default	Ansi16	ui.bracket_match	Default	Default	0x03
 default	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
 default	Ansi16	ui.cursor_line	Default	Default	0x00
 default	Ansi16	ui.dialog.button	Default	Default	0x00
@@ -92,6 +95,7 @@ default	Ansi16	ui.tab_line	Default	Default	0x00
 default	Ansi16	ui.tab_line.active	Default	Default	0x04
 default	Ansi16	ui.text	Default	Default	0x00
 default	Ansi16	ui.whitespace	Ansi(8)	Default	0x00
+default	Mono	ui.bracket_match	Default	Default	0x03
 default	Mono	ui.control_char	Default	Default	0x04
 default	Mono	ui.cursor_line	Default	Default	0x00
 default	Mono	ui.dialog.button	Default	Default	0x00
@@ -123,6 +127,7 @@ default	Mono	ui.tab_line	Default	Default	0x00
 default	Mono	ui.tab_line.active	Default	Default	0x04
 default	Mono	ui.text	Default	Default	0x00
 default	Mono	ui.whitespace	Default	Default	0x08
+default-dark	TrueColor	ui.bracket_match	Default	Default	0x03
 default-dark	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
 default-dark	TrueColor	ui.cursor_line	Rgb(232, 232, 232)	Rgb(58, 61, 74)	0x00
 default-dark	TrueColor	ui.dialog.button	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
@@ -154,6 +159,7 @@ default-dark	TrueColor	ui.tab_line	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.tab_line.active	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default-dark	TrueColor	ui.text	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
+default-dark	Ansi256	ui.bracket_match	Default	Default	0x03
 default-dark	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
 default-dark	Ansi256	ui.cursor_line	Ansi(254)	Ansi(236)	0x00
 default-dark	Ansi256	ui.dialog.button	Ansi(252)	Ansi(234)	0x00
@@ -185,6 +191,7 @@ default-dark	Ansi256	ui.tab_line	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.tab_line.active	Ansi(254)	Ansi(237)	0x00
 default-dark	Ansi256	ui.text	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.whitespace	Ansi(244)	Ansi(234)	0x00
+default-dark	Ansi16	ui.bracket_match	Default	Default	0x03
 default-dark	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
 default-dark	Ansi16	ui.cursor_line	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.dialog.button	Ansi(7)	Ansi(0)	0x00
@@ -216,6 +223,7 @@ default-dark	Ansi16	ui.tab_line	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.tab_line.active	Ansi(7)	Ansi(0)	0x04
 default-dark	Ansi16	ui.text	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.whitespace	Ansi(8)	Ansi(0)	0x00
+default-dark	Mono	ui.bracket_match	Default	Default	0x03
 default-dark	Mono	ui.control_char	Default	Default	0x04
 default-dark	Mono	ui.cursor_line	Default	Default	0x00
 default-dark	Mono	ui.dialog.button	Default	Default	0x00
@@ -247,6 +255,7 @@ default-dark	Mono	ui.tab_line	Default	Default	0x00
 default-dark	Mono	ui.tab_line.active	Default	Default	0x04
 default-dark	Mono	ui.text	Default	Default	0x00
 default-dark	Mono	ui.whitespace	Default	Default	0x08
+default-light	TrueColor	ui.bracket_match	Default	Default	0x03
 default-light	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
 default-light	TrueColor	ui.cursor_line	Rgb(232, 232, 232)	Rgb(58, 61, 74)	0x00
 default-light	TrueColor	ui.dialog.button	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
@@ -278,6 +287,7 @@ default-light	TrueColor	ui.tab_line	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.tab_line.active	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
 default-light	TrueColor	ui.text	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
+default-light	Ansi256	ui.bracket_match	Default	Default	0x03
 default-light	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
 default-light	Ansi256	ui.cursor_line	Ansi(254)	Ansi(236)	0x00
 default-light	Ansi256	ui.dialog.button	Ansi(235)	Ansi(255)	0x00
@@ -309,6 +319,7 @@ default-light	Ansi256	ui.tab_line	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.tab_line.active	Ansi(254)	Ansi(237)	0x00
 default-light	Ansi256	ui.text	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.whitespace	Ansi(244)	Ansi(255)	0x00
+default-light	Ansi16	ui.bracket_match	Default	Default	0x03
 default-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
 default-light	Ansi16	ui.cursor_line	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.dialog.button	Ansi(0)	Ansi(15)	0x00
@@ -340,6 +351,7 @@ default-light	Ansi16	ui.tab_line	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.tab_line.active	Ansi(0)	Ansi(15)	0x04
 default-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.whitespace	Ansi(8)	Ansi(15)	0x00
+default-light	Mono	ui.bracket_match	Default	Default	0x03
 default-light	Mono	ui.control_char	Default	Default	0x04
 default-light	Mono	ui.cursor_line	Default	Default	0x00
 default-light	Mono	ui.dialog.button	Default	Default	0x00
@@ -371,6 +383,7 @@ default-light	Mono	ui.tab_line	Default	Default	0x00
 default-light	Mono	ui.tab_line.active	Default	Default	0x04
 default-light	Mono	ui.text	Default	Default	0x00
 default-light	Mono	ui.whitespace	Default	Default	0x08
+ansi	TrueColor	ui.bracket_match	Default	Default	0x03
 ansi	TrueColor	ui.control_char	Ansi(15)	Ansi(5)	0x00
 ansi	TrueColor	ui.cursor_line	Default	Default	0x00
 ansi	TrueColor	ui.dialog.button	Default	Default	0x00
@@ -402,6 +415,7 @@ ansi	TrueColor	ui.tab_line	Default	Default	0x00
 ansi	TrueColor	ui.tab_line.active	Default	Default	0x04
 ansi	TrueColor	ui.text	Default	Default	0x00
 ansi	TrueColor	ui.whitespace	Ansi(8)	Default	0x00
+ansi	Ansi256	ui.bracket_match	Default	Default	0x03
 ansi	Ansi256	ui.control_char	Ansi(15)	Ansi(5)	0x00
 ansi	Ansi256	ui.cursor_line	Default	Default	0x00
 ansi	Ansi256	ui.dialog.button	Default	Default	0x00
@@ -433,6 +447,7 @@ ansi	Ansi256	ui.tab_line	Default	Default	0x00
 ansi	Ansi256	ui.tab_line.active	Default	Default	0x04
 ansi	Ansi256	ui.text	Default	Default	0x00
 ansi	Ansi256	ui.whitespace	Ansi(8)	Default	0x00
+ansi	Ansi16	ui.bracket_match	Default	Default	0x03
 ansi	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
 ansi	Ansi16	ui.cursor_line	Default	Default	0x00
 ansi	Ansi16	ui.dialog.button	Default	Default	0x00
@@ -464,6 +479,7 @@ ansi	Ansi16	ui.tab_line	Default	Default	0x00
 ansi	Ansi16	ui.tab_line.active	Default	Default	0x04
 ansi	Ansi16	ui.text	Default	Default	0x00
 ansi	Ansi16	ui.whitespace	Ansi(8)	Default	0x00
+ansi	Mono	ui.bracket_match	Default	Default	0x03
 ansi	Mono	ui.control_char	Default	Default	0x04
 ansi	Mono	ui.cursor_line	Default	Default	0x00
 ansi	Mono	ui.dialog.button	Default	Default	0x00
@@ -495,6 +511,7 @@ ansi	Mono	ui.tab_line	Default	Default	0x00
 ansi	Mono	ui.tab_line.active	Default	Default	0x04
 ansi	Mono	ui.text	Default	Default	0x00
 ansi	Mono	ui.whitespace	Default	Default	0x08
+high-contrast-dark	TrueColor	ui.bracket_match	Default	Default	0x03
 high-contrast-dark	TrueColor	ui.control_char	Rgb(0, 0, 0)	Rgb(224, 168, 255)	0x00
 high-contrast-dark	TrueColor	ui.cursor_line	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-dark	TrueColor	ui.dialog.button	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
@@ -526,6 +543,7 @@ high-contrast-dark	TrueColor	ui.tab_line	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-dark	TrueColor	ui.tab_line.active	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-dark	TrueColor	ui.text	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-dark	TrueColor	ui.whitespace	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	Ansi256	ui.bracket_match	Default	Default	0x03
 high-contrast-dark	Ansi256	ui.control_char	Ansi(16)	Ansi(183)	0x00
 high-contrast-dark	Ansi256	ui.cursor_line	Ansi(231)	Ansi(16)	0x00
 high-contrast-dark	Ansi256	ui.dialog.button	Ansi(231)	Ansi(16)	0x00
@@ -557,6 +575,7 @@ high-contrast-dark	Ansi256	ui.tab_line	Ansi(231)	Ansi(16)	0x00
 high-contrast-dark	Ansi256	ui.tab_line.active	Ansi(16)	Ansi(231)	0x00
 high-contrast-dark	Ansi256	ui.text	Ansi(231)	Ansi(16)	0x00
 high-contrast-dark	Ansi256	ui.whitespace	Ansi(250)	Ansi(16)	0x00
+high-contrast-dark	Ansi16	ui.bracket_match	Default	Default	0x02
 high-contrast-dark	Ansi16	ui.control_char	Ansi(0)	Ansi(7)	0x00
 high-contrast-dark	Ansi16	ui.cursor_line	Ansi(15)	Ansi(0)	0x00
 high-contrast-dark	Ansi16	ui.dialog.button	Ansi(15)	Ansi(0)	0x00
@@ -588,6 +607,7 @@ high-contrast-dark	Ansi16	ui.tab_line	Ansi(15)	Ansi(0)	0x00
 high-contrast-dark	Ansi16	ui.tab_line.active	Ansi(0)	Ansi(15)	0x00
 high-contrast-dark	Ansi16	ui.text	Ansi(15)	Ansi(0)	0x00
 high-contrast-dark	Ansi16	ui.whitespace	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Mono	ui.bracket_match	Default	Default	0x03
 high-contrast-dark	Mono	ui.control_char	Default	Default	0x04
 high-contrast-dark	Mono	ui.cursor_line	Default	Default	0x00
 high-contrast-dark	Mono	ui.dialog.button	Default	Default	0x00
@@ -619,6 +639,7 @@ high-contrast-dark	Mono	ui.tab_line	Default	Default	0x00
 high-contrast-dark	Mono	ui.tab_line.active	Default	Default	0x04
 high-contrast-dark	Mono	ui.text	Default	Default	0x00
 high-contrast-dark	Mono	ui.whitespace	Default	Default	0x01
+high-contrast-light	TrueColor	ui.bracket_match	Default	Default	0x03
 high-contrast-light	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(106, 27, 154)	0x00
 high-contrast-light	TrueColor	ui.cursor_line	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-light	TrueColor	ui.dialog.button	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
@@ -650,6 +671,7 @@ high-contrast-light	TrueColor	ui.tab_line	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-light	TrueColor	ui.tab_line.active	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
 high-contrast-light	TrueColor	ui.text	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
 high-contrast-light	TrueColor	ui.whitespace	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
+high-contrast-light	Ansi256	ui.bracket_match	Default	Default	0x03
 high-contrast-light	Ansi256	ui.control_char	Ansi(231)	Ansi(54)	0x00
 high-contrast-light	Ansi256	ui.cursor_line	Ansi(16)	Ansi(231)	0x00
 high-contrast-light	Ansi256	ui.dialog.button	Ansi(16)	Ansi(231)	0x00
@@ -681,6 +703,7 @@ high-contrast-light	Ansi256	ui.tab_line	Ansi(16)	Ansi(231)	0x00
 high-contrast-light	Ansi256	ui.tab_line.active	Ansi(231)	Ansi(16)	0x00
 high-contrast-light	Ansi256	ui.text	Ansi(16)	Ansi(231)	0x00
 high-contrast-light	Ansi256	ui.whitespace	Ansi(238)	Ansi(231)	0x00
+high-contrast-light	Ansi16	ui.bracket_match	Default	Default	0x02
 high-contrast-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
 high-contrast-light	Ansi16	ui.cursor_line	Ansi(0)	Ansi(15)	0x00
 high-contrast-light	Ansi16	ui.dialog.button	Ansi(0)	Ansi(15)	0x00
@@ -712,6 +735,7 @@ high-contrast-light	Ansi16	ui.tab_line	Ansi(0)	Ansi(15)	0x00
 high-contrast-light	Ansi16	ui.tab_line.active	Ansi(15)	Ansi(0)	0x00
 high-contrast-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
 high-contrast-light	Ansi16	ui.whitespace	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Mono	ui.bracket_match	Default	Default	0x03
 high-contrast-light	Mono	ui.control_char	Default	Default	0x04
 high-contrast-light	Mono	ui.cursor_line	Default	Default	0x00
 high-contrast-light	Mono	ui.dialog.button	Default	Default	0x00

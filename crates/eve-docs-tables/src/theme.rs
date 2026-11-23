@@ -566,11 +566,22 @@ pub fn check_role_set(theme: &str, rows: &[RoleRow], default_rows: &[RoleRow]) -
 }
 
 /// 重ねるロールと、その下に来るロール (07 §8.6 の 3 本目)。下が `ui.text` のものは本文の前景で判定する。
-pub const LAYERED_UNDER: [(&str, &[&str]); 4] = [
+pub const LAYERED_UNDER: [(&str, &[&str]); 5] = [
     ("ui.status_bar.chord", &["ui.status_bar"]),
     ("ui.line_number.active", &["ui.line_number"]),
     ("ui.overlay.match", &["ui.overlay", "ui.overlay.selected"]),
     ("ui.search_bar.toggle_on", &["ui.overlay"]),
+    // 対応括弧 (v0.5 の M32) は本文・現在行・選択・検索の一致の上 (07 §8.8)
+    (
+        "ui.bracket_match",
+        &[
+            "ui.text",
+            "ui.cursor_line",
+            "ui.selection",
+            "ui.search.match",
+            "ui.search.current",
+        ],
+    ),
 ];
 
 /// (h10): 色の段で、前景だけのロール (形 (iii)) の前景が本文の前景と違う。

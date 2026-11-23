@@ -1,0 +1,18 @@
+ 1│(a) (a)
+ 2│
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+検索: (a                                               [Aa~] [.*] [ab] [sel] 0/…
+m.txt                                                        行 1, 桁 8 UTF-8 LF
+
+Esc 取消  Enter 次へ  Alt+C 大小
+cursor: Some(CellPos { col: 8, row: 13 })
