@@ -7,6 +7,7 @@
 
 use eve_config::{DiagKind, Diagnostic, LanguageDef, LanguageProblem, Severity};
 
+use crate::io::error_keys::fs_reason;
 use crate::io::fs::{EntryKind, FileKind, FileSystem, FsErrorKind};
 use crate::io::fspath::FsPath;
 
@@ -166,20 +167,6 @@ fn list_toml(fs: &dyn FileSystem, dir: &FsPath) -> Result<Vec<(String, Option<u6
             toml(&name).then_some((name, known))
         })
         .collect())
-}
-
-/// ファイルを読めなかった理由の短い英語 (`permission denied` など。診断の `{reason}` とログに出す。設定ファイルの読めない
-/// 理由 (`config.reload`) と同じ書き方)。
-pub(crate) fn fs_reason(e: &crate::io::fs::FsError) -> String {
-    let name = format!("{:?}", e.kind);
-    let mut out = String::with_capacity(name.len() + 4);
-    for (i, c) in name.chars().enumerate() {
-        if c.is_ascii_uppercase() && i > 0 {
-            out.push(' ');
-        }
-        out.push(c.to_ascii_lowercase());
-    }
-    out
 }
 
 /// 1 ファイルを上限まで読み、UTF-8 の文字列にする。

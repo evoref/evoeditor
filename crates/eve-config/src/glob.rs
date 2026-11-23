@@ -7,7 +7,8 @@
 //! 文字 (コードポイント) の単位。
 //!
 //! 照合は状態の集合を 1 文字ずつ進める (非決定性の有限オートマトンの模擬)。`*` の後戻りをせず、選択肢を前もって展開しない
-//! ので、手数は「状態の数 × (文字の数 + 1)」(数の範囲は、その所の数字の並びの長さを掛ける) に収まる。
+//! ので、手数は「状態の数 × (文字の数 + 1)」(数の範囲は、その所から 21 字までを読む) に収まる。パースも長さに比例する
+//! (`{` と `}` の対応は最初に 1 回求め、閉じない `[` の後の `[` は走査し直さない)。
 
 /// `{` の入れ子の上限 (EC-4)。
 pub const GLOB_MAX_NESTING: usize = 8;
@@ -99,6 +100,8 @@ impl Glob {
             alternatives: 0,
             case,
             slash: body.is_some(),
+            unclosed: None,
+            steps: 0,
         };
         let nodes = p.seq(0, false, chars.len())?;
         let has_slash = p.slash;
@@ -196,6 +199,11 @@ fn step_matches(step: &Step, c: char, case: GlobCase) -> bool {
     }
 }
 
+/// `chars[i]` が `\` で逃がされているか (直前の `\` の並びが奇数)。
+fn escaped(chars: &[char], i: usize) -> bool {
+    chars[..i].iter().rev().take_while(|&&c| c == '\\').count() % 2 == 1
+}
+
 /// 数の範囲で読む数字の並びの上限 (桁)。これより長い並びは i64 に収まらないので範囲の外 (照合の手数を並びの長さに比例させない)。
 const NUMBER_MAX_DIGITS: usize = 20;
 
@@ -261,6 +269,11 @@ struct Parser<'a> {
     case: GlobCase,
     /// 逃がしていない `/` を読んだ (先頭の `/` を含む)。
     slash: bool,
+    /// 閉じなかった `[` の走査 (始めた位置, 範囲の終わり)。同じ範囲でそれより後ろの `[` も閉じない (後ろから始めても、走査は
+    /// 同じ字の並びを同じ区切りで読むので、閉じる `]` が無い) ので、走査せずに字にする (パースを長さの 2 乗にしない)。
+    unclosed: Option<(usize, usize)>,
+    /// `[` の中を読んだ字の数 (試験で手数を確かめる)。
+    steps: usize,
 }
 
 impl Parser<'_> {
@@ -289,9 +302,11 @@ impl Parser<'_> {
                             self.pos += 1;
                         }
                         // `/**/` (と先頭の `**/`) は 0 個以上のディレクトリ (`d/**/z.c` は `d/z.c` にも当たる。EditorConfig
-                        // と同じ、EC-4)
-                        let after_sep = at == 0 || self.chars[at - 1] == '/';
-                        if after_sep && self.pos < end && self.chars[self.pos] == '/' {
+                        // と同じ、EC-4)。星がちょうど 2 つで、前の `/` が逃がしでないときだけ (`a/***/b`・`a\/**/b` は違う)
+                        let two = self.pos - at == 2;
+                        let after_sep =
+                            at == 0 || (self.chars[at - 1] == '/' && !escaped(self.chars, at - 1));
+                        if two && after_sep && self.pos < end && self.chars[self.pos] == '/' {
                             self.pos += 1;
                             self.slash = true;
                             out.push(Node::Alt(vec![
@@ -321,9 +336,15 @@ impl Parser<'_> {
         Ok(out)
     }
 
-    /// `[` の後ろ (`end` まで)。閉じていなければ `None` (読んだ位置を戻す)。
+    /// `[` の後ろ (`end` まで)。閉じていなければ `None` (読んだ位置を戻す)。範囲の端にも `\` が効く (`[a-\]]` は `a` から `]`)。
     fn class(&mut self, end: usize) -> Option<Node> {
         let save = self.pos;
+        if let Some((from, e)) = self.unclosed
+            && e == end
+            && save > from
+        {
+            return None;
+        }
         let mut neg = false;
         if self.pos < end && matches!(self.chars[self.pos], '!' | '^') {
             neg = true;
@@ -333,9 +354,11 @@ impl Parser<'_> {
         let mut first = true;
         loop {
             if self.pos >= end {
+                self.unclosed = Some((save, end));
                 self.pos = save;
                 return None;
             }
+            self.steps += 1;
             let c = self.chars[self.pos];
             self.pos += 1;
             if c == ']' && !first {
@@ -350,8 +373,13 @@ impl Parser<'_> {
             };
             if self.pos + 1 < end && self.chars[self.pos] == '-' && self.chars[self.pos + 1] != ']'
             {
-                let hi = self.chars[self.pos + 1];
-                self.pos += 2;
+                // 範囲の端の `\` は次の 1 字 (`[a-\]]`)。`\` が範囲の最後の字なら、`\` そのもの
+                let (hi, used) = if self.chars[self.pos + 1] == '\\' && self.pos + 2 < end {
+                    (self.chars[self.pos + 2], 3)
+                } else {
+                    (self.chars[self.pos + 1], 2)
+                };
+                self.pos += used;
                 items.push((c.min(hi), c.max(hi)));
             } else {
                 items.push((c, c));
@@ -491,6 +519,21 @@ mod tests {
         assert!(!m("[/]", "/"), "集合は / に当たらない");
     }
 
+    /// `EditorConfig` のほかの実装と意図して違う所 (07 §10.3 の EC-4)。
+    #[test]
+    fn ほかの実装と意図して違う所() {
+        // `/` を含む集合も集合のまま (字の並びにしない)。集合は `/` に当たらない
+        assert!(m("[a/]", "a"));
+        assert!(!m("[a/]", "/"));
+        assert!(!m("[a/]", "[a/]"));
+        // `[/]a` はどのパスにも当たらない (集合の中の `/` は区切りに数えず、ファイル名だけに当てる)
+        assert!(!m("[/]a", "/a"));
+        assert!(!m("[/]a", "x/a"));
+        // 数の範囲は、その所の数字の並び全体を読む (`{1..3}5` は `25` に当たらない)
+        assert!(!m("{1..3}5", "25"));
+        assert!(m("{1..3}x5", "2x5"));
+    }
+
     #[test]
     fn 選択肢と入れ子() {
         assert!(m("*.{js,ts}", "a.ts"));
@@ -590,6 +633,11 @@ mod tests {
             assert_eq!(m("d/**/z.c", s), want, "{s}");
         }
         assert!(m(".github/**/*.yml", ".github/a.yml"));
+        // 星がちょうど 2 つで、前の `/` が逃がしでないときだけ
+        assert!(!m("a/***/b", "a/b"));
+        assert!(m("a/***/b", "a/x/b"));
+        assert!(!m("a\\/**/b", "a/b"));
+        assert!(m("a\\/**/b", "a/x/b"));
         assert!(m("src/**/x", "src/x"));
         assert!(m("**/x", "x"), "先頭の **/ も 0 個");
         assert!(m("**/x", "a/b/x"));
@@ -629,18 +677,77 @@ mod tests {
         assert!(!g.is_match(&long));
     }
 
+    #[test]
+    fn 閉じない角括弧の多い_glob_のパースは長さに比例する() {
+        let steps = |p: &str| {
+            let chars: Vec<char> = p.chars().collect();
+            let (close, comma) = brace_table(&chars);
+            let mut parser = Parser {
+                chars: &chars,
+                close: &close,
+                comma: &comma,
+                pos: 0,
+                alternatives: 0,
+                case: GlobCase::Sensitive,
+                slash: false,
+                unclosed: None,
+                steps: 0,
+            };
+            parser.seq(0, false, chars.len()).unwrap();
+            parser.steps
+        };
+        let n = 4_096;
+        assert!(steps(&"[".repeat(n)) <= 2 * n, "{}", steps(&"[".repeat(n)));
+        assert!(steps(&"[a".repeat(n)) <= 4 * n);
+        // 選択肢の中で閉じない `[` の後でも、範囲の外 (選択肢の後ろ) の `[...]` は読む
+        assert!(m("{a,[b}[c]", "[bc"));
+        assert!(m("{a,[b}[c]", "ac"));
+        assert!(m("[a]", "a"));
+    }
+
+    #[test]
+    fn 範囲の端の逃がし() {
+        assert!(m("[a-\\]]", "]"), "a から ] (逃がした ])");
+        assert!(m("[a-\\]]", "^"));
+        assert!(!m("[a-\\]]", "b"));
+        assert!(m("[a-\\]", "[a-]"), "閉じないので字");
+        assert!(m("[\\]]", "]"));
+    }
+
+    #[test]
+    fn 数の範囲は_21_字までしか読まない() {
+        // 0 の長い並びでも、各位置で 21 字までしか読まない (並びの長さの 2 乗にしない)
+        let g = Glob::new("*{0..1}", GlobCase::Sensitive).unwrap();
+        let s = "0".repeat(100_000);
+        let t = std::time::Instant::now();
+        assert!(g.is_match(&s), "末尾の 0 が 1 字の並び");
+        assert!(
+            t.elapsed() < std::time::Duration::from_secs(5),
+            "{:?}",
+            t.elapsed()
+        );
+    }
+
+    #[test]
+    fn 選択肢の外の先頭の斜線は置き場所の印にしない() {
+        // 先頭の `/` だけが置き場所の印。選択肢を展開すると先頭に来る `/` は字 (`{,}/` は `/` に当たり、空には当たらない)
+        assert!(m("{,}/", "/"));
+        assert!(!m("{,}/", ""));
+    }
+
     proptest::proptest! {
         /// `{a,b}` を含む glob への照合は、選択肢を展開した glob のどれかへの照合と一致する (09 §3.3 の fuzz の性質)。
+        /// 先頭の `/` (置き場所の印) と `**` (区切りとの並びで意味が変わる) は、展開の前後で同じ意味にならないので作らない:
+        /// どの部分も `*` の後に `*` 以外が来る形で組み、展開して `*` が並ばないように、`pre` は `*` で終わらず、選択肢と
+        /// `post` は `*` で始まらない。
         #[test]
         fn 選択肢の照合は展開したどれかへの照合と一致する(
-            pre in "[ab][ab/*?]{0,3}",
-            alts in proptest::collection::vec("[ab/*?]{0,3}", 2..4),
-            post in "[ab/*]{0,4}",
+            pre in "[ab]([ab/?]|\\*[ab/?]){0,3}",
+            alts in proptest::collection::vec("([ab/?](\\*[ab/?])?){0,2}", 2..4),
+            post in "([ab/?]\\*?){0,3}",
             subject in "[ab/]{0,8}",
         ) {
-            // 先頭の `/` (置き場所の印) と `**` (区切りとの並びで意味が変わる) は、展開の前後で同じ意味にならないので除く
             let expanded: Vec<String> = alts.iter().map(|a| format!("{pre}{a}{post}")).collect();
-            proptest::prop_assume!(expanded.iter().all(|e| !e.contains("**")));
             let glob = format!("{pre}{{{}}}{post}", alts.join(","));
             let whole = Glob::new(&glob, GlobCase::Sensitive).unwrap().is_match(&subject);
             let any = expanded
