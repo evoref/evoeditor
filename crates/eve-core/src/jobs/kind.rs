@@ -398,4 +398,7 @@ pub enum MetaPurpose {
     SaveAsTarget,
     /// 外部変更の確認。
     ExternalCheck,
+    /// ファイル監視の知らせの後の照合 (03 §9.5.1 の WATCH-5。v0.5 の M33)。呼び戻しの起きるファイル (`FileMeta.offline`)
+    /// は内容ハッシュを取らない。
+    WatchCheck,
 }

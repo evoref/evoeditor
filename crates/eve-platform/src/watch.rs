@@ -34,7 +34,7 @@ pub type FsSink = Arc<dyn Fn(FsEvent) + Send + Sync>;
 
 /// ファイル監視の本番の実装 (02 §4.4。notify を使う。05 §12.2)。主スレッドで使い、`Send` でない。
 pub struct NotifyWatcher {
-    next: u64,
+    next: std::cell::Cell<u64>,
     io: IoSpawn,
     shared: Arc<backend::Shared>,
 }
@@ -43,7 +43,7 @@ impl NotifyWatcher {
     /// `io` は io のレーンに作業を積む口、`sink` は知らせの口。watcher はまだ作らない (最初の登録の作業で作る)。
     pub fn new(io: IoSpawn, sink: FsSink) -> NotifyWatcher {
         NotifyWatcher {
-            next: 1,
+            next: std::cell::Cell::new(1),
             io,
             shared: Arc::new(backend::Shared::new(sink)),
         }
@@ -53,22 +53,22 @@ impl NotifyWatcher {
 impl std::fmt::Debug for NotifyWatcher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NotifyWatcher")
-            .field("next", &self.next)
+            .field("next", &self.next.get())
             .finish_non_exhaustive()
     }
 }
 
 impl FileWatcher for NotifyWatcher {
-    fn watch_dir(&mut self, dir: &FsPath) -> WatchId {
-        let id = WatchId(self.next);
-        self.next += 1;
+    fn watch_dir(&self, dir: &FsPath) -> WatchId {
+        let id = WatchId(self.next.get());
+        self.next.set(id.0 + 1);
         let shared = Arc::clone(&self.shared);
         let dir = dir.as_path().to_path_buf();
         (self.io)(Box::new(move || shared.register(id, dir)));
         id
     }
 
-    fn unwatch(&mut self, id: WatchId) {
+    fn unwatch(&self, id: WatchId) {
         let shared = Arc::clone(&self.shared);
         (self.io)(Box::new(move || shared.unregister(id)));
     }

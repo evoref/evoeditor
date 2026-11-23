@@ -110,6 +110,15 @@ fn file_time(t: io::Result<std::time::SystemTime>) -> FileTime {
     }
 }
 
+/// 中身を読むと呼び戻しが起きるファイルか (`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`。`OneDrive` のオンライン専用など。
+/// 03 §9.5.1 の WATCH-5)。
+fn recall_on_data_access(meta: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    meta.file_attributes()
+        & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+        != 0
+}
+
 fn fs_kind(path: &Path) -> FsKind {
     if crate::sys::is_remote(path) {
         FsKind::Network
@@ -181,6 +190,7 @@ impl FileSystem for WinFs {
             link,
             fs_kind,
             owner_is_me: None,
+            offline: recall_on_data_access(&meta),
             file_id_unique,
         })
     }

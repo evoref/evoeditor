@@ -128,7 +128,7 @@ fn fsp(p: &Path) -> FsPath {
 fn 登録して直下の変化を名前で知らせる() {
     let _s = serial();
     let tmp = Tmp::new("changed");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
 
@@ -156,7 +156,7 @@ fn 読むだけの開閉と孫の変化は知らせない() {
     let tmp = Tmp::new("quiet");
     fs::write(tmp.0.join("r.txt"), b"read me").expect("書く");
     fs::create_dir(tmp.0.join("sub")).expect("サブディレクトリ");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
     drain_quiet(&rx);
@@ -184,7 +184,7 @@ fn 読むだけの開閉と孫の変化は知らせない() {
 fn 解除の後は知らせない() {
     let _s = serial();
     let tmp = Tmp::new("unwatch");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
     w.unwatch(id);
@@ -206,7 +206,7 @@ fn 解除の後は知らせない() {
 fn 同じディレクトリの二つの要求は片方を外しても残る() {
     let _s = serial();
     let tmp = Tmp::new("shared");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let a = w.watch_dir(&fsp(&tmp.0));
     let b = w.watch_dir(&fsp(&tmp.0));
     started(&rx, a);
@@ -226,7 +226,7 @@ fn 同じディレクトリの二つの要求は片方を外しても残る() {
 fn 無いディレクトリは_not_found() {
     let _s = serial();
     let tmp = Tmp::new("missing");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&tmp.0.join("no-such-dir")));
     let seen = wait_for(&rx, "Failed", |e| e.watch == id);
     assert_eq!(
@@ -243,7 +243,7 @@ fn 監視中のディレクトリの削除は失効() {
     let tmp = Tmp::new("lost");
     let dir = tmp.0.join("watched");
     fs::create_dir(&dir).expect("作る");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&dir));
     started(&rx, id);
     fs::remove_dir(&dir).expect("監視中のディレクトリを消せる (05 §12.1)");
@@ -269,7 +269,7 @@ fn イベントのあふれは_rescan() {
     let _s = serial();
     let tmp = Tmp::new("overflow");
     let gate = Arc::new(Mutex::new(()));
-    let (mut w, rx) = watcher_with_gate(Arc::clone(&gate));
+    let (w, rx) = watcher_with_gate(Arc::clone(&gate));
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
     // Linux は待ち行列の長さ (`max_queued_events`) を超える数を書く (1 ファイルで少なくとも 2 つ (作成・書いた後の閉じ)
@@ -319,7 +319,7 @@ fn 入れ子の監視で子の中の保存は子に_rescan_を出さない() {
     let tmp = Tmp::new("nested");
     let sub = tmp.0.join("sub");
     fs::create_dir(&sub).expect("作る");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let parent = w.watch_dir(&fsp(&tmp.0));
     started(&rx, parent);
     let child = w.watch_dir(&fsp(&sub));
@@ -351,7 +351,7 @@ fn 読むだけの開閉は購読しない() {
     const IN_OPEN: u32 = 0x20;
     let _s = serial();
     let tmp = Tmp::new("mask");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
     let masks: Vec<u32> = fs::read_dir("/proc/self/fd")
@@ -393,7 +393,7 @@ fn 手放すと監視のハンドルを閉じる() {
     let root = tmp.0.join("root");
     let sub = root.join("sub");
     fs::create_dir_all(&sub).expect("作る");
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&sub));
     started(&rx, id);
     assert!(
@@ -449,7 +449,7 @@ fn 手放すと監視のスレッドと_fd_を閉じる() {
     settle("前の試験の inotify の fd", 0, inotify_fds);
     settle("前の試験の notify のスレッド", 0, notify_threads);
     let (fds, threads) = (0, 0);
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(&tmp.0));
     started(&rx, id);
     assert_eq!(inotify_fds(), fds + 1, "watcher はプロセスに 1 つ");
@@ -476,7 +476,7 @@ fn wsl_の_drvfs_は監視しない() {
         eprintln!("WSL の /mnt/c が無いので飛ばす");
         return;
     }
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&fsp(dir));
     let seen = wait_for(&rx, "Failed", |e| e.watch == id);
     assert!(
@@ -497,7 +497,7 @@ fn 置いた監視しない_fs_は_unsupported() {
     let Some(dir) = std::env::var_os("EVE_TEST_UNWATCHABLE_DIR") else {
         return;
     };
-    let (mut w, rx) = watcher();
+    let (w, rx) = watcher();
     let id = w.watch_dir(&FsPath::new(PathBuf::from(dir)));
     let seen = wait_for(&rx, "Failed", |e| e.watch == id);
     assert!(

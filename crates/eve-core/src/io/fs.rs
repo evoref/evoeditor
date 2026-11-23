@@ -411,6 +411,10 @@ pub struct FileMeta {
     /// `ReFS` のローカルのボリュームで 0 でない値が取れたとき、Unix はローカルの FS (FAT / `exFAT` を除く) のときだけ立つ。
     /// 立っていない `file_id` は値が使い回され・重なり得るので、同じファイルの判定には canonical のパスを使う。
     pub file_id_unique: bool,
+    /// 中身を読むと呼び戻し (ダウンロード) が起きるファイル (Windows の `FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`。`OneDrive`
+    /// などのオンライン専用)。監視の照合 (03 §9.5.1 の WATCH-5) は、このファイルの内容ハッシュを取らない (v0.5 の M33)。
+    /// Unix は常に `false`。
+    pub offline: bool,
 }
 
 /// 外部変更の比較キー (計算規則は 05 §5.5)。
@@ -1014,6 +1018,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: Some(true),
+            offline: false,
             file_id_unique: false,
         };
         let s = FileStamp::from_meta(&meta, None);
@@ -1071,6 +1076,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: Some(true),
+            offline: false,
             file_id_unique: false,
         };
         let s = FileStamp::from_meta(&meta, None);

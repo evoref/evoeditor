@@ -20,7 +20,7 @@ use eve_view::{
 };
 
 use crate::ascii::{AsciiOptions, render_ascii};
-use crate::{FixedPaths, ManualClock, ManualJobSpawner, MemFs};
+use crate::{FakeWatcher, FixedPaths, ManualClock, ManualJobSpawner, MemFs};
 
 /// `Editor` を偽 Port でヘッドレスに駆動する入口。入力を渡し、`Editor` の状態・`EditorEvent`・`Effect`・Frame を検査する。
 pub struct Harness {
@@ -31,6 +31,8 @@ pub struct Harness {
     /// 手動の時計 (`advance_ms` と同じものを直接進めることもできる)。
     pub clock: ManualClock,
     jobs: Rc<ManualJobSpawner>,
+    /// 偽のファイル監視 (`HarnessBuilder::watcher` で渡したとき。要求を見て知らせを積み、`pump_fs` で渡す)。
+    pub watcher: Option<FakeWatcher>,
     window: WindowId,
     /// 組み立てのときの画面の大きさ (`started` で渡す)。
     size: (u16, u16),
@@ -58,9 +60,17 @@ pub struct HarnessBuilder {
     dirs: Vec<String>,
     defer_start: bool,
     stdin: Option<Arc<dyn eve_core::StdinSource>>,
+    watcher: Option<FakeWatcher>,
 }
 
 impl HarnessBuilder {
+    /// 偽のファイル監視を `Ports.watcher` に渡す (03 §9.5.1 の試験。既定は監視なし)。`Harness::watcher` に同じ記録を指す
+    /// 複製が入る。
+    pub fn watcher(mut self, watcher: FakeWatcher) -> Self {
+        self.watcher = Some(watcher);
+        self
+    }
+
     /// 画面の大きさ (既定は 80×24)。
     pub fn size(mut self, cols: u16, rows: u16) -> Self {
         self.size = Some((cols, rows));
@@ -163,6 +173,7 @@ impl Harness {
             paths: paths.clone(),
         });
         let ports = Ports {
+            watcher: b.watcher.as_ref().map(FakeWatcher::shared),
             fs: fs.clone(),
             clock: Arc::new(clock.clone()),
             jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,
@@ -187,6 +198,7 @@ impl Harness {
             fs,
             clock,
             jobs,
+            watcher: b.watcher,
             window: WindowId::default(),
             size: b.size.unwrap_or((80, 24)),
             events: Vec::new(),
@@ -461,6 +473,20 @@ impl Harness {
     /// `ManualClock` を進めて `Editor` に時刻を渡す (Undo の結合・保留のキーの期限など)。
     pub fn advance_ms(&mut self, ms: u64) {
         self.clock.advance(Millis(ms));
+        self.editor.tick(self.clock.now());
+        self.collect();
+    }
+
+    /// 偽のファイル監視に積んだ知らせ (`FsEvent`) を順に `Editor::on_fs_event` へ渡す (本番の `HostMsg::Fs` の代わり)。
+    /// 監視を渡していなければ何もしない。
+    pub fn pump_fs(&mut self) {
+        let Some(w) = self.watcher.clone() else {
+            return;
+        };
+        for ev in w.take_events() {
+            self.editor.tick(self.clock.now());
+            self.editor.on_fs_event(ev);
+        }
         self.editor.tick(self.clock.now());
         self.collect();
     }

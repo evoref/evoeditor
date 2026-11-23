@@ -560,6 +560,8 @@ config_keys! {
     /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
     reload_on_external_change: ExternalChangePolicy = ExternalChangePolicy::AutoIfUnmodified,
         "file.reload_on_external_change", choice;
+    /// `file.watch.enabled`: ファイル監視 (FR-117、docs/03 §9.5.1)。`config.reload` で即時に効く (監視を張る・外す)。
+    watch_enabled: bool = true, "file.watch.enabled", boolean;
     /// `search.newline_sugar`: 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR) に一致させる (docs/03 §12.3.1)。
     /// 検索バーを開いたときの値で効く。
     newline_sugar: bool = true, "search.newline_sugar", boolean;

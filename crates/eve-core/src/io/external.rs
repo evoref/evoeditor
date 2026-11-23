@@ -40,7 +40,8 @@ impl EditorState {
                 Pending::Open { doc, .. }
                 | Pending::Save { doc, .. }
                 | Pending::CheckUnchanged { doc }
-                | Pending::ExternalCheck { doc, .. } if *doc == doc_id)
+                | Pending::ExternalCheck { doc, .. }
+                | Pending::WatchCheck { doc, .. } if *doc == doc_id)
         });
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
@@ -94,6 +95,10 @@ impl EditorState {
         match r {
             JobResult::Meta { stamp, .. } => {
                 if disk.is_some_and(|d| same_on_disk(&d, &stamp)) {
+                    // 監視の印は外す (元の内容に戻された、03 §9.5.1 の WATCH-6)
+                    if let Some(d) = self.docs.documents.get_mut(&doc_id) {
+                        d.external_pending = None;
+                    }
                     if explicit {
                         self.show_message(
                             MessageLevel::Info,
@@ -189,6 +194,7 @@ impl EditorState {
         }
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.external_seen = Some(stamp);
+            d.external_pending = None;
         }
         CommandResult::Done
     }
@@ -206,6 +212,7 @@ impl EditorState {
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.disk_stamp = None;
             d.external_seen = None;
+            d.external_pending = None;
         }
         CommandResult::Done
     }

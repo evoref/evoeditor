@@ -588,9 +588,9 @@ impl Host {
                 return ControlFlow::Break(self.exit_on_signal(frontend, kind));
             }
             HostMsg::Fatal(_) => return ControlFlow::Break(self.exit_on_fatal(frontend)),
-            // ファイル監視の知らせ (02 §9.2)。core が受ける口 (`Editor::on_fs_event`、03 §9.5.1) は M33 の段 8 で入れる。
-            // それまでは監視を張る者がいないので届かない (届いても捨てる)
-            HostMsg::Fs(_) => {}
+            // ファイル監視の知らせ (02 §9.2)。core が文書ごとに待ち合わせてから照合する (03 §9.5.1)。待ち合わせの期限は
+            // `Editor::next_deadline` に入り、この後の待機がそれを待つ
+            HostMsg::Fs(ev) => self.editor.on_fs_event(ev),
             HostMsg::Tick => {}
         }
         ControlFlow::Continue(false)

@@ -145,6 +145,9 @@ pub struct Document {
     /// 外部変更の確認で「無視」を選んだときのファイルの状態 (03 §9.5)。フォーカス復帰で同じ状態を見つけても、もう尋ねない。
     /// 保存の成功・再読込で忘れる。
     pub external_seen: Option<FileStamp>,
+    /// ファイル監視で分かった外部の変更・削除 (03 §9.5.1 の WATCH-6。v0.5 の M33)。ステータスバーとバッファ一覧に印を出す。
+    /// 保存の成功・再読込・開き直し・「無視」・削除の「新規として保持」で外す (WATCH-8)。
+    pub external_pending: Option<ExternalPending>,
     /// 読込の状態。
     pub load_state: LoadState,
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
@@ -178,6 +181,15 @@ pub struct Document {
     /// 読込の完了の前 (`disk_stamp` が無い間) の識別。`Identity` で受け取る。`disk_stamp` があればそちらを使う
     /// (保存・再読込で識別が変わる、05 §5.4)。
     pub(crate) loading_file_id: Option<crate::io::fs::FileId>,
+}
+
+/// ファイル監視で分かった外部の状態 (03 §9.5.1 の WATCH-6 の `Document.external_pending`)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExternalPending {
+    /// 外部で変更された (照合で得たファイルの Stamp。同じ Stamp では印もメッセージも出し直さない、WATCH-7)。
+    Modified(FileStamp),
+    /// 外部で削除された。
+    Deleted,
 }
 
 /// 標準入力の文書の欄 (02 §5.1 の `Document.stdin`、03 §9.2.2。v0.4 の M25)。
@@ -286,6 +298,7 @@ impl Document {
             attribute_released: false,
             invalid_bytes_released: false,
             external_seen: None,
+            external_pending: None,
             load_state: LoadState::Ready,
             load_percent: 0,
             load_total: 0,
@@ -775,6 +788,7 @@ impl Document {
         self.history.seal();
         self.history.mark_saved();
         self.disk_stamp = Some(stamp);
+        self.external_pending = None;
         self.load_state = LoadState::Ready;
     }
 
@@ -790,6 +804,7 @@ impl Document {
         if stamp.is_some() {
             self.disk_stamp = stamp;
             self.external_seen = None;
+            self.external_pending = None;
         }
     }
 

@@ -110,6 +110,7 @@ fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
         fs_kind: class.kind,
         // root は他人のファイルの所有者も保てるので「自分の」として扱う (05 §4.4)
         owner_is_me: Some(meta.uid() == my_euid() || my_euid() == 0),
+        offline: false,
         // 同じファイルの判定に (dev, ino) を使ってよいのは、ローカルの FS (FAT / exFAT を除く) だけ (05 §5.4 の (1))
         file_id_unique: kind == FileKind::File && class.id_trusted,
     }

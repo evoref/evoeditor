@@ -14,6 +14,7 @@
   "file.swap.min_interval_ms": 10000,
   "file.swap.max_bytes": 67108864,
   "file.swap.exclude_secret_files": true,
+  "file.watch.enabled": true,
   "view.ambiguous_width": 1,
   "view.wrap": "off",
   "view.wrap_indent": "same",

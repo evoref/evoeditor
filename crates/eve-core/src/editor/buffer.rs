@@ -179,7 +179,23 @@ impl EditorState {
                 } else {
                     doc.format.encoding.name().to_owned()
                 };
-                let detail = format!("{dir}  {kind}");
+                // 外部変更の印 (監視で分かった変更・削除と、確認で「無視」を選んだ文書。文字コードの欄の前、03 §9.5.1 の
+                // WATCH-9、04 §8.5)
+                let mark = match doc.external_pending {
+                    Some(crate::document::ExternalPending::Deleted) => {
+                        Some(render(keys::UI_BUFFER_LIST_EXTERNAL_DELETED, &[]))
+                    }
+                    Some(crate::document::ExternalPending::Modified(_)) => {
+                        Some(render(keys::UI_BUFFER_LIST_EXTERNAL_CHANGED, &[]))
+                    }
+                    None => doc
+                        .external_seen
+                        .map(|_| render(keys::UI_BUFFER_LIST_EXTERNAL_CHANGED, &[])),
+                };
+                let detail = match mark {
+                    Some(m) => format!("{dir}  {m}  {kind}"),
+                    None => format!("{dir}  {kind}"),
+                };
                 Some(ListItem {
                     label: cell_text(
                         &format!("{marker}{}", self.buffer_name(*doc_id)),

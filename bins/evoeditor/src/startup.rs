@@ -101,10 +101,16 @@ pub(crate) fn start(
     // (作業ディレクトリ・ワーカーの起動) の後に移す (失敗で読んだ分を捨てない)
     let stdin = take_stdin();
     spawner.set_stdin(stdin.clone().map(|s| s as Arc<dyn eve_core::StdinSource>));
+    // ファイル監視 (FR-117、03 §9.5.1)。登録・解除は io のレーンの Host の作業で行い、知らせは受信口へ `HostMsg::Fs` で
+    // 届く (05 §12.2 の 9)。監視するか (`file.watch.enabled`) は core が設定で決める (張らなければ OS を呼ばない)
+    let spawner = Rc::new(spawner);
+    let tasks: Rc<dyn eve_host::HostTasks> = spawner.clone();
+    let watcher = eve_host::file_watcher(&tasks, tx.clone());
     let ports = Ports {
+        watcher: Some(watcher),
         fs,
         clock,
-        jobs: Rc::new(spawner),
+        jobs: spawner,
         paths,
     };
     let config = loaded.config;

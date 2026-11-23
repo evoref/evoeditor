@@ -567,6 +567,13 @@ old = "30 日より古い退避が {count} 件あります: {dir}"
 
 [info.external]
 unchanged = "{path} は変更されていません"
+changed = "{name} が外部で変更されました"
+deleted = "{name} が外部で削除されました"
+changed_many = "{count} 個のファイルが外部で変更されました (バッファ一覧に印があります)"
+reloaded = "{name} を外部の変更に合わせて読み直しました (元に戻すこともできます)"
+
+[info.watch]
+unavailable = "{path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます"
 
 [info.reload]
 busy = "{path} は読み込み中です。読込が終わってから実行してください"
@@ -1462,6 +1469,14 @@ reopen = "[E] 文字コードを指定して開き直す"
 [ui.load_state]
 loading = "読込中"
 
+[ui.watch.reason]
+network = "ネットワークの共有"
+unsupported_fs = "この FS ({fs}) では監視しません"
+limit = "監視の数が OS の上限に達しました"
+denied = "権限がありません"
+not_found = "フォルダがありません"
+failed = "監視を始められません"
+
 [ui.clipboard_reason]
 no_command = "wl-clipboard または xclip を入れるとシステムのクリップボードが使えます"
 no_display = "画面 (DISPLAY / WAYLAND_DISPLAY) がありません"
@@ -1516,6 +1531,10 @@ short = "保存中"
 [status.external_change]
 long = "[外部で変更]"
 short = "外部変更"
+
+[status.external_deleted]
+long = "[外部で削除]"
+short = "外部削除"
 
 [status.degraded.long_line]
 long = "[長い行: 折り返しなし]"
@@ -1618,6 +1637,8 @@ no_match = "一致はありません"
 title = "バッファ"
 placeholder = "文書名で絞り込み"
 no_match = "一致する文書はありません"
+external_changed = "外部で変更"
+external_deleted = "外部で削除"
 
 [ui.help]
 title = "ヘルプ"

@@ -996,3 +996,69 @@ fn タブライン_描いた並びはヘッドレスの_ascii_の_frame_と同�
         }
     }
 }
+
+/// 監視している 3 つの文書 (`/w`)。最後に開いた `c.txt` が出ている。
+fn watched_three(rows: u16) -> (Harness, eve_testkit::FakeWatcher) {
+    let fake = eve_testkit::FakeWatcher::new().auto_started();
+    let mut h = Harness::builder()
+        .watcher(fake.clone())
+        .size(80, rows)
+        .file(
+            "/w/a.txt", b"a
+",
+        )
+        .file(
+            "/w/b.txt", b"b
+",
+        )
+        .file(
+            "/w/c.txt", b"c
+",
+        )
+        .build();
+    for p in ["/w/a.txt", "/w/b.txt", "/w/c.txt"] {
+        h.open(p);
+        h.run_jobs();
+        h.pump_fs();
+    }
+    (h, fake)
+}
+
+/// 監視の知らせを入れて、待ち合わせ (100 ms) を越えて照合する。
+fn settle_watch(h: &mut Harness, fake: &eve_testkit::FakeWatcher, kind: eve_core::FsEventKind) {
+    fake.push(fake.id_of("/w").expect("監視している"), kind);
+    h.pump_fs();
+    h.advance_ms(eve_core::WATCH_SETTLE.0);
+    h.run_jobs();
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 外部変更の印のある文書の一覧() {
+    // 07 §12.6.1 の「外部変更の印」: 表示していない文書の印をバッファ一覧で (03 §9.5.1 の WATCH-9、04 §8.5)
+    let (mut h, fake) = watched_three(14);
+    h.fs.add_file(
+        "/w/a.txt", b"A
+",
+    );
+    h.fs.remove(&"/w/b.txt".into());
+    settle_watch(&mut h, &fake, eve_core::FsEventKind::Rescan);
+    h.keys("ctrl+e");
+    check("buffer-list-external", &mut h);
+}
+
+// verifies: AC-FR-117-7
+#[test]
+fn 外部で削除された文書のステータスバー() {
+    // 07 §12.6.1 の「外部変更の印」: 削除の印をステータスバーで (04 §8.7 の左 7)
+    let (mut h, fake) = watched_three(8);
+    h.fs.remove(&"/w/c.txt".into());
+    settle_watch(
+        &mut h,
+        &fake,
+        eve_core::FsEventKind::Changed {
+            name: "c.txt".into(),
+        },
+    );
+    check("status-external-deleted", &mut h);
+}

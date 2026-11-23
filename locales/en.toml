@@ -569,6 +569,13 @@ old = "{count} backups are older than 30 days: {dir}"
 
 [info.external]
 unchanged = "{path} has not changed"
+changed = "{name} was changed outside the editor"
+deleted = "{name} was deleted outside the editor"
+changed_many = "{count} files were changed outside the editor (marked in the buffer list)"
+reloaded = "Reloaded {name} to match the external change (you can undo this)"
+
+[info.watch]
+unavailable = "Cannot watch the folder of {path} ({reason}). External changes are checked when you return to the editor and when you save"
 
 [info.reload]
 busy = "{path} is still loading. Run this after loading finishes"
@@ -1464,6 +1471,14 @@ reopen = "[E] Reopen with encoding"
 [ui.load_state]
 loading = "Loading"
 
+[ui.watch.reason]
+network = "network share"
+unsupported_fs = "this file system ({fs}) is not watched"
+limit = "the OS limit on watches was reached"
+denied = "permission denied"
+not_found = "the folder does not exist"
+failed = "watching could not be started"
+
 [ui.clipboard_reason]
 no_command = "install wl-clipboard or xclip to use the system clipboard"
 no_display = "there is no display (DISPLAY / WAYLAND_DISPLAY)"
@@ -1518,6 +1533,10 @@ short = "Saving"
 [status.external_change]
 long = "[Changed on disk]"
 short = "Changed"
+
+[status.external_deleted]
+long = "[Deleted on disk]"
+short = "Deleted"
 
 [status.degraded.long_line]
 long = "[Long lines: no wrap]"
@@ -1620,6 +1639,8 @@ no_match = "No matches"
 title = "Buffers"
 placeholder = "Filter by name"
 no_match = "No matching documents"
+external_changed = "changed outside"
+external_deleted = "deleted outside"
 
 [ui.help]
 title = "Help"

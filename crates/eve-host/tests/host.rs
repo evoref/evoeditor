@@ -41,6 +41,7 @@ fn env_stdin(init: HostInit, stdin: Option<Arc<dyn eve_core::StdinSource>>) -> E
     };
     let jobs = ManualJobSpawner::new(jp);
     let ports = Ports {
+        watcher: None,
         fs: fs.clone(),
         clock: Arc::new(clock.clone()),
         jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,

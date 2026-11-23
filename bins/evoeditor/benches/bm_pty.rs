@@ -37,6 +37,11 @@
 //!   `many`・`sjis`) ごとに、最後の 1 文字の打鍵の読取完了 → 最初の一致の行 / 完了の件数の欄を描いた Frame の `write` を 5 回
 //!   (`--only 405`。区間の記録 `search.first_match` の一覧の版。印は計測しないプロセスで先に読む)。参考値 (01 FR-405 AC-3)。
 //!
+//! - **BM-204w** (v0.5 の M33 の段 8): BM-204 と同じ測り方 (最初の Frame の 10 秒後から 60 秒間の CPU 使用率) を、別々の
+//!   ディレクトリの 10 個のファイルを開いて監視している状態で (`--only 204w`。01 FR-117 AC-10、NFR-204 AC-1)。
+//! - **BM-117w** (参考、v0.5 の M33 の段 8): 10 個のファイルを開き、表示していない文書のファイルを外部で書いてから、その文書の
+//!   外部変更の知らせ (印と同じ照合の結果のメッセージ行) が画面に出るまで (`--only 117w`。端末込み、30 回)。
+//!
 //! どのビルドでも測る、端末込みの参考値 (`ConPTY` を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
 //! - **BM-103c**: キー入力 (`a`) を送ってから、画面にその文字が現れるまで。
@@ -1201,6 +1206,63 @@ fn idle_stats(dir: &Path, cpu_secs: u64) -> (u64, f64) {
     let (_, cpu1) = proc_stat(pid);
     let _ = dir;
     (mem, (cpu1 - cpu0) / cpu_secs as f64 * 100.0)
+}
+
+/// 監視するディレクトリ `n` 個に 1 つずつファイルを置き、そのパスを返す (`<dir>/<tag>/d<i>/<tag><i>.txt`)。
+fn watch_files(dir: &Path, tag: &str, n: usize) -> Vec<PathBuf> {
+    (0..n)
+        .map(|i| {
+            let d = dir.join(tag).join(format!("d{i}"));
+            std::fs::create_dir_all(&d).expect("ディレクトリ");
+            let f = d.join(format!("{tag}{i}.txt"));
+            std::fs::write(&f, format!("{tag} {i}\n")).expect("書く");
+            f
+        })
+        .collect()
+}
+
+/// BM-204w: 別々のディレクトリの 10 個のファイルを開いて (監視は 10 個の親ディレクトリ、05 §12.2)、最初の Frame の 10 秒後から
+/// `cpu_secs` 秒間の CPU 使用率 (%)。
+fn idle_watch_cpu(dir: &Path, cpu_secs: u64) -> f64 {
+    let files = watch_files(dir, "w204", 10);
+    let args: Vec<&str> = files.iter().map(|f| f.to_str().expect("パス")).collect();
+    let (t, _) = Term::start(&args, "", None);
+    t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
+    thread::sleep(Duration::from_secs(10));
+    let pid = t.child.process_id().expect("pid");
+    let (_, cpu0) = proc_stat(pid);
+    thread::sleep(Duration::from_secs(cpu_secs));
+    let (_, cpu1) = proc_stat(pid);
+    (cpu1 - cpu0) / cpu_secs as f64 * 100.0
+}
+
+/// BM-117w (参考): 10 個のファイルを開き (表示は最初の 1 つ)、表示していない文書のファイルを外部で書いてから、その文書の
+/// 外部変更の知らせ (`info.external.changed`。バッファ一覧の印と同じ照合の結果で出る) が画面に出るまで (端末込み)。待ち合わせの
+/// 100 ms を含む。回ごとに、前の知らせを打鍵で消してから書く。
+fn watch_notice_latency(dir: &Path, n: usize) -> Vec<Duration> {
+    let files = watch_files(dir, "w117", 10);
+    let args: Vec<&str> = files.iter().map(|f| f.to_str().expect("パス")).collect();
+    let (mut t, _) = Term::start(&args, "", None);
+    t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
+    // 監視の登録 (io の作業) が済むまで待つ
+    thread::sleep(Duration::from_secs(2));
+    let screen = |t: &Term| t.parser.lock().unwrap().screen().contents();
+    let mut out = Vec::with_capacity(n);
+    for r in 0..n {
+        let k = 1 + r % (files.len() - 1);
+        // 前の知らせ (情報) を次の打鍵で消す (→ は本文を変えない)
+        t.send(b"\x1b[C");
+        t.wait("知らせが消える", || {
+            !screen(&t).contains("外部で変更されました")
+        });
+        thread::sleep(Duration::from_millis(200));
+        let want = format!("w117{k}.txt が外部で変更されました");
+        let start = Instant::now();
+        std::fs::write(&files[k], format!("w117 {k} run {r}\n")).expect("書く");
+        t.wait("外部変更の知らせ", || screen(&t).contains(&want));
+        out.push(start.elapsed());
+    }
+    out
 }
 
 /// (Private Bytes, 累積の CPU 時間 (秒))。
@@ -2415,6 +2477,34 @@ fn main() {
             );
             println!("BM-204 アイドル時の CPU 使用率 ({cpu_secs} 秒間): {cpu:.4} %");
         }
+    }
+
+    if want("204w") {
+        // FR-117 AC-10 / NFR-204 AC-1 (v0.5 の M33 の段 8): 別々のディレクトリの 10 個のファイルを開き、監視している状態の
+        // アイドルの CPU 使用率 (BM-204 と同じ測り方)
+        let cpu_secs = if quick { 10 } else { 60 };
+        let cpu = idle_watch_cpu(&dir, cpu_secs);
+        if json {
+            println!(
+                "{{\"id\":\"BM-204w\",\"n\":1,\"value\":{cpu:.4},\"unit\":\"%\",\"seconds\":{cpu_secs},\"quick\":{quick}}}"
+            );
+        } else {
+            println!(
+                "BM-204w 監視ありのアイドル時の CPU 使用率 (10 個のディレクトリ、{cpu_secs} 秒間): {cpu:.4} %"
+            );
+        }
+    }
+    if want("117w") {
+        // FR-117 (参考、v0.5 の M33 の段 8): 外部のプロセスが表示していない文書のファイルを書いてから、知らせが画面に出るまで
+        let n = if quick { 5 } else { 30 };
+        let v = watch_notice_latency(&dir, n);
+        report(
+            "BM-117w",
+            "表示していない文書のファイルを外部で書く → 外部変更の知らせ (印と同じ Frame のメッセージ行) が画面に出るまで (端末込み、参考)",
+            v,
+            json,
+            true,
+        );
     }
 
     let _ = std::fs::remove_dir_all(&dir);

@@ -571,6 +571,7 @@ mod tests {
                 "file.swap.min_interval_ms",
                 "file.swap.max_bytes",
                 "file.swap.exclude_secret_files",
+                "file.watch.enabled",
                 "view.ambiguous_width",
                 "view.wrap",
                 "view.wrap_indent",

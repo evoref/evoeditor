@@ -255,6 +255,7 @@ fn canonical_の無い保存先の識別は主スレッドでも使わない() {
         link: None,
         fs_kind: eve_core::FsKind::Local,
         owner_is_me: Some(true),
+        offline: false,
         file_id_unique: true,
     };
     let stamp = eve_core::FileStamp::from_meta(&meta, None);

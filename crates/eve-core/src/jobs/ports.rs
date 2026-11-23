@@ -59,6 +59,9 @@ pub struct Ports {
     pub jobs: Rc<dyn JobSpawner>,
     /// 設定・データ・退避などのディレクトリ。
     pub paths: Arc<dyn Paths>,
+    /// ファイル監視 (02 §4.4 の `FileWatcher`、03 §9.5.1。v0.5 の M33)。`None` なら監視しない (監視を使わない試験と
+    /// ヘッドレス)。`JobSpawner` と同じく共有の参照で持ち、メインスレッドだけで使う。
+    pub watcher: Option<Rc<dyn crate::io::watch::FileWatcher>>,
 }
 
 impl Ports {
