@@ -154,6 +154,8 @@ pub enum JobResult {
         theme: Option<eve_config::theme::Theme>,
         /// ファイルごとの診断 (ファイルの名前と診断の組)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+        /// `verify` で、読む前と読んだ後でファイルの大きさか更新日時が変わっていた (07 §6 の RLD-3)。
+        unstable: bool,
     },
     /// `ReadConfig` の結果。
     ConfigRead {
@@ -163,6 +165,8 @@ pub enum JobResult {
         keymap: Option<ConfigFile>,
         /// `locales` を一覧した結果。調べなかったときは `None`。
         locales: Option<crate::io::config_reload::LocaleScan>,
+        /// `verify` で、読む前と読んだ後でファイルの大きさか更新日時が変わっていた (07 §6 の RLD-3)。
+        unstable: bool,
     },
     /// `ReadLanguages` の結果。
     LanguagesRead {
@@ -174,9 +178,16 @@ pub enum JobResult {
         workspace_set: Option<std::sync::Arc<eve_config::LanguageSet>>,
         /// ファイルごとの診断 (表示名 `languages/<file>.toml`・`config.toml` など)。
         reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+        /// `verify` で、読む前と読んだ後で `*.toml` の並びか大きさか更新日時が変わっていた (07 §6 の RLD-3)。
+        unstable: bool,
     },
     /// `ReadWorkspaceConfig` の結果。
     WorkspaceConfigRead(crate::io::workspace_config::WorkspaceRead),
+    /// `ResolveConfigWatch` の結果 (監視するディレクトリと名前。無いディレクトリは含まない)。
+    ConfigWatchResolved {
+        /// 監視するディレクトリと名前。
+        dirs: Vec<crate::io::watch_config::ConfigWatchDir>,
+    },
     /// `ReadEditorConfig` の結果。
     EditorConfigRead(crate::io::editorconfig::EditorConfigRead),
     /// `PrecompileLanguages` の結果。

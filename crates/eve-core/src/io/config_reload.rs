@@ -3,6 +3,10 @@
 //! `config.toml` と `keymap.toml` を io ジョブで読み (メインスレッドで I/O しない)、届いたら解析して差し替える。
 //! エラー (構文エラー・読めない) のあるファイルは前の設定のまま維持し、診断だけ出す (起動時と違い、半端な状態にしない)。
 //! 変わった項目は 1 行に要約し、再起動しないと効かない項目は別の 1 行で知らせる。
+//!
+//! 設定ファイルの監視からの自動の読み直し (FR-706、07 §6 の RLD-1〜RLD-5。`io/watch_config.rs`) も同じ手順を通る。自動の
+//! ときだけ、読む前と読んだ後の大きさと更新日時を確かめ (変わっていたら読んだ内容を捨てる)、変わった項目が無ければ何も
+//! 知らせず、`msg.config.reload_kept` は同じファイルの同じ内容で 1 回だけにし、Undo の履歴を減らす向きの値を効かせない。
 
 use eve_config::{Config, KeymapFile, Severity};
 use eve_view::{Effect, MessageLevel};
@@ -55,6 +59,12 @@ pub(crate) struct ReloadPlan {
     resolved: eve_config::Resolved,
     /// 解析したユーザー層のキーマップ。
     keymap: KeymapFile,
+    /// 設定ファイルの監視からの自動の読み直し (07 §6 の RLD-2 / RLD-3)。
+    pub(crate) auto: bool,
+    /// 読んだ設定ファイルの内容の要約 (表示名 → 要約。無い・読めないは `None`)。`reload_kept` を 1 回にする (RLD-3)。
+    digests: Vec<(String, Option<u64>)>,
+    /// `keymap.toml` の内容の要約。
+    keymap_digest: Option<u64>,
 }
 
 /// 起動時に bin が決めた、ユーザーの言語ファイルの事実 (07 §17.4)。`config.reload` は言語ファイルの中身を読み直さず、
@@ -108,8 +118,9 @@ pub fn scan_locales(
 }
 
 impl EditorState {
-    /// `theme.name` が組込みでなければ、テーマファイルを読むジョブを投入する (`inherits` の親も読む)。
-    fn start_theme_read(&mut self) {
+    /// `theme.name` が組込みでなければ、テーマファイルを読むジョブを投入する (`inherits` の親も読む)。`auto` は設定の自動の
+    /// 読み直し (読む前と読んだ後にファイルを確かめる、07 §6 の RLD-3)。
+    fn start_theme_read(&mut self, auto: bool) {
         let name = {
             let c = self.config();
             eve_config::theme::with_background(&c.theme_name, c.theme_background).to_owned()
@@ -129,36 +140,54 @@ impl EditorState {
                 dir,
                 name: name.clone(),
                 origin: self.io.theme_name_at.clone(),
+                verify: auto,
             },
         );
-        self.io.pending.insert(job, Pending::ThemeRead);
+        self.io.pending.insert(job, Pending::ThemeRead { auto });
     }
 
-    /// テーマファイルの読込の結果。読めなければ `default` で動き、診断を出す。
-    pub(crate) fn finish_theme_read(&mut self, r: JobResult) {
+    /// テーマファイルの読込の結果。読めなければ `default` で動き、診断を出す。自動の読み直しで、読む間にファイルが変わって
+    /// いたら当てずに読み直す (07 §6 の RLD-3)。
+    pub(crate) fn finish_theme_read(&mut self, r: JobResult, auto: bool) {
         let JobResult::ThemeRead {
             name,
             theme,
             reports,
-            ..
+            unstable,
         } = r
         else {
             return;
         };
+        if auto && unstable {
+            self.config_watch_rearm();
+            return;
+        }
+        self.with_reload_scope(auto, |st| st.apply_theme_read(&name, theme, &reports));
+    }
+
+    fn apply_theme_read(
+        &mut self,
+        name: &str,
+        theme: Option<eve_config::theme::Theme>,
+        reports: &[(String, Vec<eve_config::Diagnostic>)],
+    ) {
         // 一覧 (`config.show_diagnostics`) のテーマの診断は、読み直した結果に置き換える。テーマが無い診断は
         // `theme.name` を書いた設定ファイルの名前で出す (07 §8.7) ので、そのファイルの診断には足す
         self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
         self.forget_theme_not_found();
-        for (file, diags) in &reports {
+        for (file, diags) in reports {
             if EditorState::is_theme_diagnostic_file(file) {
                 self.report_config(file, diags);
             } else {
                 self.report_config_more(file, diags);
             }
         }
-        self.set_user_theme(&name, theme);
+        self.set_user_theme(name, theme);
     }
 }
+
+/// Undo の履歴の上限のキー (自動の再読込では下げる変化を効かせない、07 §6 の RLD-3)。
+const UNDO_TOTAL_KEY: &str = "editor.undo.total_max_bytes";
 
 /// 再起動しないと効かない項目 (07 §6 の 3 分類の「再起動が必要」。端末の初期化・言語の選択で 1 回だけ使う)。
 const RESTART_KEYS: [&str; 3] = ["theme.color_mode", "view.ambiguous_width", "ui.locale"];
@@ -177,8 +206,11 @@ fn text_of(f: &ConfigFile) -> Result<Option<String>, String> {
 
 impl EditorState {
     /// 設定の読込元を置く (Host が起動時に、bin の決めたものを渡す)。置かなければ設定ディレクトリの 2 つのファイル。
+    /// 監視の Port があれば、設定ファイルの監視を始める (07 §6 の RLD-1)。
     pub fn set_config_sources(&mut self, sources: ConfigSources) {
         self.io.config_sources = Some(sources);
+        self.config_watch_reconfigure();
+        self.config_watch_refresh();
     }
 
     /// 条件付きセクションの条件の値 (起動時に bin が決めたもの。置かれていなければ既定、07 §3.4 の COND-2)。
@@ -231,43 +263,71 @@ fn has_error(diags: &[eve_config::Diagnostic]) -> bool {
 impl EditorState {
     /// `config.reload`: 設定ディレクトリの 2 つのファイルを読むジョブを投入する。
     fn start_config_reload(&mut self) -> CommandResult {
-        // 二重に始めない
-        if self
-            .io
-            .pending
-            .values()
-            .any(|p| matches!(p, Pending::ConfigReload))
-        {
-            return CommandResult::Done;
+        // 二重に始めない (ワークスペース層を読んでいる間も同じ読み直しの途中)。読み直しの途中 (手動・自動) なら、終わってから
+        // 手動でもう 1 回読み直す (途中の読み直しが読んだ後の変更も取り込む。変わった項目が無くても知らせる、07 §6 の RLD-2)
+        let running = self.io.pending.values().any(|p| {
+            matches!(
+                p,
+                Pending::ConfigReload { .. }
+                    | Pending::WorkspaceConfig {
+                        reload: Some(_),
+                        ..
+                    }
+            )
+        });
+        if running {
+            self.config_watch_queue_manual();
+        } else {
+            self.spawn_config_reload(false);
         }
+        CommandResult::Done
+    }
+
+    /// 設定ファイルを読むジョブを積む。`auto` は設定ファイルの監視からの自動の読み直し (読む前と読んだ後にファイルを確かめ、
+    /// 言語ファイルの置き場所は調べない。07 §6 の RLD-1 / RLD-3)。
+    pub(crate) fn spawn_config_reload(&mut self, auto: bool) {
         let src = self.config_sources();
+        let locales = if auto {
+            None
+        } else {
+            self.io
+                .locale_files
+                .dir
+                .clone()
+                .map(|d| (d, self.io.locale_files.chosen))
+        };
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
             JobKind::ReadConfig {
                 files: src.files.iter().map(|(_, p)| p.clone()).collect(),
                 keymap: src.keymap.clone(),
-                locales: self
-                    .io
-                    .locale_files
-                    .dir
-                    .clone()
-                    .map(|d| (d, self.io.locale_files.chosen)),
+                locales,
+                verify: auto,
             },
         );
-        self.io.pending.insert(job, Pending::ConfigReload);
-        CommandResult::Done
+        self.io.pending.insert(job, Pending::ConfigReload { auto });
     }
 
     /// 読込の結果。`config.toml` はここで差し替え、`keymap.toml` は解析の結果を Editor に渡す (キーマップは Editor が持つ)。
-    pub(crate) fn finish_config_reload(&mut self, r: JobResult) {
+    pub(crate) fn finish_config_reload(&mut self, r: JobResult, auto: bool) {
         let JobResult::ConfigRead {
             config,
             keymap,
             locales,
+            unstable,
         } = r
         else {
             return;
+        };
+        // 自動の読み直しで、読む間にファイルが変わった: 読んだ内容を捨てて待ち合わせからやり直す (RLD-3)
+        if auto && unstable {
+            self.config_watch_rearm();
+            return;
+        }
+        let digest_of = |f: &ConfigFile| match f {
+            Ok(Some(b)) => Some(crate::io::watch_config::digest(b)),
+            _ => None,
         };
         // 言語ファイルは読み直さない。`locales/` の候補か、選んだ言語のファイルが起動時から変わっていれば (無くなった・
         // 現れたを含む)、要約の後に再起動を促す (07 §17.4 の「読む時期」)
@@ -294,6 +354,13 @@ impl EditorState {
         let mut resolved =
             eve_config::resolve_home(&sources, &src.sets, src.conditions, src.home.as_deref());
         eve_config::check_ui_locale(&mut resolved, &available, &dir, self.locale());
+        let digests = src
+            .files
+            .iter()
+            .zip(&config)
+            .map(|((name, _), f)| (name.clone(), digest_of(f)))
+            .collect();
+        let keymap_digest = keymap.as_ref().and_then(digest_of);
         let keymap: KeymapFile = match keymap.as_ref().map(text_of) {
             None | Some(Ok(None)) => KeymapFile::default(),
             Some(Ok(Some(t))) => eve_config::load_keymap_str(&t),
@@ -302,7 +369,13 @@ impl EditorState {
                 diagnostics: vec![unreadable(e)],
             },
         };
-        let plan = ReloadPlan { resolved, keymap };
+        let plan = ReloadPlan {
+            resolved,
+            keymap,
+            auto,
+            digests,
+            keymap_digest,
+        };
         // ワークスペース層も所有者の検査を掛け直して読み直す (07 §12.5 の WSC-1)。ユーザー層が誤りで前の設定を保つときは
         // 読み直さない
         // 所有者の検査の逃げ道は、読み直したユーザー層と `--set` の値で決める (前の設定の値を使わない)
@@ -318,12 +391,26 @@ impl EditorState {
     }
 
     /// 解析した設定を当てる (ワークスペース層を読み直した後)。ユーザー層・ワークスペース層・`--set` を重ね直し、変わった
-    /// 項目を数える。
+    /// 項目を数える。自動の読み直しでは、診断の要約を前と同じなら出さず、表示中の警告・エラーを置き換えない (RLD-3)。
     pub(crate) fn apply_config_reload(&mut self, plan: ReloadPlan) {
+        let auto = plan.auto;
+        self.with_reload_scope(auto, |st| st.apply_config_reload_inner(plan));
+        // 監視の対象を解き直す (テーマの名前・失効した・作り直したディレクトリ。07 §6 の RLD-1)
+        self.config_watch_refresh();
+    }
+
+    fn apply_config_reload_inner(&mut self, plan: ReloadPlan) {
         let ReloadPlan {
             mut resolved,
             keymap,
+            auto,
+            digests,
+            keymap_digest,
         } = plan;
+        self.watch.config.run = Some(crate::io::watch_config::RunInfo {
+            auto,
+            keymap_digest,
+        });
         let src = self.config_sources();
         let mut changed: Vec<&'static str> = Vec::new();
         // 一覧 (`config.show_diagnostics`) の設定ファイル (と `--set`) の診断は、読み直した結果に置き換える。
@@ -349,6 +436,16 @@ impl EditorState {
         for (name, diags) in &resolved.reports {
             self.report_config(name, diags);
         }
+        // 誤り無く読めたファイルは、`reload_kept` の覚えを捨てる (また壊れたら知らせる)
+        for (name, _) in &digests {
+            let broken = resolved
+                .reports
+                .iter()
+                .any(|(n, d)| n == name && has_error(d));
+            if !broken {
+                self.config_kept_clear(name);
+            }
+        }
         if resolved.has_error {
             let name = resolved
                 .reports
@@ -356,11 +453,19 @@ impl EditorState {
                 .find(|(_, d)| has_error(d))
                 .map_or(CONFIG_FILE, |(n, _)| n.as_str())
                 .to_owned();
-            self.show_message(
-                MessageLevel::Warn,
-                keys::MSG_CONFIG_RELOAD_KEPT,
-                &[("file", &name)],
-            );
+            let digest = digests
+                .iter()
+                .find(|(n, _)| *n == name)
+                .and_then(|(_, d)| *d);
+            // 自動の読み直しでは、同じファイルの同じ内容で 1 回だけ (RLD-3)
+            if self.config_kept_once(&name, digest, auto) {
+                self.show_reload_message(
+                    auto,
+                    MessageLevel::Warn,
+                    keys::MSG_CONFIG_RELOAD_KEPT,
+                    &[("file", &name)],
+                );
+            }
         } else {
             // ワークスペース層 (安全な項目) をユーザー層と `--set` の間に重ねる (07 §12.5 の WSC-3)
             let ws_name = self
@@ -370,6 +475,20 @@ impl EditorState {
                 .cloned()
                 .unwrap_or_default();
             let ws = self.settings.workspace_layer.clone();
+            // 自動の読み直しでは、Undo の履歴を減らす向きの変化を効かせない (書きかけの内容で履歴を取り戻せない形に破棄
+            // しない。手動の `config.reload` でだけ効く、RLD-3)。値と由来をユーザー層 (後で重ね直す土台) と重ねた結果の
+            // 両方で前のものに戻す (`config.show` に効いていない値の由来を出さない。ワークスペース層を重ね直しても小さい
+            // 値が効かない)
+            if auto {
+                let before = self.current_user_layer();
+                if resolved.user.config.undo_total_max_bytes < before.config.undo_total_max_bytes {
+                    resolved.user.config.undo_total_max_bytes = before.config.undo_total_max_bytes;
+                    resolved
+                        .user
+                        .origins
+                        .copy_from(UNDO_TOTAL_KEY, &before.origins);
+                }
+            }
             let composed = eve_config::compose(
                 &resolved.user,
                 ws.as_deref().map(|l| (ws_name.as_str(), l)),
@@ -379,6 +498,13 @@ impl EditorState {
             self.report_workspace_config(&composed.workspace_diagnostics);
             resolved.config = composed.config;
             resolved.origins = composed.origins;
+            let undo_before = self.config().undo_total_max_bytes;
+            if auto && resolved.config.undo_total_max_bytes < undo_before {
+                resolved.config.undo_total_max_bytes = undo_before;
+                resolved
+                    .origins
+                    .copy_from(UNDO_TOTAL_KEY, &self.settings.config_origins);
+            }
             changed = eve_config::changed_keys(self.config(), &resolved.config);
             self.io.theme_name_at = resolved.theme_name_at.clone();
             self.settings.user_layer = Some(resolved.user.clone());
@@ -391,14 +517,16 @@ impl EditorState {
             // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
-            self.start_theme_read();
+            self.start_theme_read(auto);
             // 開いている文書の `.editorconfig` も、読み直したユーザー層の `workspace.safe_directories` で読み直す (07 §10.3 の
             // EC-1。届くまでは前の値。ユーザー層の誤りで前の設定を保つときは、ワークスペース層と同じく読み直さない)
             self.reread_editorconfig_all();
+            // 自動の読み直しの回の `.editorconfig` の知らせは、表示中の警告・エラーを置き換えない (07 §6 の RLD-3)
+            self.watch.config.auto_ec_round = auto.then_some(self.settings.editorconfig_round);
         }
         // 言語定義のファイル (`languages/*.toml`) も読み直す (07 §6。設定ファイルにエラーがあれば、その言語定義は前のまま)。
         // 開いている文書の言語は判定し直さない (LANG-7)
-        self.start_languages_read(false);
+        self.spawn_languages_reread(auto);
         self.keys.reloaded = Some((keymap, changed));
     }
 
@@ -411,18 +539,22 @@ impl EditorState {
         }
     }
 
-    /// 変わった項目の要約 (07 §6 の規則 4)。キーマップが変わったら `keymap.toml` も項目に数える。
-    fn report_reload(&mut self, mut changed: Vec<&'static str>, keymap_changed: bool) {
+    /// 変わった項目の要約 (07 §6 の規則 4)。キーマップが変わったら `keymap.toml` も項目に数える。自動の読み直しでは、変わった
+    /// 項目が無ければ何も知らせず、要約は表示中の警告・エラーを置き換えない (RLD-2)。
+    fn report_reload(&mut self, mut changed: Vec<&'static str>, keymap_changed: bool, auto: bool) {
         if keymap_changed {
             changed.push(KEYMAP_FILE);
         }
         if changed.is_empty() {
-            self.show_message(MessageLevel::Info, keys::INFO_CONFIG_RELOAD_UNCHANGED, &[]);
+            if !auto {
+                self.show_message(MessageLevel::Info, keys::INFO_CONFIG_RELOAD_UNCHANGED, &[]);
+            }
             self.notify_locale_restart();
             return;
         }
         let keys = changed.join(", ");
-        self.show_message(
+        self.show_reload_message(
+            auto,
             MessageLevel::Info,
             keys::INFO_CONFIG_RELOADED,
             &[("count", &changed.len().to_string()), ("keys", &keys)],
@@ -433,7 +565,8 @@ impl EditorState {
             .filter(|k| RESTART_KEYS.contains(k))
             .collect();
         if !restart.is_empty() {
-            self.show_message(
+            self.show_reload_message(
+                auto,
                 MessageLevel::Info,
                 keys::INFO_CONFIG_RELOAD_RESTART,
                 &[("keys", &restart.join(", "))],
@@ -456,15 +589,26 @@ impl Editor {
         let Some((keymap, changed)) = self.state.keys.reloaded.take() else {
             return;
         };
+        let run = self.state.watch.config.run.take().unwrap_or_default();
+        let auto = run.auto;
+        // 自動の読み直しでは、前と同じ診断の要約を出さず、当てる前に表示していた警告・エラーを置き換えない (RLD-3)
+        let outer = auto.then(|| self.state.begin_reload_scope());
         let mut keymap_changed = false;
         if has_error(&keymap.diagnostics) {
             self.state.report_config(KEYMAP_FILE, &keymap.diagnostics);
-            self.state.show_message(
-                MessageLevel::Warn,
-                keys::MSG_CONFIG_RELOAD_KEPT,
-                &[("file", KEYMAP_FILE)],
-            );
+            if self
+                .state
+                .config_kept_once(KEYMAP_FILE, run.keymap_digest, auto)
+            {
+                self.state.show_reload_message(
+                    auto,
+                    MessageLevel::Warn,
+                    keys::MSG_CONFIG_RELOAD_KEPT,
+                    &[("file", KEYMAP_FILE)],
+                );
+            }
         } else {
+            self.state.config_kept_clear(KEYMAP_FILE);
             // まだ一度も設定していない (キーマップのファイルが無い起動) は空と同じ
             keymap_changed = self
                 .state
@@ -476,7 +620,10 @@ impl Editor {
             let diags = self.set_user_keymap(&keymap);
             self.state.report_config(KEYMAP_FILE, &diags);
         }
-        self.state.report_reload(changed, keymap_changed);
+        self.state.report_reload(changed, keymap_changed, auto);
+        if let Some(outer) = outer {
+            self.state.end_reload_scope(outer);
+        }
     }
 }
 
@@ -487,14 +634,20 @@ impl Editor {
         let Some((file, name)) = self.state.keys.workspace_keymap_pending.take() else {
             return;
         };
+        let auto = std::mem::take(&mut self.state.watch.config.ws_keymap_auto);
         let diags = self.set_workspace_keymap(file.as_ref());
         if file.is_some() {
-            // ワークスペース層の結果で非同期に届くので、表示中の警告・エラーを置き換えない (07 §12.5 の WSC-3)
+            // ワークスペース層の結果で非同期に届くので、表示中の警告・エラーを置き換えない (07 §12.5 の WSC-3)。自動の
+            // 読み直しの回では、連鎖の前と同じ診断の要約を出さない (07 §6 の RLD-3)
+            let outer = auto.then(|| self.state.begin_reload_scope());
             self.state.report_config_with(
                 &name,
                 &diags,
                 crate::ui_model::config_report::Delivery::Background,
             );
+            if let Some(outer) = outer {
+                self.state.end_reload_scope(outer);
+            }
         }
     }
 }

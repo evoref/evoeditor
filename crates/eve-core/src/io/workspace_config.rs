@@ -77,6 +77,21 @@ pub struct WorkspaceRead {
     pub config_notes: Vec<Diagnostic>,
     /// `.eve/keymap.toml` の名前で出す、読まなかった理由と構文エラー (読めたときの診断は、キーマップを当てるときに出す)。
     pub keymap_notes: Vec<Diagnostic>,
+    /// `.eve/config.toml` の内容の要約 (読めたとき。`msg.config.reload_kept` を同じ内容で 1 回にする、07 §6 の RLD-3)。
+    pub config_digest: Option<u64>,
+    /// `.eve/keymap.toml` の内容の要約 (読めたとき)。
+    pub keymap_digest: Option<u64>,
+    /// 設定の自動の読み直し (`verify`) で、読む前と読んだ後でファイルの大きさか更新日時が変わっていた (RLD-3)。
+    pub unstable: bool,
+}
+
+/// ワークスペース層のファイル (`<root>/.eve/config.toml`・`<root>/.eve/keymap.toml`)。読込と監視 (07 §6 の RLD-1) が使う。
+pub(crate) fn workspace_files(root: &FsPath) -> [FsPath; 2] {
+    let dir = root.join(WORKSPACE_CONFIG_DIR);
+    [
+        dir.join(WORKSPACE_CONFIG_FILE),
+        dir.join(WORKSPACE_KEYMAP_FILE),
+    ]
 }
 
 /// 位置の無い (ファイル全体の) 診断 1 件。
@@ -232,6 +247,8 @@ pub fn read_workspace_config(
     let mut config_notes = Vec::new();
     let mut keymap_notes = Vec::new();
     let mut dir_trusted = true;
+    let mut config_digest = None;
+    let mut keymap_digest = None;
     let layer = match read_one(fs, &dir, WORKSPACE_CONFIG_FILE, safe_dirs) {
         Outcome::Missing => Fetched::Absent,
         Outcome::Busy => Fetched::Keep,
@@ -252,6 +269,7 @@ pub fn read_workspace_config(
             }
         }
         Outcome::Text(text) => {
+            config_digest = Some(crate::io::watch_config::digest(text.as_bytes()));
             let mut l = eve_config::load_workspace_str(&text, conditions);
             let name = config_path.display();
             for d in &mut l.languages {
@@ -285,6 +303,7 @@ pub fn read_workspace_config(
             }
         }
         Outcome::Text(text) => {
+            keymap_digest = Some(crate::io::watch_config::digest(text.as_bytes()));
             let file = eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text));
             if file
                 .diagnostics
@@ -318,6 +337,9 @@ pub fn read_workspace_config(
         keymap,
         config_notes,
         keymap_notes,
+        config_digest,
+        keymap_digest,
+        unstable: false,
     }
 }
 
@@ -358,6 +380,8 @@ impl EditorState {
         };
         let safe_dirs_written = safe_dirs.to_vec();
         let safe_dirs: Vec<FsPath> = safe_dirs.iter().map(|s| FsPath::from(s.as_str())).collect();
+        // 設定の自動の読み直しでは、読む前と読んだ後にファイルを確かめる (07 §6 の RLD-3)
+        let verify = reload.as_ref().is_some_and(|p| p.auto);
         let job = self.jobs.spawn(
             None,
             eve_view::Revision(0),
@@ -365,6 +389,7 @@ impl EditorState {
                 root,
                 conditions: self.config_conditions(),
                 safe_dirs,
+                verify,
             },
         );
         self.io.pending.insert(
@@ -392,6 +417,27 @@ impl EditorState {
             }
             return;
         };
+        let auto = reload.as_ref().is_some_and(|p| p.auto);
+        // 設定の自動の読み直しで、読む間にファイルが変わった: 読んだ内容 (ユーザー層を含む) を捨てて待ち合わせからやり直す
+        // (07 §6 の RLD-3)
+        if auto && read.unstable {
+            self.config_watch_rearm();
+            return;
+        }
+        self.with_reload_scope(auto, |st| {
+            st.apply_workspace_config(read, reload, safe_dirs);
+        });
+    }
+
+    fn apply_workspace_config(
+        &mut self,
+        read: WorkspaceRead,
+        reload: Option<ReloadPlan>,
+        safe_dirs: Vec<String>,
+    ) {
+        let auto = reload.as_ref().is_some_and(|p| p.auto);
+        // キーマップのワークスペース層は Editor が後で当てる (`finish_workspace_keymap`)。その診断も自動の回の知らせ方にする
+        self.watch.config.ws_keymap_auto = auto;
         let WorkspaceRead {
             config_path,
             keymap_path,
@@ -399,6 +445,9 @@ impl EditorState {
             mut keymap,
             config_notes,
             keymap_notes,
+            config_digest,
+            keymap_digest,
+            unstable: _,
         } = read;
         // 所有者の検査の逃げ道が前回と変わったら、一時の失敗でも前の層を保たない (逃げ道を外したのに、判定の前の `Busy` で
         // 前の層が残らないように、07 §12.5 の WSC-1)
@@ -426,7 +475,8 @@ impl EditorState {
         }
         // 逃げ道を変えた読み直しで、一時の失敗のために読めず外した (黙って外さない)
         for file in dropped {
-            self.show_message(
+            self.show_reload_message(
+                auto,
                 MessageLevel::Warn,
                 keys::MSG_WORKSPACE_NOT_REREAD,
                 &[("path", file)],
@@ -441,6 +491,13 @@ impl EditorState {
         }
         // (文言キー, ファイル): エラーで前の層を保つ (`reload_kept`) か、一時の失敗で保つ (`reload_busy_kept`)
         let mut kept: Vec<(&str, &str)> = Vec::new();
+        // 誤り無く読めた (無いを含む) ファイルは、`reload_kept` の覚えを捨てる (また壊れたら知らせる、RLD-3)
+        if matches!(layer, Fetched::Absent | Fetched::Got(_)) {
+            self.config_kept_clear(&config_name);
+        }
+        if matches!(keymap, Fetched::Absent | Fetched::Got(_)) {
+            self.config_kept_clear(&keymap_name);
+        }
         // 一時の失敗で前の層を保つときも知らせる (知らせなく古い層が残らないように)
         if layer == Fetched::Keep && self.settings.workspace_layer.is_some() {
             kept.push((keys::MSG_CONFIG_RELOAD_BUSY_KEPT, &config_name));
@@ -457,8 +514,13 @@ impl EditorState {
                 self.settings.workspace_languages = l.languages.clone();
                 self.settings.workspace_layer = Some(Arc::new(l));
             }
-            // 起動時は層を持たない。`config.reload` では前に読んだ層を保つ (07 §6 の規則 1)
-            Fetched::Broken if reloading => kept.push((keys::MSG_CONFIG_RELOAD_KEPT, &config_name)),
+            // 起動時は層を持たない。`config.reload` では前に読んだ層を保つ (07 §6 の規則 1)。自動の読み直しでは、同じ
+            // 内容の誤りを 1 回だけ知らせる (RLD-3)
+            Fetched::Broken if reloading => {
+                if self.config_kept_once(&config_name, config_digest, auto) {
+                    kept.push((keys::MSG_CONFIG_RELOAD_KEPT, &config_name));
+                }
+            }
             Fetched::Broken => {
                 self.settings.workspace_layer = None;
                 self.settings.workspace_languages.clear();
@@ -476,7 +538,9 @@ impl EditorState {
             Fetched::Broken => {
                 self.report_config_with(&keymap_name, &keymap_notes, Delivery::Background);
                 if reloading {
-                    kept.push((keys::MSG_CONFIG_RELOAD_KEPT, &keymap_name));
+                    if self.config_kept_once(&keymap_name, keymap_digest, auto) {
+                        kept.push((keys::MSG_CONFIG_RELOAD_KEPT, &keymap_name));
+                    }
                 } else {
                     self.keys.workspace_keymap_pending = Some((None, keymap_name.clone()));
                 }
@@ -484,7 +548,7 @@ impl EditorState {
             Fetched::Keep => {}
         }
         for (key, file) in kept {
-            self.show_message(MessageLevel::Warn, key, &[("file", file)]);
+            self.show_reload_message(auto, MessageLevel::Warn, key, &[("file", file)]);
         }
         match reload {
             // `config.reload`: 言語定義の読み直しは、再読込が積む (判定し直さない、LANG-7)。新しいファイルの形は決め直す

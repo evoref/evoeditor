@@ -132,6 +132,9 @@ struct State {
     /// 偽の所有者 (09 §3.4 の `FakePathsOwner`): `read_checked` の判定で落とすディレクトリ・ファイルと、その理由。
     /// 印の無いものは「自分の所有で他人が書けない、判定できる FS」として通す。
     owner_verdicts: BTreeMap<FsPath, OwnerVerdict>,
+    /// 読んでいる間の書込 (`write_during_read`): 次にそのパスを読んだ (`open_read`・`read_checked`) 直後に、この内容に
+    /// 書き換える (読んだ側は書く前の内容を受け取り、読んだ後の `metadata` は新しい大きさと更新日時を返す)。
+    write_during_read: BTreeMap<FsPath, (FsPath, Vec<u8>)>,
 }
 
 /// メモリ上の `FileSystem` (偽 Port)。ファイル・ディレクトリ・シンボリックリンクを持ち、`fail_next` などで障害を注入できる。
@@ -180,6 +183,7 @@ impl MemFs {
                 swap_entries: Vec::new(),
                 file_id_unique: true,
                 owner_verdicts: BTreeMap::new(),
+                write_during_read: BTreeMap::new(),
             }),
         }
     }
@@ -205,6 +209,28 @@ impl MemFs {
         self.set_file(&FsPath::from(path), data);
     }
 
+    /// 次に `path` を読んだ直後に、内容を `data` に書き換える (遅い書き手・同期ソフトが、読んでいる間に書いた。読んだ側は
+    /// 書く前の内容を受け取る。07 §6 の RLD-3 の試験)。
+    pub fn write_during_read(&self, path: &str, data: &[u8]) {
+        self.write_other_during_read(path, path, data);
+    }
+
+    /// 次に `read` を読んだ直後に、ほかのファイル `write` を `data` にする (無ければ作る。読んでいる間に同じディレクトリに
+    /// ファイルが増えた・変わった。07 §6 の RLD-3 の試験)。
+    pub fn write_other_during_read(&self, read: &str, write: &str, data: &[u8]) {
+        self.st()
+            .write_during_read
+            .insert(FsPath::from(read), (FsPath::from(write), data.to_vec()));
+    }
+
+    /// 読んだ直後の書込 (`write_during_read`) があれば当てる。
+    fn apply_write_during_read(&self, s: &mut State, path: &FsPath) {
+        let Some((target, data)) = s.write_during_read.remove(path) else {
+            return;
+        };
+        self.put_file(s, &target, &data);
+    }
+
     /// ディレクトリを作る (祖先も作る)。
     pub fn add_dir(&self, path: &str) {
         let mut s = self.st();
@@ -222,9 +248,13 @@ impl MemFs {
     /// 外部からの変更: 内容と mtime を変える (`file_id` は保つ)。無ければ作る。
     pub fn set_file(&self, path: &FsPath, data: &[u8]) {
         let mut s = self.st();
-        let mtime = self.now_time(&mut s);
+        self.put_file(&mut s, path, data);
+    }
+
+    fn put_file(&self, s: &mut State, path: &FsPath, data: &[u8]) {
+        let mtime = self.now_time(s);
         if let Some(parent) = path.parent() {
-            Self::add_ancestors_and_self(&mut s, &parent);
+            Self::add_ancestors_and_self(s, &parent);
         }
         let (id, readonly, nlink) = match s.files.get(path) {
             Some(e) => (e.id, e.readonly, e.nlink),
@@ -1048,9 +1078,9 @@ impl FileSystem for MemFs {
         if e.data.len() as u64 > max_len {
             return Ok(CheckedRead::TooLarge);
         }
-        Ok(CheckedRead::Read {
-            bytes: e.data.clone(),
-        })
+        let bytes = e.data.clone();
+        self.apply_write_during_read(&mut s, &path);
+        Ok(CheckedRead::Read { bytes })
     }
 
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
@@ -1074,13 +1104,17 @@ impl FileSystem for MemFs {
         injected(&mut s, FsOp::OpenRead)?;
         let path = &link_target(&s, path);
         match s.files.get(path) {
-            Some(e) => Ok(Box::new(MemReader {
-                data: e.data.clone(),
-                pos: 0,
-                chunk: s.chunk_size,
-                fail_after: s.read_fail_after,
-                delay: s.read_delay.clone(),
-            })),
+            Some(e) => {
+                let reader = MemReader {
+                    data: e.data.clone(),
+                    pos: 0,
+                    chunk: s.chunk_size,
+                    fail_after: s.read_fail_after,
+                    delay: s.read_delay.clone(),
+                };
+                self.apply_write_during_read(&mut s, path);
+                Ok(Box::new(reader))
+            }
             None if s.dirs.contains(path) || s.specials.contains(path) => Err(
                 FsError::with_detail(FsErrorKind::InvalidPath, FsErrorDetail::NotAFile),
             ),

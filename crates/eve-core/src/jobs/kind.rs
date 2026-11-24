@@ -58,6 +58,9 @@ pub enum JobKind {
         name: String,
         /// `theme.name` を書いた所 (テーマが無いときの診断の場所、07 §8.7)。分からなければ `None`。
         origin: Option<eve_config::KeyOrigin>,
+        /// 読む前と読んだ後にファイルの大きさと更新日時を確かめる (設定の自動の再読込、07 §6 の RLD-3)。変わっていたら結果の
+        /// `unstable` を立てる。
+        verify: bool,
     },
     /// 設定ファイル (ユーザー層の `config.toml` を順に) と `keymap.toml` を読む (`config.reload`、07 §6)。
     ReadConfig {
@@ -68,6 +71,8 @@ pub enum JobKind {
         /// 一覧する `locales/` と選んだ言語 (候補と、選んだ言語のファイルの大きさと更新日時だけを調べる。中身は読まない、
         /// 07 §17.4)。`None` は調べない。
         locales: Option<(FsPath, eve_config::Locale)>,
+        /// 読む前と読んだ後にファイルの大きさと更新日時を確かめる (設定の自動の再読込、07 §6 の RLD-3)。
+        verify: bool,
     },
     /// 言語定義を読んで重ねる (07 §9.6 の LANG-2、02 §9.3 の `ReadLanguages`)。起動時は、起動時のパスを開くジョブより前に
     /// 積む (`io` は直列なので、起動時の文書は定義が届いた後に開き終わる)。`config.reload` でも積む。`dir` の
@@ -87,6 +92,8 @@ pub enum JobKind {
         precompile: bool,
         /// ワークスペース層のファイルの表示名 (ワークスペース層の集まりの診断は、このファイルの分だけ返す)。
         workspace_files: Vec<String>,
+        /// 読む前と読んだ後に `dir` の `*.toml` の大きさと更新日時を確かめる (設定の自動の再読込、07 §6 の RLD-3)。
+        verify: bool,
     },
     /// ワークスペース層 (`<root>/.eve/config.toml`・`.eve/keymap.toml`) を所有者の検査つきで読み、解析・分類する (07 §12.5 の
     /// WSC-1 / WSC-2、02 §9.3 の `ReadWorkspaceConfig`)。起動時はルートが決まったとき、`config.reload` はユーザー層を
@@ -98,6 +105,15 @@ pub enum JobKind {
         conditions: eve_config::Conditions,
         /// `workspace.safe_directories` (07 §12.1 の OWN-5)。
         safe_dirs: Vec<FsPath>,
+        /// 読む前と読んだ後にファイルの大きさと更新日時を確かめる (設定の自動の再読込、07 §6 の RLD-3)。
+        verify: bool,
+    },
+    /// 設定ファイルの監視の対象を、監視するディレクトリ (比べる形の canonical のパス) と名前に解く (07 §6 の RLD-1。
+    /// 文書の監視と同じディレクトリの形にする、03 §9.5.1 の WATCH-12)。無いディレクトリは返さない (監視しない)。結果は
+    /// `JobResult::ConfigWatchResolved`。
+    ResolveConfigWatch {
+        /// 見るファイルと、`*.toml` を見るディレクトリ。
+        targets: Vec<crate::io::watch_config::ConfigWatchTarget>,
     },
     /// 文書のディレクトリから上へ `.editorconfig` を所有者の検査つきで集め、解析・glob の照合・重ね合わせまで行う (07 §10.3
     /// の EC-1 / EC-2 / EC-5、02 §9.3 の `ReadEditorConfig`)。文書の読込の完了・名前を付けて保存でパスが変わった・

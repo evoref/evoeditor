@@ -56,6 +56,8 @@ exclude_secret_files = true
 # 開いているファイルを監視して、ほかのアプリによる変更・削除を知らせるか。表示している未保存の変更の無い文書は
 # 読み直します (reload_on_external_change = "auto_if_unmodified" のとき)。"never" のときと、ネットワークの共有などの
 # 監視できないフォルダでは監視せず、画面に戻ったときと保存するときに確かめます。
+# 設定ファイル (このファイル・keymap.toml・テーマ・languages/・.eve/) も監視し、保存すると読み直します
+# (false では config.reload で読み直します。"never" は設定ファイルの監視には効きません)。
 enabled = true
 
 [view]

@@ -81,6 +81,8 @@ pub use io::rescue::{RescueError, RescueOutcome, RescueReason, RescueWriter};
 pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use io::watch::{FileWatcher, FsEvent, FsEventKind, WatchError, WatchId};
+/// 設定ファイルの監視の対象 (`JobKind::ResolveConfigWatch` の入力と結果。docs/07 §6 の RLD-1)。
+pub use io::watch_config::{CONFIG_RENEW_MIN, ConfigWatchDir, ConfigWatchTarget};
 pub use io::watch_doc::{
     WATCH_RELOAD_MAX_BYTES, WATCH_RELOAD_MIN_INTERVAL, WATCH_SETTLE, WATCH_SETTLE_MAX,
 };

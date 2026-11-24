@@ -329,6 +329,8 @@ impl EditorState {
             // ワークスペース層を読む (07 §12.5 の WSC-1)。逃げ道はユーザー層と `--set` の値 (ワークスペース層は書けない)
             let safe_dirs = self.settings.config.safe_directories.clone();
             let _ = self.start_workspace_config_read(&safe_dirs, None);
+            // ワークスペース層の設定ファイル (`.eve/`) も監視する (07 §6 の RLD-1)
+            self.config_watch_refresh();
         }
         // ファインダ: 待っていれば走査を始め、`DIR` で決まったら開く (03 §12.7.1、07 §18.2)
         if let Some(source) = self.workspace.current.as_ref().map(Workspace::source) {

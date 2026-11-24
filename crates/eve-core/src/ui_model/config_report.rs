@@ -73,7 +73,10 @@ impl EditorState {
                 .config_diagnostics
                 .push((file.to_owned(), diagnostics.to_vec()));
         }
-        self.show_config_problems(file, diagnostics, delivery);
+        // 設定の自動の読み直しでは、前と同じ診断の要約を出さない (07 §6 の RLD-3)
+        if let Some(delivery) = self.reload_delivery(file, diagnostics, delivery) {
+            self.show_config_problems(file, diagnostics, delivery);
+        }
     }
 
     /// `report_config` と同じだが、一覧のそのファイルの診断を置き換えずに足す (テーマが無い診断を、`theme.name` を
@@ -105,12 +108,21 @@ impl EditorState {
         }
         // 要約も上限を掛けた後の列で作る。ワークスペース層のファイルの診断 (言語定義の読み直し・正規表現の組立ての結果) は
         // ジョブの結果で非同期に届くので、表示中の警告・エラーを置き換えない (07 §12.5 の WSC-3)
+        let delivery = if workspace {
+            Delivery::Background
+        } else {
+            Delivery::Replace
+        };
+        // 設定の自動の読み直しでは、前と同じ診断の要約を出さない (07 §6 の RLD-3)
+        let Some(delivery) = self.reload_delivery(file, diagnostics, delivery) else {
+            return;
+        };
         if workspace {
             let mut shown = diagnostics.to_vec();
             eve_config::cap_diagnostics(&mut shown);
-            self.show_config_problems(file, &shown, Delivery::Background);
+            self.show_config_problems(file, &shown, delivery);
         } else {
-            self.show_config_problems(file, diagnostics, Delivery::Replace);
+            self.show_config_problems(file, diagnostics, delivery);
         }
     }
 
