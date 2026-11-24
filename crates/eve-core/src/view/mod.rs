@@ -7,4 +7,6 @@ pub(crate) mod bracket;
 pub(crate) mod motion;
 pub(crate) mod mouse;
 pub(crate) mod multi_cursor;
+pub(crate) mod select_expand;
+pub(crate) mod text_object;
 pub(crate) mod view_cmds;

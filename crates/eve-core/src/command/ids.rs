@@ -93,6 +93,7 @@ pub const SELECT_ADD_CURSOR_BELOW: &str = "select.add_cursor_below";
 pub const SELECT_ADD_NEXT_MATCH: &str = "select.add_next_match";
 pub const SELECT_ALL: &str = "select.all";
 pub const SELECT_ALL_MATCHES: &str = "select.all_matches";
+pub const SELECT_EXPAND: &str = "select.expand";
 pub const SELECT_EXTEND_DOWN: &str = "select.extend_down";
 pub const SELECT_EXTEND_END: &str = "select.extend_end";
 pub const SELECT_EXTEND_HOME: &str = "select.extend_home";
@@ -105,6 +106,8 @@ pub const SELECT_EXTEND_TO_DOC_START: &str = "select.extend_to_doc_start";
 pub const SELECT_EXTEND_UP: &str = "select.extend_up";
 pub const SELECT_EXTEND_WORD_LEFT: &str = "select.extend_word_left";
 pub const SELECT_EXTEND_WORD_RIGHT: &str = "select.extend_word_right";
+pub const SELECT_LINE: &str = "select.line";
+pub const SELECT_SHRINK: &str = "select.shrink";
 pub const UI_CANCEL: &str = "ui.cancel";
 pub const UI_CONFIRM: &str = "ui.confirm";
 pub const UI_DIALOG_CHOOSE: &str = "ui.dialog_choose";
@@ -123,7 +126,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 118] = [
+pub const ALL: [&str; 121] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -215,6 +218,7 @@ pub const ALL: [&str; 118] = [
     SELECT_ADD_NEXT_MATCH,
     SELECT_ALL,
     SELECT_ALL_MATCHES,
+    SELECT_EXPAND,
     SELECT_EXTEND_DOWN,
     SELECT_EXTEND_END,
     SELECT_EXTEND_HOME,
@@ -227,6 +231,8 @@ pub const ALL: [&str; 118] = [
     SELECT_EXTEND_UP,
     SELECT_EXTEND_WORD_LEFT,
     SELECT_EXTEND_WORD_RIGHT,
+    SELECT_LINE,
+    SELECT_SHRINK,
     UI_CANCEL,
     UI_CONFIRM,
     UI_DIALOG_CHOOSE,

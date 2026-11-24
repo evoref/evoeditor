@@ -288,9 +288,11 @@ pub(crate) const UI_HELP_SEARCH_SINGLE_LINE: &str = "ui.help.search.single_line"
 pub(crate) const UI_HELP_SEARCH_SUGAR: &str = "ui.help.search.sugar";
 pub(crate) const UI_HELP_TERMINAL_ALT: &str = "ui.help.terminal.alt";
 pub(crate) const UI_HELP_TERMINAL_CHORD: &str = "ui.help.terminal.chord";
+pub(crate) const UI_HELP_TERMINAL_CTRL_SHIFT_L: &str = "ui.help.terminal.ctrl_shift_l";
 pub(crate) const UI_HELP_TERMINAL_IME: &str = "ui.help.terminal.ime";
 pub(crate) const UI_HELP_TERMINAL_MULTI_CURSOR_PASTE: &str = "ui.help.terminal.multi_cursor_paste";
 pub(crate) const UI_HELP_TERMINAL_README: &str = "ui.help.terminal.readme";
+pub(crate) const UI_HELP_TERMINAL_REDRAW: &str = "ui.help.terminal.redraw";
 pub(crate) const UI_HELP_TERMINAL_STDIN_KEYS: &str = "ui.help.terminal.stdin_keys";
 pub(crate) const UI_HELP_TERMINAL_STDIN_POWERSHELL: &str = "ui.help.terminal.stdin_powershell";
 pub(crate) const UI_HELP_TERMINAL_STDIN_REDRAW: &str = "ui.help.terminal.stdin_redraw";
@@ -655,9 +657,11 @@ const ALL: &[&str] = &[
     UI_HELP_SEARCH_SUGAR,
     UI_HELP_TERMINAL_ALT,
     UI_HELP_TERMINAL_CHORD,
+    UI_HELP_TERMINAL_CTRL_SHIFT_L,
     UI_HELP_TERMINAL_IME,
     UI_HELP_TERMINAL_MULTI_CURSOR_PASTE,
     UI_HELP_TERMINAL_README,
+    UI_HELP_TERMINAL_REDRAW,
     UI_HELP_TERMINAL_STDIN_KEYS,
     UI_HELP_TERMINAL_STDIN_POWERSHELL,
     UI_HELP_TERMINAL_STDIN_REDRAW,

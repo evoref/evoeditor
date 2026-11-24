@@ -54,6 +54,8 @@ pub struct View {
     pub(crate) word_match: Option<crate::view::multi_cursor::WordMark>,
     /// 対応括弧の強調 (03 §5.7 の BRK-5)。Frame を作る前に求め、鍵 (Revision・head など) が同じ間は探し直さない。
     pub(crate) bracket: Option<crate::view::bracket::BracketMark>,
+    /// 選択の拡張の履歴 (03 §5.7 の SEL-4。`select.expand` が積み、`select.shrink` が戻す。選択を置き直すと捨てる)。
+    pub(crate) expand_history: Option<crate::view::select_expand::ExpandHistory>,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
@@ -873,6 +875,7 @@ impl EditorState {
                 cursor_affinity: Default::default(),
                 word_match: None,
                 bracket: None,
+                expand_history: None,
             },
         );
         id
@@ -1410,6 +1413,8 @@ impl EditorState {
         v.cursor_affinity = Default::default();
         // 選択を変えると「単語の一致」の印は消える (足す操作と `ui.cancel` は、この後に立て直す。03 §4.5.1 の MCUR-2 (e))
         v.word_match = None;
+        // 選択の拡張の履歴も捨てる (`select.expand` / `select.shrink` は、この後に置き直す。03 §5.7 の SEL-4)
+        v.expand_history = None;
         self.out.needs_render = true;
     }
 

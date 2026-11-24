@@ -90,6 +90,7 @@ select.add_cursor_below	Motion	Read	—
 select.add_next_match	Motion	Read	—
 select.all	Motion	Read	—
 select.all_matches	Motion	Read	—
+select.expand	Motion	Read	—
 select.extend_down	Motion	Read	—
 select.extend_end	Motion	Read	—
 select.extend_home	Motion	Read	—
@@ -102,6 +103,8 @@ select.extend_to_doc_start	Motion	Read	—
 select.extend_up	Motion	Read	—
 select.extend_word_left	Motion	Read	—
 select.extend_word_right	Motion	Read	—
+select.line	Motion	Read	—
+select.shrink	Motion	Read	—
 ui.cancel	Ui	None	—
 ui.confirm	Ui	None	overlay.active != "" || search.active
 ui.dialog_choose	Ui	None	overlay.active == "dialog"
