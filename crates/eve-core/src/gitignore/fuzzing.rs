@@ -194,7 +194,11 @@ fn check_literal_lines(c: &GitignoreCase, base: &[u8]) -> Result<(), String> {
             CaseFold::Ascii => pat.eq_ignore_ascii_case(subject),
         };
         let want = !pat.is_empty() && eq && (!dir_only || c.kind == PathKind::Dir);
-        let (one, _) = IgnoreRules::parse(base, line);
+        // 行 1 つだけの規則は、元の行 (`raw`) を行の処理に 1 回だけ通して作る。処理した後の `line` を `parse` に通し直すと、
+        // 行末の CR を 2 回落とし (`"a\r\r"` が `"a"` になる)、行頭の BOM の並びをファイルの先頭の BOM として落とす
+        // (2 行目以降の `"\u{feff}a"` が `"a"` になる) ため、本文の中の行と違う規則になる。
+        let (mut one, mut report) = IgnoreRules::parse(base, b"");
+        one.push_line(raw, 1, &mut report);
         let got = one.decide(&c.path, c.kind, c.fold).is_some();
         if got != want {
             return Err(format!(
