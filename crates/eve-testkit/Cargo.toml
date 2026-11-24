@@ -45,6 +45,11 @@ harness = false
 name = "bm_211"
 harness = false
 
+# BM-216 (保存時の変換のメインスレッドの時間。参考値、docs/09 §5.2。v0.5 の M34 の段 3)
+[[bench]]
+name = "bm_216"
+harness = false
+
 [[bench]]
 name = "bm_106"
 harness = false

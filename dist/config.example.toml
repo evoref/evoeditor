@@ -18,6 +18,12 @@ indent_unit = "space"
 indent_width = 4
 # Backspace で消す単位: "grapheme" (見た目の 1 文字) または "codepoint" (結合文字などを 1 つずつ)。
 backspace_unit = "grapheme"
+# 保存するときに、各行の末尾の空白 (半角の空白とタブ) を除く (全角の空白は残します)。カーソルのある行も除きます。
+# 言語ごと (Markdown と Diff は除かない) と .editorconfig の trim_trailing_whitespace で替わります。
+trim_trailing_whitespace_on_save = false
+# 保存するときに、改行で終わらない文書の末尾に改行を 1 つ足す (false でも、ある改行は取り除きません)。
+# .editorconfig の insert_final_newline で替わります。
+insert_final_newline_on_save = false
 
 [editor.undo]
 # 開いているすべての文書の、元に戻す履歴の合計の上限 (バイト。1048576〜1099511627776)。

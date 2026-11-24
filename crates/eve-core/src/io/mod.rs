@@ -30,6 +30,7 @@ pub(crate) mod save;
 pub(crate) mod save_all;
 pub(crate) mod save_as;
 pub(crate) mod save_plan;
+pub(crate) mod save_transform;
 pub(crate) mod secret;
 pub(crate) mod snapshot;
 pub(crate) mod startup;

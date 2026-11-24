@@ -27,6 +27,7 @@ pub use format::{
     EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LineStatsScanner, LoadState,
     ReadOnlyReason, ReadOnlyReasons, TextFormat, count_long_lines,
 };
+pub(crate) use history::NodeState;
 pub use history::{HistoryStep, NodeId, RecordOutcome, UndoBudget, UndoHistory};
 pub use preserved::{PreservedError, PreservedMap};
 pub use transaction::{Origin, Transaction, TransactionMeta, UndoGroupHint};

@@ -236,6 +236,9 @@ pub(crate) struct IoState {
     /// テキスト変換をメインスレッドで作る対象の大きさの上限 (既定は `TRANSFORM_SYNC_BYTES`。試験だけが feature
     /// `test-hooks` の口で小さくする、03 §15.9.1 の (e))。
     pub(crate) transform_sync_bytes: usize,
+    /// 保存の連鎖の「変換を判定した」印 (文書ごと。03 §9.3.1 の SVT-4 (c))。連鎖の入口で「未判定」にし、保存ジョブを
+    /// 投入する直前に 1 回だけ判定する。保存の成功で外す。
+    pub(crate) save_transforms: BTreeMap<DocumentId, crate::io::save_transform::SaveTransform>,
 }
 
 /// 検索: 文書内検索の状態・検索バー・再検索の予約・全件の検索のジョブ (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -432,6 +435,7 @@ impl EditorState {
                 cancelled_loads: BTreeSet::new(),
                 system_encoding: None,
                 transform_sync_bytes: crate::document::transform::TRANSFORM_SYNC_BYTES,
+                save_transforms: BTreeMap::new(),
                 log_path: None,
                 config_sources: None,
                 theme_name_at: None,

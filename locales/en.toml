@@ -633,6 +633,18 @@ in_progress = "Saving"
 to_recovery = "Saved to {target}. The original file {path} was not changed"
 unchanged = "No changes (the file was not rewritten)"
 
+[info.save.suffix]
+transform_kept = "The on-save cleanup (trailing whitespace, final newline) is still in the text; press {key:edit.undo} to undo it"
+transform_remains = "The on-save cleanup (trailing whitespace, final newline) is still in the text"
+transform_reverted = "The on-save cleanup (trailing whitespace, final newline) was undone"
+transform_skipped_large = "(the document is over 1 MiB, so trailing whitespace and the final newline were left as is)"
+transformed = "({detail})"
+
+[info.save.transformed]
+final_newline = "added a final newline"
+separator = "; "
+trimmed = "trimmed trailing whitespace (lines: {lines})"
+
 [info.leftover]
 deleted = "Deleted the leftover of {path}"
 restored = "Restored {path}"
@@ -641,6 +653,9 @@ restored = "Restored {path}"
 done = "Saved {saved} documents"
 done_skipped = "Saved {saved} documents. {skipped} untitled or read-only documents were not saved"
 none = "No documents to save"
+
+[info.save_all.suffix]
+transformed = "({count} of them were cleaned up on save)"
 
 [info.select]
 no_more_matches = "No more matches"

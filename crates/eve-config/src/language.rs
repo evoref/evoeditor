@@ -50,6 +50,8 @@ pub struct BuiltinLanguage {
     pub comment_line: Option<&'static str>,
     /// 字下げの単位 (形式が字下げを決めている言語だけ、LANG-3)。
     pub indent_unit: Option<IndentUnit>,
+    /// 保存時に末尾の空白を除くか (`trim_trailing_whitespace_on_save`、FR-216。`markdown` と `diff` だけが `false` を持つ)。
+    pub trim_trailing_whitespace_on_save: Option<bool>,
 }
 
 const fn lang(
@@ -69,13 +71,22 @@ const fn lang(
         first_line,
         comment_line,
         indent_unit,
+        trim_trailing_whitespace_on_save: None,
+    }
+}
+
+/// 保存時に末尾の空白を除かない組込みの言語 (行末の空白が意味を持つ。07 §9.6.1 の最後の列)。
+const fn keep_trailing_whitespace(l: BuiltinLanguage) -> BuiltinLanguage {
+    BuiltinLanguage {
+        trim_trailing_whitespace_on_save: Some(false),
+        ..l
     }
 }
 
 /// 組込みの言語定義 (07 §9.6.1 の表と同じ順。表との一致は eve-core の試験 `language_table` が確かめる)。
 pub const BUILTIN_LANGUAGES: &[BuiltinLanguage] = &[
     lang("rust", "Rust", &["rs"], &[], None, Some("//"), None),
-    lang(
+    keep_trailing_whitespace(lang(
         "markdown",
         "Markdown",
         &["md", "markdown"],
@@ -83,7 +94,7 @@ pub const BUILTIN_LANGUAGES: &[BuiltinLanguage] = &[
         None,
         None,
         None,
-    ),
+    )),
     lang(
         "toml",
         "TOML",
@@ -172,7 +183,15 @@ pub const BUILTIN_LANGUAGES: &[BuiltinLanguage] = &[
     ),
     lang("html", "HTML", &["html", "htm"], &[], None, None, None),
     lang("css", "CSS", &["css"], &[], None, None, None),
-    lang("diff", "Diff", &["diff", "patch"], &[], None, None, None),
+    keep_trailing_whitespace(lang(
+        "diff",
+        "Diff",
+        &["diff", "patch"],
+        &[],
+        None,
+        None,
+        None,
+    )),
     lang(
         "gitcommit",
         "Git Commit",
@@ -329,6 +348,10 @@ pub struct LanguageDef {
     pub tab_width: Option<LangValue<u8>>,
     /// `comment.line`。
     pub comment_line: Option<LangValue<String>>,
+    /// `trim_trailing_whitespace_on_save` (FR-216。v0.5 の M34 の段 3)。
+    pub trim_trailing_whitespace_on_save: Option<LangValue<bool>>,
+    /// `insert_final_newline_on_save` (同上)。
+    pub insert_final_newline_on_save: Option<LangValue<bool>>,
 }
 
 /// 言語定義の値の由来 (`config.show` の右の列、07 §3.5)。
@@ -544,6 +567,14 @@ pub struct Language {
     pub ws_indent_width: Option<(u8, LangOrigin)>,
     /// ワークスペース層の定義の `indent.tab_width`。
     pub ws_tab_width: Option<(u8, LangOrigin)>,
+    /// `trim_trailing_whitespace_on_save` (FR-216。07 §3.6 の (3)(4) の段)。
+    pub trim_on_save: Option<(bool, LangOrigin)>,
+    /// `insert_final_newline_on_save` (同上)。
+    pub final_newline_on_save: Option<(bool, LangOrigin)>,
+    /// ワークスペース層の定義の `trim_trailing_whitespace_on_save` (07 §3.6 の (7) の段)。
+    pub ws_trim_on_save: Option<(bool, LangOrigin)>,
+    /// ワークスペース層の定義の `insert_final_newline_on_save` (同上)。
+    pub ws_final_newline_on_save: Option<(bool, LangOrigin)>,
 }
 
 impl Language {
@@ -574,6 +605,10 @@ impl Language {
             ws_indent_unit: None,
             ws_indent_width: None,
             ws_tab_width: None,
+            trim_on_save: None,
+            final_newline_on_save: None,
+            ws_trim_on_save: None,
+            ws_final_newline_on_save: None,
         }
     }
 
@@ -611,6 +646,12 @@ impl Language {
             ws_indent_unit: None,
             ws_indent_width: None,
             ws_tab_width: None,
+            trim_on_save: b
+                .trim_trailing_whitespace_on_save
+                .map(|v| (v, LangOrigin::Builtin)),
+            final_newline_on_save: None,
+            ws_trim_on_save: None,
+            ws_final_newline_on_save: None,
         }
     }
 }
@@ -870,6 +911,18 @@ impl LanguageSet {
         if let Some(v) = &def.comment_line {
             l.comment_line = Some((v.value.clone(), at(v.line, v.column)));
         }
+        // 保存時の変換も、ワークスペース層の値は別の段 (§3.6 の (7)) に置く
+        let (trim, final_newline) = if workspace {
+            (&mut l.ws_trim_on_save, &mut l.ws_final_newline_on_save)
+        } else {
+            (&mut l.trim_on_save, &mut l.final_newline_on_save)
+        };
+        if let Some(v) = &def.trim_trailing_whitespace_on_save {
+            *trim = Some((v.value, at(v.line, v.column)));
+        }
+        if let Some(v) = &def.insert_final_newline_on_save {
+            *final_newline = Some((v.value, at(v.line, v.column)));
+        }
         diags
     }
 
@@ -1003,6 +1056,12 @@ impl LanguageSet {
             if let Some((c, _)) = &l.comment_line {
                 let _ = writeln!(out, "comment = {{ line = {} }}", quote(c));
             }
+            if let Some((b, _)) = &l.trim_on_save {
+                let _ = writeln!(out, "trim_trailing_whitespace_on_save = {b}");
+            }
+            if let Some((b, _)) = &l.final_newline_on_save {
+                let _ = writeln!(out, "insert_final_newline_on_save = {b}");
+            }
         }
         out
     }
@@ -1109,7 +1168,7 @@ pub struct DocValue<T> {
     pub origin: ValueOrigin,
 }
 
-/// 文書ごとに決まる値 (07 §3.6 の 5 つのキー)。`file.default_*` は言語定義が持たない (LANG-3) ので、層の値 ((1)(2)(6)(8)) で
+/// 文書ごとに決まる値 (07 §3.6 の 7 つのキー)。`file.default_*` は言語定義が持たない (LANG-3) ので、層の値 ((1)(2)(6)(8)) で
 /// 決まる。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocValues {
@@ -1123,6 +1182,10 @@ pub struct DocValues {
     pub default_line_ending: DocValue<crate::DefaultLineEnding>,
     /// `file.default_encoding` (新しいファイルの文字コード、LAYER-4)。
     pub default_encoding: DocValue<crate::DefaultEncoding>,
+    /// `editor.trim_trailing_whitespace_on_save` (保存時に末尾の空白を除く、FR-216)。
+    pub trim_trailing_whitespace_on_save: DocValue<bool>,
+    /// `editor.insert_final_newline_on_save` (保存時に末尾の改行を足す、FR-216)。
+    pub insert_final_newline_on_save: DocValue<bool>,
 }
 
 /// 文書ごとの値を決める材料 (07 §3.6 の LAYER-1)。
@@ -1247,6 +1310,23 @@ pub fn doc_values(layers: &DocLayers<'_>) -> DocValues {
             |c| c.default_encoding,
             None,
             ec.and_then(|e| e.encoding.clone()),
+        ),
+        trim_trailing_whitespace_on_save: pick(
+            layers,
+            "editor.trim_trailing_whitespace_on_save",
+            |c| c.trim_trailing_whitespace_on_save,
+            Some((|l| &l.trim_on_save, |l| &l.ws_trim_on_save)),
+            ec.and_then(|e| e.trim_trailing_whitespace.clone()),
+        ),
+        insert_final_newline_on_save: pick(
+            layers,
+            "editor.insert_final_newline_on_save",
+            |c| c.insert_final_newline_on_save,
+            Some((
+                |l| &l.final_newline_on_save,
+                |l| &l.ws_final_newline_on_save,
+            )),
+            ec.and_then(|e| e.insert_final_newline.clone()),
         ),
     }
 }

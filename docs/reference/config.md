@@ -1,6 +1,6 @@
 # 設定リファレンス
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-config --defaults --json` の出力 (公開キー 45 個と既定値) から作る。キー・型・許容値・意味の正本は [07 §5](../07-config-extensibility.md#5-設定項目一覧-スキーマと既定値)。既定値は `config.toml` にそのまま書ける表記 (TOML の値)。今の設定を重ねた結果は `evoeditor --dump-config` で見る。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-config --defaults --json` の出力 (公開キー 47 個と既定値) から作る。キー・型・許容値・意味の正本は [07 §5](../07-config-extensibility.md#5-設定項目一覧-スキーマと既定値)。既定値は `config.toml` にそのまま書ける表記 (TOML の値)。今の設定を重ねた結果は `evoeditor --dump-config` で見る。
 
 ## `[editor]`
 
@@ -10,6 +10,8 @@
 | `editor.indent_unit` | `"space"` |
 | `editor.indent_width` | `4` |
 | `editor.backspace_unit` | `"grapheme"` |
+| `editor.trim_trailing_whitespace_on_save` | `false` |
+| `editor.insert_final_newline_on_save` | `false` |
 | `editor.undo.total_max_bytes` | `268435456` |
 
 ## `[file]`

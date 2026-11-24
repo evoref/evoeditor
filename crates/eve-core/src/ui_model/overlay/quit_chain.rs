@@ -227,8 +227,24 @@ impl EditorState {
         // キャンセル (最後の選択肢): データを変えない
         if choice >= c.cancel_index() {
             match &c.action {
-                ConfirmAction::SaveFailed(_) | ConfirmAction::Lossy(_) => {
-                    self.show_message(MessageLevel::Info, keys::INFO_SAVE_ABORTED, &[]);
+                ConfirmAction::SaveFailed(crate::io::save::SaveFailedAsk { doc, path, .. })
+                | ConfirmAction::Lossy(crate::io::open::LossyAsk { doc, path, .. }) => {
+                    // 保存時の変換が本文に残っていれば付記する (03 §9.3.1 の SVT-8)
+                    let kept = self.save_transform_kept_suffix(*doc);
+                    self.show_message_with_suffix(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_ABORTED,
+                        &[("path", &path.display())],
+                        kept.as_deref(),
+                    );
+                }
+                // 中止のメッセージを出さない確認 (外部変更・原子的置換不可・ハードリンク・バックアップなし・ダングリングの
+                // リンク・読み取り専用を解除して保存) も、変換が本文に残っていれば中止と付記を出す (SVT-8。出さないことは
+                // #647)
+                ConfirmAction::Fallback(crate::io::save::FallbackAsk { doc, .. })
+                | ConfirmAction::DanglingLink(crate::io::save::SaveFailedAsk { doc, .. })
+                | ConfirmAction::ClearReadOnly(crate::io::open::LossyAsk { doc, .. }) => {
+                    self.notify_transform_kept_on_abort(*doc);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
                 // 終了の連鎖のキャンセル: 連鎖全体を中止し、破棄の印をすべて無効にする (文書は元のまま)
@@ -355,7 +371,11 @@ impl EditorState {
         self.ui.quit_code = 0;
         // 連鎖の途中の (前の終了の) 状態は持ち越さない。保存の成功後に、連鎖を作り直して残りを確かめる
         self.ui.quit_chain = None;
-        self.save_doc_then(doc, Continuation::Quit)
+        self.save_doc_then_from(
+            doc,
+            Continuation::Quit,
+            crate::command::ids::APP_SAVE_AND_QUIT,
+        )
     }
 
     /// 保存中の待ちを済ませた後の終了の入口: dirty な全文書の確認 (終了の連鎖) へ進む。

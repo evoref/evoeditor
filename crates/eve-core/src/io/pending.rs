@@ -146,6 +146,8 @@ pub(crate) enum Pending {
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
     /// `release`: 閉じた文書の保存の失敗で書くとき、書き終えるまで緊急退避に残している公開物の文書。
     WriteRecovery {
+        /// 退避した文書 (保存時の変換が本文に残ったことの付記、03 §9.3.1 の SVT-8)。
+        doc: DocumentId,
         path: FsPath,
         release: Option<DocumentId>,
     },
@@ -406,8 +408,8 @@ impl EditorState {
                 range,
                 pua,
             } => self.finish_replace_one(doc, revision, range, pua, r),
-            Pending::WriteRecovery { path, release } => {
-                self.finish_write_recovery(&path, r);
+            Pending::WriteRecovery { doc, path, release } => {
+                self.finish_write_recovery(doc, &path, r);
                 if let Some(doc) = release {
                     self.io.closing_snapshots.remove(&doc);
                     self.mark_snapshot_update(doc);

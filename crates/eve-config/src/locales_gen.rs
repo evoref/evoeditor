@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1104 件)。
+/// `locales/en.toml` の文言 (1113 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -337,11 +337,20 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.save.in_place"), B("Saved {path} by overwriting in place")),
     (B("info.save.in_progress"), B("Saving")),
     (B("info.save.partial_saved"), B("Saved the partial content to {path} ({size})")),
+    (B("info.save.suffix.transform_kept"), B("The on-save cleanup (trailing whitespace, final newline) is still in the text; press {key:edit.undo} to undo it")),
+    (B("info.save.suffix.transform_remains"), B("The on-save cleanup (trailing whitespace, final newline) is still in the text")),
+    (B("info.save.suffix.transform_reverted"), B("The on-save cleanup (trailing whitespace, final newline) was undone")),
+    (B("info.save.suffix.transform_skipped_large"), B("(the document is over 1 MiB, so trailing whitespace and the final newline were left as is)")),
+    (B("info.save.suffix.transformed"), B("({detail})")),
     (B("info.save.to_recovery"), B("Saved to {target}. The original file {path} was not changed")),
+    (B("info.save.transformed.final_newline"), B("added a final newline")),
+    (B("info.save.transformed.separator"), B("; ")),
+    (B("info.save.transformed.trimmed"), B("trimmed trailing whitespace (lines: {lines})")),
     (B("info.save.unchanged"), B("No changes (the file was not rewritten)")),
     (B("info.save_all.done"), B("Saved {saved} documents")),
     (B("info.save_all.done_skipped"), B("Saved {saved} documents. {skipped} untitled or read-only documents were not saved")),
     (B("info.save_all.none"), B("No documents to save")),
+    (B("info.save_all.suffix.transformed"), B("({count} of them were cleaned up on save)")),
     (B("info.search.no_selection"), B("There is no selection. Select text, then open the search bar")),
     (B("info.search.replace_empty_query"), B("Enter the text to search for")),
     (B("info.search.replace_no_match"), B("Nothing to replace")),
@@ -1117,7 +1126,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1104 件)。
+/// `locales/ja.toml` の文言 (1113 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1446,11 +1455,20 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.save.in_place"), B("{path} を直接上書きで保存しました")),
     (B("info.save.in_progress"), B("保存中です")),
     (B("info.save.partial_saved"), B("途中までの内容を {path} に保存しました ({size})")),
+    (B("info.save.suffix.transform_kept"), B("保存時の変換 (行末の空白・末尾の改行) は本文に残っています。{key:edit.undo} で戻せます")),
+    (B("info.save.suffix.transform_remains"), B("保存時の変換 (行末の空白・末尾の改行) は本文に残っています")),
+    (B("info.save.suffix.transform_reverted"), B("保存時の変換 (行末の空白・末尾の改行) は戻しました")),
+    (B("info.save.suffix.transform_skipped_large"), B("(1 MiB を超える文書なので、行末の空白の除去と末尾の改行はしていません)")),
+    (B("info.save.suffix.transformed"), B("({detail})")),
     (B("info.save.to_recovery"), B("退避先 {target} に保存しました。元のファイル {path} は変更していません")),
+    (B("info.save.transformed.final_newline"), B("末尾に改行を足しました")),
+    (B("info.save.transformed.separator"), B("、")),
+    (B("info.save.transformed.trimmed"), B("行末の空白を {lines} 行で除きました")),
     (B("info.save.unchanged"), B("変更はありません (ファイルは書き換えていません)")),
     (B("info.save_all.done"), B("{saved} 件の文書を保存しました")),
     (B("info.save_all.done_skipped"), B("{saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません")),
     (B("info.save_all.none"), B("保存する文書はありません")),
+    (B("info.save_all.suffix.transformed"), B("(うち {count} 件は保存時に行末の空白・末尾の改行を整えました)")),
     (B("info.search.no_selection"), B("選択範囲がありません。選択してから検索バーを開いてください")),
     (B("info.search.replace_empty_query"), B("検索する文字列を入力してください")),
     (B("info.search.replace_no_match"), B("置換する箇所はありません")),

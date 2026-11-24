@@ -569,3 +569,103 @@ fn 拡張子に先頭の点を書くと警告する() {
     );
     assert_eq!(d.len(), 1, "定義は使う");
 }
+
+// verifies: AC-FR-216-1
+#[test]
+fn 保存時の変換の項目は言語ごとに読み_組込みは_markdown_と_diff_だけが除かない() {
+    let set = LanguageSet::builtin();
+    let trim = |l: &str| {
+        set.get(l)
+            .and_then(|l| l.trim_on_save.as_ref().map(|v| v.0))
+    };
+    assert_eq!(trim("markdown"), Some(false));
+    assert_eq!(trim("diff"), Some(false));
+    for b in BUILTIN_LANGUAGES {
+        if !matches!(b.id, "markdown" | "diff") {
+            assert_eq!(trim(b.id), None, "{}", b.id);
+        }
+        assert!(
+            set.get(b.id)
+                .is_some_and(|l| l.final_newline_on_save.is_none())
+        );
+    }
+    // ユーザー層は組込みの false を上書きでき、型の誤りは項目だけを使わない
+    let (d, diags) = load_language_str(
+        "languages/a.toml",
+        "[[language]]\nname = \"markdown\"\ntrim_trailing_whitespace_on_save = true\ninsert_final_newline_on_save = \"yes\"\n",
+    );
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert_eq!(diags[0].key, "language.insert_final_newline_on_save");
+    let (set, _) = LanguageSet::build(&d);
+    let md = set.get("markdown").expect("markdown");
+    assert_eq!(md.trim_on_save.as_ref().map(|v| v.0), Some(true));
+    assert!(md.final_newline_on_save.is_none());
+    assert!(
+        set.dump()
+            .contains("trim_trailing_whitespace_on_save = true")
+    );
+    // ワークスペース層の値は (7) の段に置く
+    let ws = defs("[[language]]\nname = \"rust\"\ninsert_final_newline_on_save = true\n");
+    let (set, _) = LanguageSet::build_layers(&[], &ws);
+    let rs = set.get("rust").expect("rust");
+    assert!(rs.final_newline_on_save.is_none());
+    assert_eq!(
+        rs.ws_final_newline_on_save.as_ref().map(|v| v.0),
+        Some(true)
+    );
+}
+
+// verifies: AC-FR-216-1
+#[test]
+fn 保存時の変換の値は_set_と_editorconfig_と言語と一般の値の順で決まる() {
+    let set = LanguageSet::builtin();
+    let md = set.get("markdown");
+    let ec = |trim: bool| crate::EditorConfigValues {
+        trim_trailing_whitespace: Some((
+            trim,
+            crate::EcOrigin {
+                file: "/p/.editorconfig".to_owned(),
+                line: 2,
+                column: 1,
+                section: "*".to_owned(),
+            },
+        )),
+        ..crate::EditorConfigValues::default()
+    };
+    let values = |config: &str, sets: &[String], lang, ec: Option<&crate::EditorConfigValues>| {
+        let r = resolve(
+            &[Source {
+                name: "config.toml".to_owned(),
+                text: Ok(Some(config.to_owned())),
+            }],
+            sets,
+            Conditions::default(),
+        );
+        assert!(r.reports.is_empty(), "{:?}", r.reports);
+        let v = doc_values(&DocLayers {
+            config: &r.config,
+            origins: &r.origins,
+            user: None,
+            language: lang,
+            workspace: false,
+            editorconfig: ec,
+        });
+        (
+            v.trim_trailing_whitespace_on_save.value,
+            v.insert_final_newline_on_save.value,
+        )
+    };
+    let on =
+        "[editor]\ntrim_trailing_whitespace_on_save = true\ninsert_final_newline_on_save = true\n";
+    // 既定はどちらも偽
+    assert_eq!(values("", &[], None, None), (false, false));
+    assert_eq!(values(on, &[], None, None), (true, true));
+    // 組込みの markdown は末尾の空白を除かない (一般の値に勝つ)
+    assert_eq!(values(on, &[], md, None), (false, true));
+    // `.editorconfig` (5) は言語 (3) に勝つ
+    assert_eq!(values(on, &[], md, Some(&ec(true))), (true, true));
+    assert_eq!(values(on, &[], None, Some(&ec(false))), (false, true));
+    // `--set` (8) は最も強い
+    let set_off = ["editor.trim_trailing_whitespace_on_save=false".to_owned()];
+    assert_eq!(values(on, &set_off, None, Some(&ec(true))), (false, true));
+}

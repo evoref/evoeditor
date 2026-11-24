@@ -382,6 +382,17 @@ pub(crate) const MSG_TRANSFORM_STALE: &str = "msg.transform.stale";
 pub(crate) const MSG_TRANSFORM_TARGET_GONE: &str = "msg.transform.target_gone";
 pub(crate) const STATUS_TRANSFORMING_LONG: &str = "status.transforming.long";
 pub(crate) const STATUS_TRANSFORMING_SHORT: &str = "status.transforming.short";
+// 保存時の変換 (v0.5 の M34 の段 3、03 §9.3.1・04 §8.16)
+pub(crate) const INFO_SAVE_SUFFIX_TRANSFORMED: &str = "info.save.suffix.transformed";
+pub(crate) const INFO_SAVE_TRANSFORMED_TRIMMED: &str = "info.save.transformed.trimmed";
+pub(crate) const INFO_SAVE_TRANSFORMED_FINAL_NEWLINE: &str = "info.save.transformed.final_newline";
+pub(crate) const INFO_SAVE_SUFFIX_TRANSFORM_SKIPPED_LARGE: &str =
+    "info.save.suffix.transform_skipped_large";
+pub(crate) const INFO_SAVE_SUFFIX_TRANSFORM_KEPT: &str = "info.save.suffix.transform_kept";
+pub(crate) const INFO_SAVE_SUFFIX_TRANSFORM_REMAINS: &str = "info.save.suffix.transform_remains";
+pub(crate) const INFO_SAVE_SUFFIX_TRANSFORM_REVERTED: &str = "info.save.suffix.transform_reverted";
+pub(crate) const INFO_SAVE_TRANSFORMED_SEPARATOR: &str = "info.save.transformed.separator";
+pub(crate) const INFO_SAVE_ALL_SUFFIX_TRANSFORMED: &str = "info.save_all.suffix.transformed";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
@@ -743,6 +754,15 @@ const ALL: &[&str] = &[
     MSG_TRANSFORM_TARGET_GONE,
     STATUS_TRANSFORMING_LONG,
     STATUS_TRANSFORMING_SHORT,
+    INFO_SAVE_SUFFIX_TRANSFORMED,
+    INFO_SAVE_TRANSFORMED_TRIMMED,
+    INFO_SAVE_TRANSFORMED_FINAL_NEWLINE,
+    INFO_SAVE_SUFFIX_TRANSFORM_SKIPPED_LARGE,
+    INFO_SAVE_SUFFIX_TRANSFORM_KEPT,
+    INFO_SAVE_SUFFIX_TRANSFORM_REMAINS,
+    INFO_SAVE_SUFFIX_TRANSFORM_REVERTED,
+    INFO_SAVE_TRANSFORMED_SEPARATOR,
+    INFO_SAVE_ALL_SUFFIX_TRANSFORMED,
 ];
 
 #[cfg(test)]

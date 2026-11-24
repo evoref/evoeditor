@@ -236,6 +236,17 @@ fn preserved_cost(format: Option<&FormatChange>, preserved: &PreservedUndo) -> u
     preserved.bytes() + format.map_or(0, FormatChange::preserved_bytes)
 }
 
+/// 履歴の中のノードの状態 ([`UndoHistory::node_state`])。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NodeState {
+    /// 今の位置 (1 回の Undo で戻せる)。
+    Current,
+    /// 本文に効いているが、今の位置ではない (後に別の編集がある)。
+    Applied,
+    /// Undo で戻された (Redo にある、または捨てた)。
+    Undone,
+}
+
 impl UndoHistory {
     /// 空の履歴を作る。根が保存点。
     pub fn new(budget: UndoBudget) -> UndoHistory {
@@ -273,6 +284,36 @@ impl UndoHistory {
     /// やり直せるノードがある。
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
+    }
+
+    /// ノード `id` の今の状態 (保存時の変換のノードを見る、03 §9.3.1 の SVT-8)。
+    pub(crate) fn node_state(&self, id: NodeId) -> NodeState {
+        if self.undo.back().is_some_and(|n| n.id == id) {
+            NodeState::Current
+        } else if self.undo.iter().any(|n| n.id == id) || id <= self.base {
+            // 予算で破棄した古いノード (`base` 以前) も、本文には効いたまま
+            NodeState::Applied
+        } else {
+            // Redo にある・Undo の後に Redo ごと捨てた
+            NodeState::Undone
+        }
+    }
+
+    /// Redo のノードを捨てる (Undo として戻した保存時の変換を、Redo に残さない。03 §9.3.1 の SVT-8 の例外)。保存点が
+    /// Redo のノードを指していれば戻れない。
+    pub(crate) fn discard_redo(&mut self) {
+        if self.redo.is_empty() {
+            return;
+        }
+        if self
+            .saved
+            .is_some_and(|s| self.redo.iter().any(|n| n.id == s))
+        {
+            self.saved = None;
+        }
+        let freed: usize = self.redo.iter().map(|n| n.bytes).sum();
+        self.total -= freed;
+        self.redo.clear();
     }
 
     /// 取り消せるノードの数。

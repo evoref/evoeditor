@@ -40,6 +40,8 @@ const KEYS: &[&str] = &[
     "language.first_line",
     "language.indent",
     "language.comment",
+    "language.trim_trailing_whitespace_on_save",
+    "language.insert_final_newline_on_save",
     "language.auto_pairs",
     "language.word_separators",
     "language.grammar",
@@ -210,6 +212,17 @@ impl Cx<'_> {
                             self.lang_problem(LanguageProblem::TooLong, &full, v);
                         } else {
                             def.first_line = Some(self.lang_value(s, kat));
+                        }
+                    }
+                }
+                // 保存時の変換 (FR-216。v0.5 の M34 の段 3 から読む、07 §9.6 の LANG-3)
+                "trim_trailing_whitespace_on_save" | "insert_final_newline_on_save" => {
+                    if let Some(b) = self.boolean(&full, v) {
+                        let value = Some(self.lang_value(b, kat));
+                        if key == "trim_trailing_whitespace_on_save" {
+                            def.trim_trailing_whitespace_on_save = value;
+                        } else {
+                            def.insert_final_newline_on_save = value;
                         }
                     }
                 }

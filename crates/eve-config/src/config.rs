@@ -688,6 +688,16 @@ config_keys! {
     /// `editor.backspace_unit`: Backspace の削除の単位 (FR-201)。
     backspace_unit: BackspaceUnit = BackspaceUnit::Grapheme, "editor.backspace_unit", choice,
         P::Safe;
+    /// `editor.trim_trailing_whitespace_on_save`: 保存時に各行の末尾の ASCII の空白とタブを除く (FR-216、03 §9.3.1 の
+    /// SVT-2)。文書ごとのキー (07 §3.6。言語定義と `.editorconfig` の `trim_trailing_whitespace` で替わる)。
+    trim_trailing_whitespace_on_save: bool = false,
+        "editor.trim_trailing_whitespace_on_save", boolean,
+        P::Safe;
+    /// `editor.insert_final_newline_on_save`: 保存時に、空でなく区切りで終わらない文書の末尾に改行を 1 つ足す (FR-216、
+    /// 03 §9.3.1 の SVT-3。`false` は取り除かない)。文書ごとのキー (07 §3.6)。
+    insert_final_newline_on_save: bool = false,
+        "editor.insert_final_newline_on_save", boolean,
+        P::Safe;
     /// `view.wrap`: 折り返しの方式 (FR-506)。
     wrap: WrapMode = WrapMode::Off, "view.wrap", choice,
         P::Safe;

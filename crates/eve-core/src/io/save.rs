@@ -102,6 +102,26 @@ impl EditorState {
         doc_id: DocumentId,
         cont: Continuation,
     ) -> CommandResult {
+        let command = match cont {
+            // `app.quit_with_error` は終了コードで見分ける (07 §18.4)
+            Continuation::Quit if self.ui.quit_code != 0 => {
+                crate::command::ids::APP_QUIT_WITH_ERROR
+            }
+            Continuation::Quit => crate::command::ids::APP_QUIT,
+            Continuation::Close(_) => crate::command::ids::BUFFER_CLOSE,
+            Continuation::Reopen(..) => crate::command::ids::FILE_REOPEN_WITH_ENCODING,
+        };
+        self.save_doc_then_from(doc_id, cont, command)
+    }
+
+    /// `save_doc_then` の、保存を始めたコマンド (保存時の変換の Transaction の `Origin::Command`、03 §9.3.1 の SVT-5) を
+    /// 指定する版 (`app.save_and_quit`)。
+    pub(crate) fn save_doc_then_from(
+        &mut self,
+        doc_id: DocumentId,
+        cont: Continuation,
+        command: &'static str,
+    ) -> CommandResult {
         if self.document(doc_id).is_none() {
             return CommandResult::Rejected(RejectReason::NoTarget);
         }
@@ -114,6 +134,8 @@ impl EditorState {
             self.ui.continuations.insert(job, cont);
             return CommandResult::Pending(job);
         }
+        // `AskUnsaved` の「保存」は新しい連鎖 (保存の完了の後に出し直したものも。03 §9.3.1 の SVT-4 (c))
+        self.begin_save_chain(doc_id, command);
         // 名前の入力 (無題・読み取り専用) より先に拒否する。後続 (終了・閉じる・開き直し) も行わない (03 §9.7)
         if self.reject_stateful_invalid(doc_id, None) {
             return CommandResult::Rejected(RejectReason::NotAvailable);
@@ -310,6 +332,12 @@ impl EditorState {
             self.open_lossy(ask, kind);
             return CommandResult::Done;
         }
+        // 保存時の変換 (03 §9.3.1): すべての確認の後、書出しのジョブを投入する直前 (Snapshot を取る前) に同期で 1 回だけ
+        // 当てる。この連鎖で判定済み (確認の後の投入し直し) なら当てない。変換で進んだ Revision に承認を引き継ぐ
+        self.apply_save_transform(doc_id, &path);
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         let (encoding, bom, escape) = (
             out_encoding,
             fmt.map_or(doc.format.has_bom, |f| f.bom),
@@ -389,6 +417,7 @@ impl EditorState {
         self.io.pending.insert(
             job,
             Pending::WriteRecovery {
+                doc,
                 path: path.clone(),
                 release: Some(doc),
             },
@@ -431,7 +460,11 @@ impl EditorState {
             self.show_message(MessageLevel::Error, key, args);
             return;
         };
-        let detail = self.message_text(key, args);
+        // 保存時の変換を当てた連鎖なら、変換が本文に残っていることを本文の後ろに付ける (03 §9.3.1 の SVT-8)
+        let detail = match self.save_transform_kept_suffix(ask.doc) {
+            Some(suffix) => format!("{} {suffix}", self.message_text(key, args)),
+            None => self.message_text(key, args),
+        };
         let choice = |id: &'static str, accel: char| ChoiceDef {
             id,
             accel: Some(accel),
@@ -478,6 +511,7 @@ impl EditorState {
                 self.io.pending.insert(
                     job,
                     Pending::WriteRecovery {
+                        doc,
                         path,
                         release: None,
                     },
@@ -492,20 +526,23 @@ impl EditorState {
         }
     }
 
-    /// 「退避先に保存」の結果。文書の状態 (dirty・保存点) は変えない。
-    pub(crate) fn finish_write_recovery(&mut self, path: &FsPath, r: JobResult) {
+    /// 「退避先に保存」の結果。文書の状態 (dirty・保存点) は変えない。保存時の変換が本文に残っていれば付記する (SVT-8)。
+    pub(crate) fn finish_write_recovery(&mut self, doc: DocumentId, path: &FsPath, r: JobResult) {
+        let kept = self.save_transform_kept_suffix(doc);
         match r {
-            JobResult::RecoveryWritten { path: target, .. } => self.show_message(
+            JobResult::RecoveryWritten { path: target, .. } => self.show_message_with_suffix(
                 MessageLevel::Info,
                 keys::INFO_SAVE_TO_RECOVERY,
                 &[("target", &target.display()), ("path", &path.display())],
+                kept.as_deref(),
             ),
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
-                self.show_message(
+                self.show_message_with_suffix(
                     MessageLevel::Error,
                     keys::MSG_SAVE_RECOVERY_FAILED,
                     &[("reason", &reason), ("path", &path.display())],
+                    kept.as_deref(),
                 );
             }
             _ => {}
@@ -842,31 +879,36 @@ impl EditorState {
                 // 直接上書きで書いたことは 1 回示す (03 §9.3 手順 7)。つながりを承認した保存の完了は、`info.save.done` に
                 // 代えて `info.save.escape_merged` にする (03 §8.3.1 の「つながったまま保存した後」)。直接上書きでは
                 // `info.save.in_place` の後に出す (完了の要点を最後に残す)
+                let shown = path.display();
+                let count = job.merged.map(|c| c.to_string()).unwrap_or_default();
+                let mut done: Vec<(&str, Vec<(&str, &str)>)> = Vec::new();
                 if report_method == SaveMethod::InPlace {
-                    self.message(
-                        MessageLevel::Info,
-                        keys::INFO_SAVE_IN_PLACE,
-                        &path.display(),
-                    );
+                    done.push((keys::INFO_SAVE_IN_PLACE, vec![("path", &shown)]));
                 }
                 match job.merged {
-                    Some(count) => self.show_message(
-                        MessageLevel::Info,
+                    Some(_) => done.push((
                         keys::INFO_SAVE_ESCAPE_MERGED,
-                        &[("path", &path.display()), ("count", &count.to_string())],
-                    ),
+                        vec![("path", &shown), ("count", &count)],
+                    )),
                     None if report_method != SaveMethod::InPlace && partial.is_none() => {
-                        self.message(MessageLevel::Info, keys::INFO_SAVE_DONE, &path.display());
+                        done.push((keys::INFO_SAVE_DONE, vec![("path", &shown)]));
                     }
                     None => {}
                 }
                 // 途中までの文書は、つながりの知らせ (`info.save.escape_merged`) を出した後でも、印を外したことを最後に示す
                 if let Some(size) = partial.as_deref() {
-                    self.show_message(
-                        MessageLevel::Info,
+                    done.push((
                         keys::INFO_SAVE_PARTIAL_SAVED,
-                        &[("path", &path.display()), ("size", size)],
-                    );
+                        vec![("path", &shown), ("size", size)],
+                    ));
+                }
+                // 保存時の変換の知らせは、最後に出す完了のメッセージの後ろに 1 つだけ付ける (04 §8.16、03 §9.3.1 の SVT-5 /
+                // SVT-6)。連鎖はここで終わるので印を外す
+                let suffix = self.take_save_transform_suffix(doc_id);
+                let last = done.len().saturating_sub(1);
+                for (i, (key, args)) in done.iter().enumerate() {
+                    let s = if i == last { suffix.as_deref() } else { None };
+                    self.show_message_with_suffix(MessageLevel::Info, key, args, s);
                 }
                 self.show_save_warning(path, &report.warnings);
                 if path_changed {
@@ -1069,11 +1111,18 @@ impl EditorState {
                 // 上書き保存が権限エラーで失敗したら、文書を読み取り専用 (書込権限なし) に切り替える。編集した内容は失われず、
                 // 名前を付けて保存で書ける (FR-116 AC-3、03 §9.6)。名前を付けて保存の失敗では付けない (失敗したのは別のパス)
                 if matches!(&err, JobError::Fs(e) if e.kind == FsErrorKind::PermissionDenied)
-                    && let Some(doc) = self.docs.documents.get_mut(&doc_id)
-                    && doc.path.as_ref() == Some(path)
+                    && self
+                        .docs
+                        .documents
+                        .get(&doc_id)
+                        .is_some_and(|d| d.path.as_ref() == Some(path))
                 {
-                    doc.read_only
-                        .insert(crate::document::ReadOnlyReason::NoWritePermission);
+                    // 読み取り専用にすると変換を Undo で戻せなくなるので、先に戻す (03 §9.3.1 の SVT-8 の例外)
+                    self.revert_save_transform_before_read_only(doc_id);
+                    if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
+                        doc.read_only
+                            .insert(crate::document::ReadOnlyReason::NoWritePermission);
+                    }
                     self.mark_dirty_render();
                 }
                 let ask = self.save_failed_ask(doc_id, path, expected, fmt, cont);
@@ -1131,7 +1180,11 @@ impl EditorState {
                         self.open_dangling_link(ask, link_target)
                     }
                     Some(ask) => self.report_save_failure(Some(ask), key, &args, retry),
-                    None => self.show_message(level, key, &args),
+                    // 取消し (`info.save.aborted`) など確認を出さない失敗も、変換が本文に残っていれば付記する (SVT-8)
+                    None => {
+                        let kept = self.save_transform_kept_suffix(doc_id);
+                        self.show_message_with_suffix(level, key, &args, kept.as_deref());
+                    }
                 }
             }
             _ => {}

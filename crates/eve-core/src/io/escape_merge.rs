@@ -268,11 +268,14 @@ impl EditorState {
             .documents
             .get(&ask.doc)
             .map(crate::document::Document::revision);
+        // 保存時の変換が本文に残っていれば付記する (03 §9.3.1 の SVT-8)
+        let kept = self.save_transform_kept_suffix(ask.doc);
         if current != Some(ask.base) {
-            self.show_message(
+            self.show_message_with_suffix(
                 MessageLevel::Info,
                 keys::INFO_SAVE_ABORTED,
                 &[("path", &ask.path.display())],
+                kept.as_deref(),
             );
             return;
         }
@@ -294,10 +297,11 @@ impl EditorState {
         }
         let count = marks.len();
         self.set_marks(ask.doc, marks);
-        self.show_message(
+        self.show_message_with_suffix(
             MessageLevel::Info,
             keys::INFO_SAVE_ESCAPE_MERGE_CANCELLED,
             &[("count", &count.to_string())],
+            kept.as_deref(),
         );
     }
 }

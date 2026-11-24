@@ -73,13 +73,20 @@ fn 仕様の例のファイルを仕様どおりに読む() {
     let f = parse_editorconfig(SPEC_EXAMPLE);
     assert!(f.root());
     assert_eq!(f.section_count(), 6);
-    // insert_final_newline は v0.5 で写さない (未対応の情報診断)
-    assert_eq!(f.diagnostics().len(), 1);
-    assert_eq!(f.diagnostics()[0].kind, DiagKind::Unsupported);
-    assert_eq!(f.diagnostics()[0].key, "insert_final_newline");
-    assert_eq!(f.diagnostics()[0].line, 7);
+    // insert_final_newline は M34 の段 3 から写す (診断なし)。写さないプロパティの例は max_line_length
+    assert_eq!(f.diagnostics(), []);
+    let m = parse_editorconfig("[*]\nmax_line_length = 80\n");
+    assert_eq!(m.diagnostics().len(), 1);
+    assert_eq!(m.diagnostics()[0].kind, DiagKind::Unsupported);
+    assert_eq!(m.diagnostics()[0].key, "max_line_length");
+    assert_eq!(m.diagnostics()[0].line, 2);
 
     let py = one(SPEC_EXAMPLE, "src/a.py");
+    assert_eq!(
+        py.insert_final_newline.as_ref().map(|v| v.0),
+        Some(true),
+        "[*] の insert_final_newline"
+    );
     assert_eq!(unit(&py), Some(IndentUnit::Space));
     assert_eq!(width(&py), Some(EcWidth::Width(4)));
     assert_eq!(tab(&py), Some(4), "tab_width は indent_size の値");
@@ -203,7 +210,7 @@ fn 近いファイルと後のセクションが勝ち_unset_は取り消す() {
 
 #[test]
 fn 誤った値と写さないプロパティの診断() {
-    let text = "root = maybe\n[*]\nindent_style = tabs\nindent_size = 17\ntab_width = -1\nend_of_line = lfcr\ncharset = latin1\nmax_line_length = 80\ntrim_trailing_whitespace = true\nspelling_language = en\nij_any = 1\n";
+    let text = "root = maybe\n[*]\nindent_style = tabs\nindent_size = 17\ntab_width = -1\nend_of_line = lfcr\ncharset = latin1\nmax_line_length = 80\ntrim_trailing_whitespace = yes\nspelling_language = en\nij_any = 1\n";
     let f = parse_editorconfig(text);
     let got: Vec<(String, String, u32, Severity)> = f
         .diagnostics()
@@ -222,7 +229,7 @@ fn 誤った値と写さないプロパティの診断() {
             ("end_of_line".into(), "lfcr".into(), 6, w),
             ("charset".into(), "latin1".into(), 7, i),
             ("max_line_length".into(), String::new(), 8, i),
-            ("trim_trailing_whitespace".into(), String::new(), 9, i),
+            ("trim_trailing_whitespace".into(), "yes".into(), 9, w),
         ]
     );
     assert_eq!(
@@ -324,4 +331,40 @@ fn 誤った値の許される値と理由の名前() {
         "bad_glob"
     );
     assert!(EditorConfigValues::default().is_empty());
+}
+
+// verifies: AC-FR-216-1
+#[test]
+fn 保存時の変換の_2_つのプロパティを写し_unset_と誤った値は取り消す() {
+    let trim = |v: &EditorConfigValues| v.trim_trailing_whitespace.as_ref().map(|t| t.0);
+    let fin = |v: &EditorConfigValues| v.insert_final_newline.as_ref().map(|t| t.0);
+    let v = one(
+        "[*]\ntrim_trailing_whitespace = TRUE\ninsert_final_newline = false\n",
+        "a.txt",
+    );
+    assert_eq!((trim(&v), fin(&v)), (Some(true), Some(false)));
+    assert!(!v.is_empty());
+    let o = v.trim_trailing_whitespace.as_ref().map(|t| t.1.clone());
+    assert_eq!(o.map(|o| (o.line, o.section)), Some((2, "*".to_owned())));
+    // 近いファイルの unset・誤った値は、それまでに重ねた値を取り消す (§10.1)
+    let v = values(&[
+        (
+            "/.editorconfig",
+            "[*]\ntrim_trailing_whitespace = true\ninsert_final_newline = true\n",
+            "p/a.txt",
+        ),
+        (
+            "/p/.editorconfig",
+            "[*]\ntrim_trailing_whitespace = unset\ninsert_final_newline = 1\n",
+            "a.txt",
+        ),
+    ]);
+    assert_eq!((trim(&v), fin(&v)), (None, None));
+    let f = parse_editorconfig("[*]\ninsert_final_newline = 1\n");
+    assert_eq!(
+        f.diagnostics()[0].kind,
+        DiagKind::EditorConfig(EditorConfigProblem::InvalidValue {
+            allowed: vec!["true".into(), "false".into(), "unset".into()]
+        })
+    );
 }

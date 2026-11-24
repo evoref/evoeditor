@@ -106,6 +106,12 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             None,
             "1 MB の各行の行頭のカーソルで 1 文字の入力 → Frame (core 区間。BM-103a と同じ測り方)",
         ),
+        // v0.5 の M34 の段 3: 保存時の変換 (01 FR-216 AC-3。判定しない。打鍵の予算 NFR-103 と比べて上限を見直す材料)
+        id if id.starts_with("BM-216-") => t(
+            "(参考) 判定しない",
+            None,
+            "1 MiB の上限の文書の file.save の同期の区間 (変換の判定・作成・適用と保存ジョブの投入。-off は変換なし)",
+        ),
         "BM-103b" => t(
             "p50 2 ms / p99 8 ms",
             limits(v, 2.0, 8.0),

@@ -1,4 +1,5 @@
-//! 組込みの言語定義 (`eve_config::BUILTIN_LANGUAGES`) が 07 §9.6.1 の表 (1 行 1 言語、LANG-1 の正本) と一致すること。どの
+//! 組込みの言語定義 (`eve_config::BUILTIN_LANGUAGES`) が 07 §9.6.1 の表 (1 行 1 言語、LANG-1 の正本。最後の列
+//! `trim_trailing_whitespace_on_save` は v0.5 の M34 の段 3 から読む) と一致すること。どの
 //! 2 つの組込みの言語も同じ `file_types`・`file_names` を持たないこと。
 //! 表は `eve-docs-tables` で読む (docs/11 §8.5。`config_reserved` と同じ形。eve-config は `eve-docs-tables` に依存しない)。
 
@@ -23,7 +24,7 @@ fn unit_name(u: Option<IndentUnit>) -> Vec<String> {
     }
 }
 
-// verifies: AC-FR-704-1
+// verifies: AC-FR-704-1, AC-FR-216-1
 #[test]
 fn 組込みの言語定義は_07_の_9_6_1_の表と一致する() {
     let body = section(
@@ -49,6 +50,7 @@ fn 組込みの言語定義は_07_の_9_6_1_の表と一致する() {
                 cell(t, r, "first_line"),
                 cell(t, r, "comment.line"),
                 cell(t, r, "indent.unit"),
+                cell(t, r, "trim_trailing_whitespace_on_save"),
             ],
         ));
     }
@@ -65,6 +67,10 @@ fn 組込みの言語定義は_07_の_9_6_1_の表と一致する() {
                     b.first_line.map(str::to_owned).into_iter().collect(),
                     b.comment_line.map(str::to_owned).into_iter().collect(),
                     unit_name(b.indent_unit),
+                    b.trim_trailing_whitespace_on_save
+                        .map(|v| v.to_string())
+                        .into_iter()
+                        .collect(),
                 ],
             )
         })

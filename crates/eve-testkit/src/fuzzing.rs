@@ -960,6 +960,33 @@ fn text_transform_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("text_transform {id} ranges {n} typed {typed} undo {undo}")
 }
 
+/// 保存時の変換の設定を切り替えて保存する (docs/03 §9.3.1、§15.9.1 の fuzz。v0.5 の M34 の段 3)。2 つの設定
+/// (`editor.trim_trailing_whitespace_on_save`・`editor.insert_final_newline_on_save`) を引数で選んで設定に入れ、
+/// `file.save` してジョブを走らせ、ときどき Undo する。保存の検査 (d) は、変換を当てた本文 (バッファ) と書いたバイト列が
+/// 一致することを確かめる (変換はバッファにも当たる、§8.5)。
+#[allow(
+    clippy::disallowed_methods,
+    reason = "設定を差し替えるコマンドが無いので、testkit は EditorState に直接触れる (STR-B3)"
+)]
+fn save_transform_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    let x = b.u8();
+    let (trim, final_newline) = (x & 1 != 0, x & 2 != 0);
+    let config = eve_config::Config {
+        trim_trailing_whitespace_on_save: trim,
+        insert_final_newline_on_save: final_newline,
+        ..h.editor.state().config().clone()
+    };
+    h.editor.state_mut().set_config(config);
+    h.cmd("file.save");
+    h.run_jobs();
+    let undo = x & 4 != 0;
+    if undo {
+        h.cmd("edit.undo");
+    }
+    let _ = h.frame();
+    format!("save_transform trim {trim} final_newline {final_newline} undo {undo}")
+}
+
 /// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
 /// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
 /// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは `cmd` の一覧の外の操作 26 で選ぶ)。
@@ -1179,7 +1206,7 @@ pub fn editor_sequence(data: &[u8]) {
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
         // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
-        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で選ぶ
+        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で、保存時の変換 (M34) は操作 31 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1221,7 +1248,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 31 {
+        match b.u8() % 32 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1398,6 +1425,11 @@ pub fn editor_sequence(data: &[u8]) {
             30 => {
                 // 選択の拡張 (v0.5 の M34 の段 5。docs/03 §5.7)
                 let what = select_expand_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            31 => {
+                // 保存時の変換の設定を切り替えて保存 (v0.5 の M34 の段 3。docs/03 §9.3.1)
+                let what = save_transform_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {
