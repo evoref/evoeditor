@@ -3,6 +3,7 @@
 
 use eve_config::{BackspaceUnit, Config};
 use eve_testkit::Harness;
+use eve_text::{ByteOff, Range, Selection};
 
 /// 本文を入れた無題の文書。カーソルは文書の先頭。
 fn doc(text: &str) -> Harness {
@@ -69,6 +70,73 @@ fn インデントの後も行全体を選んだまま() {
     // 選択はまだ 2 行にまたがっている: もう一度インデントすると 2 行とも 8 桁になる
     h.cmd("edit.indent");
     assert_eq!(h.doc_text(), "        a\n        b\n");
+}
+
+fn set_ranges(h: &mut Harness, ranges: &[(usize, usize)]) {
+    let rs = ranges
+        .iter()
+        .map(|&(a, b)| Range::new(ByteOff(a), ByteOff(b)))
+        .collect();
+    let v = h
+        .editor
+        .state()
+        .window_view(h.window())
+        .expect("View がある");
+    h.editor
+        .state_mut()
+        .set_selection(v, Selection::new(rs, 0).expect("Selection"));
+}
+
+fn ranges(h: &Harness) -> Vec<(usize, usize)> {
+    let v = h
+        .editor
+        .state()
+        .window_view(h.window())
+        .expect("View がある");
+    h.editor
+        .state()
+        .view(v)
+        .expect("View がある")
+        .selection
+        .iter()
+        .map(|r| (r.anchor.0, r.head.0))
+        .collect()
+}
+
+// 03 §15.4 の下の箇条 (Issue #630): 空のカーソルは行コメントの切替 (CMT-5 の細目 (b)) と同じく、行頭 (列 0) なら列 0 の
+// まま、ほかは自分の編集の後ろへ写す (足した字下げを選んだ選択に変わらない)
+#[test]
+fn インデントでは行頭の空のカーソルは行頭のまま_ほかは字下げの後ろへ() {
+    let mut h = doc("ab\ncd\n");
+    // 1 行目の `a` を選んだ Range と、2 行目の行頭の空のカーソル (Issue #630 の再現)
+    set_ranges(&mut h, &[(0, 1), (3, 3)]);
+    h.cmd("edit.indent");
+    assert_eq!(h.doc_text(), "    ab\n    cd\n");
+    assert_eq!(ranges(&h), [(0, 5), (7, 7)]);
+    // 行の途中の空のカーソルは、字下げの分だけ後ろへ (空のまま)
+    let mut h = doc("ab\ncd\n");
+    set_ranges(&mut h, &[(0, 1), (4, 4)]);
+    h.cmd("edit.indent");
+    assert_eq!(ranges(&h), [(0, 5), (12, 12)]);
+    // 1 回の Undo で本文と選択が戻る
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "ab\ncd\n");
+    assert_eq!(ranges(&h), [(0, 1), (4, 4)]);
+}
+
+#[test]
+fn アンインデントでも空のカーソルは空のまま() {
+    // 2 行目の行頭の空のカーソル
+    let mut h = doc("    ab\n    cd\n");
+    set_ranges(&mut h, &[(0, 1), (7, 7)]);
+    h.cmd("edit.outdent");
+    assert_eq!(h.doc_text(), "ab\ncd\n");
+    assert_eq!(ranges(&h), [(0, 0), (3, 3)]);
+    // 字下げの途中 (消した範囲の始まりへ寄る) と、`c` の後ろ (消した分だけ前へ)
+    let mut h = doc("    ab\n    cd\n");
+    set_ranges(&mut h, &[(0, 1), (9, 9), (12, 12)]);
+    h.cmd("edit.outdent");
+    assert_eq!(ranges(&h), [(0, 0), (3, 3), (4, 4)]);
 }
 
 #[test]

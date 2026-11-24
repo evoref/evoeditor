@@ -126,9 +126,27 @@ pub(super) fn commit(
     }
 }
 
-/// 元の Range を、向きを保って写す: 始まりは前寄り、終わりは後ろ寄りに (行全体を選んでいれば行全体のまま)。
-fn map_range(r: &Range, cs: &ChangeSet) -> Range {
+/// 各 Range の位置 (`head`) が行頭 (列 0) か。行の編集の前の本文で調べ、[`map_range`] に渡す。
+pub(crate) fn heads_at_line_start(t: &impl TextRead, sel: &Selection) -> Vec<bool> {
+    sel.iter()
+        .map(|r| t.line_to_byte(t.byte_to_line(r.head)) == r.head)
+        .collect()
+}
+
+/// 行の編集 (インデント / アンインデント・行コメントの切替) の後の Range (03 §15.4 の下の箇条、§15.6 の CMT-5 の細目 (b))。
+/// 空でない Range は、向きを保って始まりを前寄り・終わりを後ろ寄りに写す (行全体を選んでいれば行全体のまま)。空のカーソルは
+/// 自分の編集の後ろへ写す (`MapPolicy::Own`) が、行頭 (列 0) のものは列 0 に留める (足した字下げ・記号を選んだ選択に
+/// 変えない)。`at_line_start` は編集の前の本文で調べた値 ([`heads_at_line_start`])。
+pub(crate) fn map_range(r: &Range, at_line_start: bool, cs: &ChangeSet) -> Range {
     use eve_text::Bias;
+    if r.is_empty() {
+        let bias = if at_line_start {
+            Bias::Before
+        } else {
+            Bias::After
+        };
+        return Range::point(cs.map_pos(r.head, bias));
+    }
     let (start, end) = (
         cs.map_pos(r.start(), Bias::Before),
         cs.map_pos(r.end(), Bias::After),
@@ -164,8 +182,12 @@ pub(crate) fn indent_lines(ctx: &mut CommandCtx<'_>, unit: &str) -> CommandResul
             }
         }
     }
+    let at_line_start = heads_at_line_start(t, &sel);
     commit(ctx, ids::EDIT_INDENT, edits, move |_, cs| {
-        sel.iter().map(|r| map_range(r, cs)).collect()
+        sel.iter()
+            .zip(&at_line_start)
+            .map(|(r, &s)| map_range(r, s, cs))
+            .collect()
     })
 }
 
@@ -195,8 +217,12 @@ pub(crate) fn outdent_lines(
             }
         }
     }
+    let at_line_start = heads_at_line_start(t, &sel);
     commit(ctx, ids::EDIT_OUTDENT, edits, move |_, cs| {
-        sel.iter().map(|r| map_range(r, cs)).collect()
+        sel.iter()
+            .zip(&at_line_start)
+            .map(|(r, &s)| map_range(r, s, cs))
+            .collect()
     })
 }
 
