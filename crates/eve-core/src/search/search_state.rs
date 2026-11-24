@@ -920,7 +920,10 @@ impl EditorState {
         let Some(view) = self.focused_view() else {
             return;
         };
+        // 検索の移動の前の位置をジャンプ履歴に記録する (検索バーを開いている間は最初の移動だけ、03 §5.9 の JMP-1 (b))
+        let jump = self.search_jump_mark(view);
         self.set_selection(view, Selection::single(Range::new(m.start, m.end)));
+        self.commit_search_jump(jump);
         self.ensure_cursor_visible(view);
         if wrapped {
             let key = if forward {

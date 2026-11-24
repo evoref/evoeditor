@@ -165,7 +165,12 @@ impl EditorState {
             self.show_message(MessageLevel::Info, keys::INFO_PANE_NO_ROOM, &[]);
             return CommandResult::Done;
         }
-        let Some((src, recent)) = win.panes.get(&p).map(|x| (x.view, x.recent.clone())) else {
+        // 新しいペインは元のペインの最近使った順とジャンプ履歴を写す (03 §5.9 の JMP-2)
+        let Some((src, recent, jumps)) = win
+            .panes
+            .get(&p)
+            .map(|x| (x.view, x.recent.clone(), x.jumps.clone()))
+        else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let before = win.layout(size);
@@ -187,6 +192,7 @@ impl EditorState {
                 view,
                 views: BTreeMap::from([(doc, view)]),
                 recent,
+                jumps,
             },
         );
         self.focus_pane((w, new));

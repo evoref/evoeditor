@@ -1286,7 +1286,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.16 編集の拡張 (Could) の文言の案 (v0.5 の M34)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。段 8 の PR で、ジャンプ履歴の文言 (`cmd.cursor.jump_back` / `cmd.cursor.jump_forward`・`info.jump.no_back` / `info.jump.no_forward`) を同じく移した。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
 
 **完了のメッセージと付記** (保存時の変換。03 §9.3.1 の SVT-5 / SVT-6 / SVT-8): 変換の知らせは独立のメッセージにせず、**その保存で最後に出す完了のメッセージの後ろに 1 つだけ付記する**。完了のメッセージの選び方は今のまま (`info.save.done`。つながりを承認した保存の成功は `info.save.escape_merged`、途中まで読んだ標準入力の文書は `info.save.partial_saved` が代わりに出る。直接上書きでは `info.save.in_place` が先に出て、続く完了のメッセージが最後)。付記は、変換で本文が変わったら `info.save.suffix.transformed`、設定は真だが 1 MiB を超えて変換しなかったら `info.save.suffix.transform_skipped_large` (2 つは同時に起きない)。`info.save.escape_merged` は要点が先頭にあるので、付記は後ろに足して先頭の要点を崩さない (80 桁を超えたら、メッセージ行の今の省略の規則で後ろから切る。全文はメッセージ履歴で読める)。書けずに終わったときは、失敗・中止のメッセージに `info.save.suffix.transform_kept` を付ける (完了の付記とは同時に起きない)。全保存の要約には `info.save_all.suffix.transformed` を付ける。
 
@@ -2021,6 +2021,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.comment.no_lines` (v0.5) | `edit.toggle_comment` で、対象の行が空行と空白だけの行だけ (CMT-1。文書は変えない) | コメントにする行がありません |
 | `info.transform.unchanged` (v0.5) | テキスト変換 (`edit.transform_*`・`edit.sort_lines_*`・`edit.trim_trailing_whitespace`) で本文が変わらなかった (03 §15.8 の TXT-5。Transaction を作らない) | 変更する箇所はありませんでした |
 | `info.transform.sort_skipped_cr_lf` (v0.5) | 並べ替えで、並べ替えると空になる行で単独の CR と単独の LF が隣り合うので、並べ替えなかったブロックがあった (03 §15.8 の TXT-3) | 並べ替えると改行 (CR と LF) がつながる範囲は並べ替えませんでした |
+| `info.jump.no_back` (v0.5) | `cursor.jump_back` で、ジャンプ履歴に今より前の位置が無い (今と同じ文書の同じ行の項目だけのときを含む。何もしない。03 §5.9 の JMP-3。M34 の段 8) | 戻る位置はありません |
+| `info.jump.no_forward` (v0.5) | `cursor.jump_forward` で、ジャンプ履歴に今より後ろの位置が無い (まだ戻っていないときを含む。何もしない。JMP-3) | 進む位置はありません |
 | `msg.transform.stale` (v0.5) | 1 MiB を超える対象の変換のジョブを待つ間に編集が続き、作り直しも古かった (03 §15.8 の TXT-6。文書は変わらない) | 編集が続いたため、変換しませんでした / 入力を止めてから、もう一度実行してください |
 | `msg.transform.target_gone` (v0.5) | 変換のジョブを待つ間の編集で、対象の範囲が 1 つでも消えた (Range の長さが 0 になった・ブロックの行が残らない・区切りだけが残った)、または待つ間にその文書の再読込を始めた (TXT-6。文書は変わらない) | 変換する範囲が編集で無くなったため、変換しませんでした / 範囲を選び直して、もう一度実行してください |
 | `msg.transform.failed` (v0.5) | 変換のジョブが失敗した (一時の領域の確保の失敗・パニック。TXT-6。文書は変わらない) | 変換できませんでした (メモリが足りない可能性があります) / 対象を小さく選んで実行してください |

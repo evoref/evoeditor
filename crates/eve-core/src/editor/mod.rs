@@ -73,6 +73,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::view::multi_cursor::register(&mut r);
     crate::view::bracket::register(&mut r);
     crate::view::select_expand::register(&mut r);
+    crate::view::jump::register(&mut r);
     crate::io::file_cmds::register(&mut r);
     crate::io::external::register(&mut r);
     buffer::register(&mut r);

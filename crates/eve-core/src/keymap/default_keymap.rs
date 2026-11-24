@@ -267,6 +267,16 @@ pub(crate) fn default_keymap() -> Keymap {
     ] {
         bind("editor", keys, cmd);
     }
+    // ジャンプ履歴 (v0.5 の M34、FR-310。07 §11.6 の「編集の拡張」。規則は 03 §5.9 の JMP-1〜JMP-7)。繰り返して押す操作なので、
+    // 1 打の `alt` + 文字と、全端末で届くチョードの代替の両方を持つ (2 打目に `shift` を使わない)
+    for (keys, cmd) in [
+        ("alt+j", "cursor.jump_back"),
+        ("alt+k", "cursor.jump_forward"),
+        ("ctrl+k j", "cursor.jump_back"),
+        ("ctrl+k k", "cursor.jump_forward"),
+    ] {
+        bind("editor", keys, cmd);
+    }
     // チョードの代替キー ((alt))
     for (keys, cmd) in [
         ("ctrl+k left", "cursor.home"),

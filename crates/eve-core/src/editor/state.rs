@@ -729,6 +729,8 @@ impl EditorState {
         }
         self.docs.documents.insert(id, doc);
         self.clamp_views_of(id);
+        // ジャンプ履歴の項目も新しい本文に収める (03 §5.9 の JMP-4)
+        self.settle_jumps_of(id);
         // 言語 (読込の完了で初めて判定する。再読込・開き直しは前の言語を保つ、07 §9.6 の LANG-7) と文書ごとの値
         self.settle_language(id);
     }
@@ -1011,6 +1013,10 @@ impl EditorState {
             .documents
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
+        // 本文を丸ごと置き換える再読込は、ジャンプ履歴を前後の本文の同じ行:桁で写す (03 §5.9 の JMP-4)。前の本文を
+        // 持っておく (`Snapshot` は木を共有するので O(1))
+        let before =
+            matches!(tx.origin, crate::document::Origin::Reload).then(|| document.snapshot());
         match document.apply(&tx)? {
             AppliedTx::Identity { selection } => {
                 // 変更なし: 発行 View の Selection だけを更新する (goal_dcol は編集と同じく解除)
@@ -1021,7 +1027,7 @@ impl EditorState {
             }
             AppliedTx::Changed(applied) => {
                 let rev = applied.revision;
-                self.after_change(doc, &applied, tx.view);
+                self.after_change(doc, &applied, tx.view, before.as_ref());
                 Ok(rev)
             }
         }
@@ -1039,9 +1045,11 @@ impl EditorState {
             .documents
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
+        // 再読込のノードの Undo は本文を丸ごと置き換える (ジャンプ履歴を同じ行:桁で写す、03 §5.9 の JMP-4)
+        let before = document.snapshot();
         let applied = document.undo()?;
         Ok(applied
-            .map(|a| self.after_history_step(doc, &a, view))
+            .map(|a| self.after_history_step(doc, &a, view, &before))
             .is_some())
     }
 
@@ -1056,9 +1064,10 @@ impl EditorState {
             .documents
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
+        let before = document.snapshot();
         let applied = document.redo()?;
         Ok(applied
-            .map(|a| self.after_history_step(doc, &a, view))
+            .map(|a| self.after_history_step(doc, &a, view, &before))
             .is_some())
     }
 
@@ -1066,13 +1075,19 @@ impl EditorState {
     /// 選択を戻す。表示中でなければ (別の文書に切り替えたペインの表に残っているだけ・ペインに属さない) 写像だけ。ノードに
     /// View が無い (View を指さずに適用した) ときは、実行した View `by` を発行 View とみなす。実行した View が発行 View で
     /// なければ、その選択は写像だけで、戻した変更の先頭が見えるようにスクロールだけする。
-    fn after_history_step(&mut self, doc: DocumentId, a: &Applied, by: Option<ViewId>) {
+    fn after_history_step(
+        &mut self,
+        doc: DocumentId,
+        a: &Applied,
+        by: Option<ViewId>,
+        before: &eve_text::Snapshot,
+    ) {
         let issuer = match a.view {
             None => by,
             Some(v) if self.pane_of_shown_view(v).is_some() => Some(v),
             Some(_) => None,
         };
-        self.after_change(doc, a, issuer);
+        self.after_change(doc, a, issuer, Some(before));
         if let Some(by) = by.filter(|b| Some(*b) != issuer)
             && let Some((_, after)) = a.changes.changed_ranges().next()
         {
@@ -1120,7 +1135,14 @@ impl EditorState {
         }
     }
 
-    fn after_change(&mut self, doc: DocumentId, a: &Applied, issuer: Option<ViewId>) {
+    /// `before` は適用の前の本文 (再読込とその Undo / Redo のジャンプ履歴の写像に使う。ほかの変更では使わない)。
+    fn after_change(
+        &mut self,
+        doc: DocumentId,
+        a: &Applied,
+        issuer: Option<ViewId>,
+        before: Option<&eve_text::Snapshot>,
+    ) {
         // 履歴の予算による破棄は、文書ごとに 1 回だけ通知する (03 §7.5)
         if a.record.as_ref().is_some_and(|r| r.pruned) && self.io.trim_notified.insert(doc) {
             self.show_message(
@@ -1134,6 +1156,14 @@ impl EditorState {
         self.map_search_scope(doc, &a.changes);
         // 待っているテキスト変換の対象の範囲も写像する (作り直しに使う、03 §15.8 の TXT-6)
         self.map_text_transform(doc, &a.changes);
+        // 全ペインのジャンプ履歴の項目も写像する (03 §5.9 の JMP-4)。本文を丸ごと置き換える再読込 (その Undo / Redo を
+        // 含む) は、前後の本文の同じ行:桁で写す (§9.5。全置換の ChangeSet で写すと先頭に潰れる)
+        match before {
+            Some(old) if matches!(a.origin, crate::document::Origin::Reload) => {
+                self.remap_jumps_line_col(doc, old);
+            }
+            _ => self.map_jumps(doc, &a.changes),
+        }
         // 行をまたぐ検索の再開の位置も、編集した行より前のものだけを残す (03 §12.3.1)
         self.map_search_marks(doc, &a.changes, a.old_revision);
         let Some(document) = self.docs.documents.get(&doc) else {

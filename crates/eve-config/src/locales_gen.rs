@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1113 件)。
+/// `locales/en.toml` の文言 (1119 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -49,6 +49,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.cursor.goto_line.title"), B("Go to Line")),
     (B("cmd.cursor.home.description"), B("Move the cursor to the start of the line.")),
     (B("cmd.cursor.home.title"), B("Go to Line Start")),
+    (B("cmd.cursor.jump_back.description"), B("Go back to where you were before a jump (go to line, search, switching files)")),
+    (B("cmd.cursor.jump_back.title"), B("Jump Back")),
+    (B("cmd.cursor.jump_forward.description"), B("Go forward again after jumping back")),
+    (B("cmd.cursor.jump_forward.title"), B("Jump Forward")),
     (B("cmd.cursor.move_down.description"), B("Move the cursor down one line.")),
     (B("cmd.cursor.move_down.title"), B("Move Down")),
     (B("cmd.cursor.move_left.description"), B("Move the cursor left.")),
@@ -296,6 +300,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.hint_bar.hidden"), B("The hint bar is hidden (its line is used for the text)")),
     (B("info.hint_bar.shown"), B("The hint bar is shown")),
     (B("info.history.copied"), B("Copied {count} messages")),
+    (B("info.jump.no_back"), B("No earlier position")),
+    (B("info.jump.no_forward"), B("No later position")),
     (B("info.lang.changed"), B("Language set to {language}")),
     (B("info.leftover.deleted"), B("Deleted the leftover of {path}")),
     (B("info.leftover.restored"), B("Restored {path}")),
@@ -1126,7 +1132,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1113 件)。
+/// `locales/ja.toml` の文言 (1119 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1167,6 +1173,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.cursor.goto_line.title"), B("行へ移動")),
     (B("cmd.cursor.home.description"), B("カーソルを行の先頭へ動かします。")),
     (B("cmd.cursor.home.title"), B("行頭へ移動")),
+    (B("cmd.cursor.jump_back.description"), B("行へ移動・検索・ファイルの切り替えなどの前にいた位置へ戻ります")),
+    (B("cmd.cursor.jump_back.title"), B("前の位置へ戻る")),
+    (B("cmd.cursor.jump_forward.description"), B("戻った位置から進みます")),
+    (B("cmd.cursor.jump_forward.title"), B("次の位置へ進む")),
     (B("cmd.cursor.move_down.description"), B("カーソルを下の行へ動かします。")),
     (B("cmd.cursor.move_down.title"), B("下へ移動")),
     (B("cmd.cursor.move_left.description"), B("カーソルを左へ動かします。")),
@@ -1414,6 +1424,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.hint_bar.hidden"), B("ヒントバーを隠しました (その行を本文に使います)")),
     (B("info.hint_bar.shown"), B("ヒントバーを表示しました")),
     (B("info.history.copied"), B("{count} 件のメッセージをコピーしました")),
+    (B("info.jump.no_back"), B("戻る位置はありません")),
+    (B("info.jump.no_forward"), B("進む位置はありません")),
     (B("info.lang.changed"), B("言語を {language} にしました")),
     (B("info.leftover.deleted"), B("{path} の後始末として削除しました")),
     (B("info.leftover.restored"), B("{path} を元に戻しました")),

@@ -608,8 +608,11 @@ impl EditorState {
             }
         }
         if moved && let Some(sel) = Selection::new(out, primary) {
+            // 主の Range が動いたら、動く前の位置をジャンプ履歴に記録する (03 §5.9 の JMP-1 (a))
+            let jump = self.jump_mark(view_id);
             // 選択を解き、目標の列を消す (03 §5.2 の水平移動と同じ)。同じ位置になった Range は併合する
             self.set_selection(view_id, sel);
+            self.commit_jump(jump);
             self.ensure_cursor_visible(view_id);
         }
         let key = match primary_lookup {

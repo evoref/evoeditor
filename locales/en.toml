@@ -64,6 +64,14 @@ title = "Go to Line"
 description = "Move the cursor to the start of the line."
 title = "Go to Line Start"
 
+[cmd.cursor.jump_back]
+description = "Go back to where you were before a jump (go to line, search, switching files)"
+title = "Jump Back"
+
+[cmd.cursor.jump_forward]
+description = "Go forward again after jumping back"
+title = "Jump Forward"
+
 [cmd.cursor.move_down]
 description = "Move the cursor down one line."
 title = "Move Down"
@@ -558,6 +566,10 @@ clamped = "There is no line {line}. Moved to the last line ({last})"
 
 [info.history]
 copied = "Copied {count} messages"
+
+[info.jump]
+no_back = "No earlier position"
+no_forward = "No later position"
 
 [info.hint_bar]
 hidden = "The hint bar is hidden (its line is used for the text)"
