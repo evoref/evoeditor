@@ -325,7 +325,8 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
    - 失敗の扱い (Unix): 警告 (SaveWarning::FsyncFailed) として SaveReport に積み、保存を続けるのは FS が fsync を受け付けない
      (EINVAL / ENOTSUP / EOPNOTSUPP / ENOSYS。ネットワーク FS 等) ときだけ。それ以外 (EIO・ENOSPC・EDQUOT 等。データがディスクに届いていない恐れ) は
      置換に進まず、一時ファイルを消して T を残したまま FsError を返す (手順 8。docs/review/v0.3-findings.md の SAF-46)
-3b. **一時ファイルのハンドルを閉じる** (Windows では開いたまま ReplaceFileW を呼ぶと共有違反になる。Unix でも fd を閉じてから rename する)
+3b. **一時ファイルのハンドルを閉じる** (Windows では開いたまま ReplaceFileW を呼ぶと共有違反になる。Unix でも fd を閉じてから rename する)。
+    閉じる前にそのハンドルで tmp の FileId を控え、閉じた後に tmp の mtime を控える (手順 7 の「控える値」)
 4. 権限・属性の複製 (§5.1)  — 失敗は警告。所有者は手順 1b で T と同じにしてある (保てなければ 1b で AtomicUnsupported) ので、ここではグループと mode だけを扱う。
    v0.1 (Windows) は READONLY・HIDDEN・SYSTEM 属性のみ (所有者・ACL・ADS は ReplaceFileW が保つ分)。Unix の mode / 所有者は v0.2 (macOS / Linux 出荷時)。
    Unix の xattr・ACL と macOS の UF_HIDDEN の明示的な複製は v0.2 (FR-106)
@@ -344,12 +345,34 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 6. ディレクトリ fsync — FsyncLevel::Full / FileOnly のとき (None では行わない)。Unix のみ、v0.2。Windows は不可・不要で、どの水準でもディレクトリを flush しない。
    失敗は警告 (SaveWarning::FsyncFailed) で、保存は成功として返す。
    FileOnly と Full の動作は今は同じ (どちらも手順 3 と手順 6 を行う。Windows ではどちらも手順 3 の FlushFileBuffers だけ) で、値を分けているのは OQ-77 (FsKind::Network の既定を緩めるか) の検討のために残した区別である
-7. 事後: metadata(T) を取り直し SaveReport.new_stamp (FileStamp。hash は書いた内容から計算済み) に入れる。FileId が変わること (Unix では必ず変わる) を core に伝え、監視 (§12) の自己イベント抑制に使う。
-   **置換の後の T が自分の書いたものかを FileId で確かめる**: 手順 3b でハンドルを閉じる前に tmp の FileId (と len) を控えておき、事後の metadata(T) の FileId が
-   それと一致しなければ (置換から事後の metadata までの間に他のプロセスが T を置き換えた。ReplaceFileW では置換後の T は tmp の FileId を持つ (§5.4、S-09 で確認)。
-   新規ファイルの MoveFileExW も同じ)、事後の値を new_stamp に入れない。new_stamp には自分の書いた内容の値 (tmp の FileId・len・hash、mtime は控えた値) を入れ、
-   SaveWarning (保存の直後に他のプログラムが変更した可能性) を積む。core の disk_stamp がディスクの T と一致しないので、次の保存は照合 (手順 0b) で Conflict になり、
-   外部変更として利用者に確認される (黙って上書きしない)。直接上書き (§4.4) では FileId は変わらないので、手順 1 の FileId と一致することを同じ規則で確かめる
+7. 事後: metadata(T) を取り直し、置換の後の T が自分の書いたものかを下の規則で確かめてから SaveReport.new_stamp (FileStamp。hash は書いた内容から計算済み) に入れる。
+   FileId が変わること (Unix では必ず変わる) を core に伝え、監視 (§12) の自己イベント抑制に使う。
+   **控える値**: 手順 3b でハンドルを閉じる前に、そのハンドルで tmp の FileId を控え、手順 2 で書いたバイト数を len として控える。mtime は閉じた後に tmp をパスで取り直して控える
+   (Windows の FAT / exFAT はハンドルを閉じるときに更新時刻を付け直すので、閉じる前の値は置換の後の T と合わない。2026-11-24 に exFAT で実測。取り直した tmp の FileId と len が
+   控えた値と違えば mtime は控えない)。ハンドルで FileId を取れなかったときは、閉じた後にパスで取り直した tmp の FileId を控える (metadata と同じ作り方。それも取れなければ控えない)。
+   パスで取り直した FileId は、閉じた後に tmp が差し替えられていれば別のファイルのものなので、T の FS に依らず「保たれない FS」と同じに扱い、下の (b) で mtime も比べる。
+   「置換をまたいで識別が保たれる FS」かの判定 (§5.4) も同じハンドル (Unix は tmp のパスの statfs) で行い、ハンドルで取れないときと判定できないときは保たれない側にする。
+   **確かめ方** (上から順に。Windows の ReplaceFileW と新規ファイルの MoveFileExW、Unix の rename と新規ファイルの renameat2 / link + unlink の退路のすべてに当てる):
+   (a) T の FS が置換をまたいで識別が保たれる FS か、mtime を控えられなかったとき: 事後の FileId が控えた FileId と等しく、len も等しい → 自分の書いたもの
+   (b) T の FS が保たれない FS (FAT / exFAT・ネットワークなど。§5.4) で mtime を控えられたとき、または FileId を控えられなかったとき: 事後の len と mtime が控えた値と等しい → 自分の書いたもの。
+       保たれない FS では FileId が等しくても mtime が違えば自分の書いたものとしない (FAT 系の識別はディレクトリの項目の位置で使い回されるので、置換の直後に他者が同じ長さの T を作り、
+       空いた位置に入ると FileId が等しくなる)
+   (c) それ以外 → 確かめられない (置換から事後の metadata までの間に他のプロセスが T を置き換えた可能性。ReplaceFileW では置換後の T は tmp の FileId を持つ
+       (保たれる FS。§5.4、S-09 で確認)。新規ファイルの MoveFileExW も同じ)
+   FileId も mtime も控えられなかったときは len だけで比べる (等しければ自分の書いたもの、違えば (c))。
+   自分の書いたものなら事後の値を new_stamp に入れる。(c) では事後の値を入れず、自分の書いた内容の値 (控えた FileId・len・hash、mtime は控えた値。控えられなかった欄は事後の値) を入れ、
+   SaveWarning::ChangedAfterSave (保存の直後に他のプログラムが変更した可能性) を積む。この値は (c) の条件からディスクの T と (mtime, len, FileId) のどれかが必ず違うので、
+   次の保存は照合 (手順 0b) で、中身が同じでなければ Conflict になり、外部変更として利用者に確認される (黙って上書きしない)。len と FileId が等しく mtime だけが違い、
+   中身も同じなら、§5.5 の規則で変更なしとして通る (16 MiB 以下)。
+   (b) は (a) より弱い: 置換から事後の metadata までの数 ms に、他のプロセスが T を同じ長さで、mtime も同じ値 (FAT 系の 2 秒の刻みの中) のファイルに置き換えると見分けられず、
+   その値を new_stamp に入れる。16 MiB 以下なら new_stamp の内容ハッシュ (書いた内容のもの) と次の保存の照合 (手順 0b の内容ハッシュの比較、§5.5) が違いを見つけて Conflict にするが、
+   16 MiB を超えるファイルでは見逃して次の保存で上書きする (01 §4.6 の既知の制約)。
+   **直接上書き (§4.4)**: 控えるのは §4.4 手順 3 で開いたハンドルの FileId (取れなければ手順 1 の FileId。パスで取った値なので保たれない FS と同じに扱う) と書いた長さ、
+   mtime は手順 7 の後にハンドルを閉じた直後にパスで取り直した値で、FS の判定も同じハンドルで行う。改名しないので、自分のファイルの FileId はどの FS (FAT 系を含む) でも変わらない。
+   そこで **(a) を必ず満たし** (FileId と len が等しい。被せられた別のファイルは FileId の違いで見つける)、保たれない FS では **(b) も満たす** (mtime も等しい。FAT 系は識別を使い回すので、
+   消して作り直されたファイルが同じ FileId になることがある) ときだけ自分の書いたものとする (mtime を控えられなかったときは (a) だけ。FileId を控えられなかったときは (b) だけ)。
+   mtime で見つけられるのは、閉じた直後の取り直しから事後の metadata までの間に置き換えられたときだけ。(c) では同じく自分の書いた値を入れて ChangedAfterSave を積む。事後の metadata を取れなければ、書く前の (手順 1 の) 値を入れて ChangedAfterSave を積む (保存は成功のまま。
+   docs/review/v0.3-findings.md の SAF-20)
    Windows で backup 引数に渡した .<name>.eve-bak-<pid>-<rand8> を削除する。削除できたら保存中フラグを削除する。
    **退避名を削除できなかったら (他のプロセスが開いている等) フラグを消さずに残し** (T は新内容で完全なので、開くときの写像では報告しない行になる。§4.6)、
    SaveWarning (退避名を消せなかったこととそのパス) を積む。フラグを残すのは、v0.2 の起動時の走査が残った退避名を見つける手掛かりにするため (§4.6)。
@@ -565,18 +588,24 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 
 ### 5.4 ファイル同一性 (`FileId`)
 
-| OS | 取得 | 安定性 |
+| OS・FS | 取得 | 安定性 (右端は、置換をまたいで一時ファイルの識別が保たれるか。§4.1 手順 7) |
 |---|---|---|
-| Unix (v0.2) | `(st_dev, st_ino)` | rename 置換で変わる (それが FR-117 の検知にも役立つ)。btrfs のサブボリュームで `st_dev` が揃わない例外あり |
-| Windows | `GetFileInformationByHandleEx(FileIdInfo)` → `(VolumeSerialNumber, FileId 128bit)` (ReFS 対応)。Rust std の `MetadataExt::file_index` は Windows の unstable API のため自前で呼ぶ | NTFS では rename 後も同じ ID (ReplaceFileW でも tmp 側の ID になる) |
+| Unix (v0.2) | `(st_dev, st_ino)` | rename 置換で変わる (T の識別は tmp のものになる。それが FR-117 の検知にも役立つ)。btrfs のサブボリュームで `st_dev` が揃わない例外あり。ext4・xfs・btrfs・tmpfs などのローカルの FS では置換の後の T が tmp の識別を持つ: **保たれる** |
+| Windows (NTFS) | `GetFileInformationByHandleEx(FileIdInfo)` → `(VolumeSerialNumber, FileId 128bit)` (ReFS 対応)。Rust std の `MetadataExt::file_index` は Windows の unstable API のため自前で呼ぶ | NTFS では rename 後も同じ ID (ReplaceFileW でも tmp 側の ID になる): **保たれる** |
+| Windows (ReFS) | 同上 (128 bit。64 bit に収まらない) | 識別は「ディレクトリの中の番号 + 親ディレクトリ」から作られ、別のディレクトリへの移動では変わるが、同じディレクトリの中の置換 (一時ファイルは T と同じディレクトリに作る) では tmp の識別が保たれる見込み (MS-FSCC の FileIdInformation の説明。**未実測**: Dev Drive の作成に管理者の権限が要るため): **保たれる** として扱う |
+| Windows (FAT / FAT32・exFAT) | `FileIdInfo` に答えない (`ERROR_INVALID_PARAMETER`) ので、`GetFileInformationByHandle` の 64 bit の値 (`nFileIndexHigh` / `nFileIndexLow`) | ディレクトリの項目の位置から作られる。改名しなければ保たれる (書く前・置換の前の照合では使える。削除の後に同じ位置が別のファイルに使い回されることはある) が、ReplaceFileW でも MoveFileExW でも置換のたびに変わる (exFAT で実測、2026-11-24。FAT32 は未実測で、同じ作りなので同じ扱い): **保たれない** |
+| Linux (vfat / msdos・exfat) | `(st_dev, st_ino)` | カーネルが割り当てる番号 (`iunique()`) で、ディスクには無い。rename では保たれるが、inode のキャッシュから追い出された後に読み直すと別の番号になることがある: **保たれない** として扱う |
+| ネットワーク (SMB・NFS など)・FUSE・9p (WSL の DrvFs を含む) | 上の各 OS の値 | サーバと後ろの FS 次第 (後ろが exFAT の SMB の共有 (`\\localhost\E$`) と WSL の DrvFs (`/mnt/e`) は置換のたびに変わる。どちらも 2026-11-24 に実測): 分からないので **保たれない** として扱う |
 
 用途: (1) 同じファイルを二重に開く検出 (`evoeditor A.txt a.txt` on Windows)、(2) 保存直前の「別ファイルに置き換わっていないか」確認、(3) 監視イベントの自己抑制。
 
-**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分け、FS の旗に `FILE_SUPPORTS_OPEN_BY_FILE_ID` があることも求める。WinFsp・Dokan などで作る FS が NTFS と名乗るため) で、`FileIdInfo` の値が 0 でないとき (ハンドルが `FileRemoteProtocolInfo` に答える (リモートの) ファイルと、`fs_kind` が `Local` でないパスは除く)。Unix は `FsKind::Local` で、`statfs` の `f_type` が FAT (msdos・vfat)・exFAT でないとき (Linux。ほかの Unix は判定しないので `false`)。ディレクトリは `false`。FAT / exFAT (ディレクトリの項目の位置から作られ、使い回される)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。`false` の FS では canonical のパスで比べる。**複製したボリューム** (ディスクの複製・マウントしたバックアップの VHDX・シャドウコピー `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN`) は、NTFS でもボリュームのシリアル番号と `FileId` が元と重なるので、識別が等しくても canonical のパスのボリュームの部分 (ドライブ文字・UNC のサーバとシェア・装置名) が違えば同じとしない (03 §12.7.6 の 0。ハードリンクは同じボリュームの中にしかない)。同じドライブの下のフォルダに複製をマウントしたものは見分けられない (既知の制約)。Linux の `(st_dev, st_ino)` は、削除した inode の番号を別のファイルがすぐ使うことがあるので、文書の古い識別との一致はジョブの中で文書のパスを `metadata` し直して確かめる (03 §12.7.6 の「古い識別の確かめ」)。(2)・(3) の用途はこの区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる)。
+**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分け、FS の旗に `FILE_SUPPORTS_OPEN_BY_FILE_ID` があることも求める。WinFsp・Dokan などで作る FS が NTFS と名乗るため) で、`FileIdInfo` の値が 0 でないとき (ハンドルが `FileRemoteProtocolInfo` に答える (リモートの) ファイルと、`fs_kind` が `Local` でないパスは除く)。Unix は `FsKind::Local` で、`statfs` の `f_type` が FAT (msdos・vfat)・exFAT でないとき (Linux。ほかの Unix は判定しないので `false`)。ディレクトリは `false`。FAT / exFAT (Windows はディレクトリの項目の位置から作られ、削除の後に使い回される。Linux はカーネルが割り当てる番号で、上の表のとおり変わることがある)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。`false` の FS では canonical のパスで比べる。**複製したボリューム** (ディスクの複製・マウントしたバックアップの VHDX・シャドウコピー `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN`) は、NTFS でもボリュームのシリアル番号と `FileId` が元と重なるので、識別が等しくても canonical のパスのボリュームの部分 (ドライブ文字・UNC のサーバとシェア・装置名) が違えば同じとしない (03 §12.7.6 の 0。ハードリンクは同じボリュームの中にしかない)。同じドライブの下のフォルダに複製をマウントしたものは見分けられない (既知の制約)。Linux の `(st_dev, st_ino)` は、削除した inode の番号を別のファイルがすぐ使うことがあるので、文書の古い識別との一致はジョブの中で文書のパスを `metadata` し直して確かめる (03 §12.7.6 の「古い識別の確かめ」)。(2) のうち書く前と置換の前の照合 (§4.1 手順 0b・4b、§4.4 手順 1・3) と (3) は、この区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる。T を改名しない間は FAT 系でも識別は保たれる)。(2) のうち置換の後の確かめ (§4.1 手順 7) は、次の性質に依る。
+
+**置換をまたいで識別が保たれる FS** (§4.1 手順 7 で (a) の FileId だけで確かめ、(b) に退かない FS。eve-platform の内部の性質で、`FileMeta` には出さない。上の表の右端): Windows は NTFS / ReFS のローカルのボリューム (FS の名前と `FILE_SUPPORTS_OPEN_BY_FILE_ID`。ハンドルがリモートでなく、識別が 0 でないとき)、Linux は `FsKind::Local` で `f_type` が FAT (msdos・vfat)・exFAT でないとき。それ以外 (FAT 系・`Network` (FUSE・9p を含む)・判定の失敗・Linux 以外の Unix) は **保たれない側** に倒し、手順 7 の (b) (len と mtime) で確かめる。判定は一時ファイルのハンドル (Windows) か一時ファイルのパスの `statfs` (Linux) で (直接上書きは開いた T のハンドルか T のパス)、(1) の判定と同じ箇所で作る。(1) の `file_id_unique` (別のファイルと識別が重ならないか) とは別の性質 (同じファイルの識別が置換をまたいで続くか) なので、今は材料が同じでも別に持ち、片方の変更で他方を変えない。
 
 ### 5.5 外部変更検知 (FR-117) の比較キー
 
-02 §4.5 の `FileStamp { mtime, len, file_id, hash }` を比較キーとする (03 §9 の `known_stamp` の型)。本節はその計算規則を定める。`(mtime, len, FileId)` を基本とし、**mtime が等しく len も等しい** 場合に限って内容ハッシュ (16 MiB 以下) を比較する。加えて、**len と FileId が等しく mtime だけが違う** 場合も、16 MiB 以下なら内容ハッシュで照合し、一致すれば変更なしとする (OneDrive などの同期ソフト・ウイルス対策が内容を変えずに mtime だけを更新することがあり、そのたびに外部変更の確認を出さないため。16 MiB を超えるファイルは mtime の違いを変更として扱う)。一致したときは照合した側の stamp (新しい mtime) を以後の比較に使う。保存ジョブの中でハッシュを比べるのは **書き始める前の照合** (§4.1 手順 0b、§4.4 手順 1) だけで、置換の直前 (§4.1 手順 4b) と in-place の開いた直後 (§4.4 手順 3) は `(mtime, len, FileId)` だけで照合する (T を読み直す時間で競合の窓を広げないため)。理由: mtime 分解能は FAT32 2 秒、HFS+ 1 秒、ext4 は `CLOCK_REALTIME_COARSE` (数 ms) で同一 tick の連続更新が同じ mtime になる。**ハッシュは読込ジョブ内でストリーミング計算** する (保存ジョブで計算すると「開いてから最初の保存まで」ハッシュが無く、その間の外部変更を見逃すため)。保存ジョブでも書いた内容から計算して `SaveReport.new_stamp` に入れる。ハッシュ関数は **XXH3-64 (twox-hash クレート、MIT。純 Rust で §17.2 の「C 依存 0」に合う)** とし、値は 02 §4.5 の `ContentHash([u8; 8])` に入れる (v0.1 の既定)。S-09 のベンチでは速度だけを確かめる (16 MiB のハッシュが読込時間に対して無視できること)。`FsKind::Network` では mtime がクライアントキャッシュで遅延する (NFS `actimeo`) ことを UI の文言で伝える。
+02 §4.5 の `FileStamp { mtime, len, file_id, hash }` を比較キーとする (03 §9 の `known_stamp` の型)。本節はその計算規則を定める。`(mtime, len, FileId)` を基本とし、**mtime が等しく len も等しい** 場合に限って内容ハッシュ (16 MiB 以下) を比較する。加えて、**len と FileId が等しく mtime だけが違う** 場合も、16 MiB 以下なら内容ハッシュで照合し、一致すれば変更なしとする (OneDrive などの同期ソフト・ウイルス対策が内容を変えずに mtime だけを更新することがあり、そのたびに外部変更の確認を出さないため。16 MiB を超えるファイルは mtime の違いを変更として扱う)。一致したときは照合した側の stamp (新しい mtime) を以後の比較に使う。保存ジョブの中でハッシュを比べるのは **書き始める前の照合** (§4.1 手順 0b、§4.4 手順 1) だけで、置換の直前 (§4.1 手順 4b) と in-place の開いた直後 (§4.4 手順 3) は `(mtime, len, FileId)` だけで照合する (T を読み直す時間で競合の窓を広げないため)。理由: mtime 分解能は FAT32 2 秒 (Windows の exFAT も実測で 2 秒の刻み (2026-11-24)。exFAT の形式には 10 ms の増分の欄があるが、Windows のドライバの値では見えない)、HFS+ 1 秒、ext4 は `CLOCK_REALTIME_COARSE` (数 ms) で同一 tick の連続更新が同じ mtime になる。FAT 系では、書込中の数秒の間に他のプログラムが T を同じ長さで直接書き換えると mtime が 2 秒の刻みの中に収まって FileId も変わらないので、置換の直前の照合 (§4.1 手順 4b) と in-place の開いた直後の照合 (§4.4 手順 3) は実質 len だけの照合になる (改名で置き換えたなら FileId の違いで分かる。書く前の照合 (手順 0b) は 16 MiB 以下なら内容ハッシュで見つける)。**ハッシュは読込ジョブ内でストリーミング計算** する (保存ジョブで計算すると「開いてから最初の保存まで」ハッシュが無く、その間の外部変更を見逃すため)。保存ジョブでも書いた内容から計算して `SaveReport.new_stamp` に入れる。ハッシュ関数は **XXH3-64 (twox-hash クレート、MIT。純 Rust で §17.2 の「C 依存 0」に合う)** とし、値は 02 §4.5 の `ContentHash([u8; 8])` に入れる (v0.1 の既定)。S-09 のベンチでは速度だけを確かめる (16 MiB のハッシュが読込時間に対して無視できること)。`FsKind::Network` では mtime がクライアントキャッシュで遅延する (NFS `actimeo`) ことを UI の文言で伝える。
 
 **`FsKind` の判定** (`FileMeta.fs_kind`。`metadata()` の中で T 自身について判定する (シンボリックリンクは辿った先の FS)。v0.5 の M31 までの仕様は「T の親ディレクトリ」としていたが、実装 (Windows のパスの判定・Linux の `statfs`) は T 自身で判定しており、識別の信頼 (§5.4) も T のある FS で決まるので、T 自身に改めた):
 

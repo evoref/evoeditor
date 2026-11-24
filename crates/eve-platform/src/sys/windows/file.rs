@@ -9,16 +9,17 @@ use std::ptr;
 use windows_sys::Win32::Foundation::{GENERIC_WRITE, GetLastError, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CREATE_NEW, CreateFileW, DeleteFileW, FILE_ALLOCATION_INFO,
-    FILE_ATTRIBUTE_NORMAL, FILE_ID_INFO, FILE_REMOTE_PROTOCOL_INFO, FILE_SHARE_READ,
-    FILE_TYPE_CHAR, FILE_TYPE_PIPE, FileAllocationInfo, FileIdInfo, FileRemoteProtocolInfo,
-    FlushFileBuffers, GetDiskFreeSpaceExW, GetDriveTypeW, GetFileAttributesW,
-    GetFileInformationByHandle, GetFileInformationByHandleEx, GetFileType,
+    FILE_ATTRIBUTE_NORMAL, FILE_ID_INFO, FILE_READ_ATTRIBUTES, FILE_REMOTE_PROTOCOL_INFO,
+    FILE_SHARE_READ, FILE_TYPE_CHAR, FILE_TYPE_PIPE, FileAllocationInfo, FileIdInfo,
+    FileRemoteProtocolInfo, FlushFileBuffers, GetDiskFreeSpaceExW, GetDriveTypeW,
+    GetFileAttributesW, GetFileInformationByHandle, GetFileInformationByHandleEx, GetFileType,
     GetVolumeInformationByHandleW, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW,
     ReplaceFileW, SetFileAttributesW, SetFileInformationByHandle,
 };
 
 use super::security::OwnerOnly;
 use super::wide::wide;
+use crate::save_check::IdAcrossReplace;
 
 /// `GetDriveTypeW` の戻り値 `DRIVE_REMOTE`。
 const DRIVE_REMOTE: u32 = 4;
@@ -28,7 +29,9 @@ pub(crate) fn last_error() -> u32 {
     unsafe { GetLastError() }
 }
 
-/// 一時ファイルを `CREATE_NEW`・`FILE_SHARE_READ` で作る (所有者のみの DACL を渡せる)。
+/// 一時ファイルを `CREATE_NEW`・`FILE_SHARE_READ` で作る (所有者のみの DACL を渡せる)。書込に加えて `FILE_READ_ATTRIBUTES`
+/// で開く (閉じる前に識別を `file_info` で控える。05 §4.1 手順 3b / 7。NTFS では無くても問い合わせに答えたが、
+/// 問い合わせに要る権利を明示して FS の扱いに依らないようにする)。
 pub(crate) fn create_new(path: &Path, owner_only: Option<&OwnerOnly>) -> io::Result<File> {
     let w = wide(path);
     let sa = owner_only.map_or(ptr::null(), OwnerOnly::as_ptr);
@@ -36,7 +39,7 @@ pub(crate) fn create_new(path: &Path, owner_only: Option<&OwnerOnly>) -> io::Res
     let h = unsafe {
         CreateFileW(
             w.as_ptr(),
-            GENERIC_WRITE,
+            GENERIC_WRITE | FILE_READ_ATTRIBUTES,
             FILE_SHARE_READ,
             sa,
             CREATE_NEW,
@@ -152,11 +155,15 @@ pub(crate) struct HandleInfo {
     /// `volume` と `index` で同じファイルを判定してよい (05 §5.4 の (1)): NTFS / `ReFS` のローカルのボリュームで、
     /// `index` が 0 でない。
     pub unique: bool,
+    /// 置換 (`ReplaceFileW`・`MoveFileExW`) をまたいで識別が保たれるか (05 §5.4 の「置換をまたいで識別が保たれる FS」、
+    /// §4.1 手順 7)。NTFS / `ReFS` のローカルのボリュームで `index` が 0 でないときだけ `Kept` (FAT 系・リモート・判定の失敗は
+    /// `MayChange`)。`unique` とは別の性質 (今は材料が同じ)。
+    pub across_replace: IdAcrossReplace,
 }
 
 /// ハンドルの識別 (05 §5.4)。`FileIdInfo` (128 bit。`ReFS` の識別は 64 bit に収まらない) が取れればそれを、取れない FS
-/// (FAT など) では `GetFileInformationByHandle` の 64 bit の値を使う。どの経路 (`metadata`・直接上書きのハンドル) も
-/// この関数で取るので、比べる値の作り方は揃う。
+/// (FAT など) では `GetFileInformationByHandle` の 64 bit の値を使う。どの経路 (`metadata`・直接上書きのハンドル・
+/// 原子的保存の一時ファイルのハンドル) もこの関数で取るので、比べる値の作り方は揃う。ハンドルは `FILE_READ_ATTRIBUTES` で開いておく。
 pub(crate) fn file_info(f: &File) -> io::Result<HandleInfo> {
     // SAFETY: 全ビット 0 の `BY_HANDLE_FILE_INFORMATION` は有効な値 (すべて整数)。
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
@@ -168,12 +175,17 @@ pub(crate) fn file_info(f: &File) -> io::Result<HandleInfo> {
         u64::from(info.dwVolumeSerialNumber),
         (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow),
     ));
-    let unique = index != 0 && trusted_id_fs(f) && !is_remote_handle(f);
+    let local_ntfs = index != 0 && trusted_id_fs(f) && !is_remote_handle(f);
     Ok(HandleInfo {
         volume,
         index,
         nlink: info.nNumberOfLinks,
-        unique,
+        unique: local_ntfs,
+        across_replace: if local_ntfs {
+            IdAcrossReplace::Kept
+        } else {
+            IdAcrossReplace::MayChange
+        },
     })
 }
 
@@ -288,6 +300,27 @@ pub(crate) fn is_remote(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 原子的保存の一時ファイルのハンドル (`create_new`) で、閉じる前に識別を控えられる。NTFS の一時ディレクトリでは
+    /// 置換をまたいで識別が保たれる FS と判定する (05 §4.1 手順 7)。退行すると黙って長さと更新時刻の確かめ (§4.1 手順 7 の
+    /// (b)) に弱まるので、ここで気付く。
+    #[test]
+    fn 一時ファイルのハンドルで識別を取れて_ntfs_は置換をまたいで保たれる() {
+        let p = std::env::temp_dir().join(format!(
+            "eve-file-info-{}-{:?}.tmp",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_file(&p);
+        let f = create_new(&p, None).expect("一時ファイル");
+        let info = file_info(&f);
+        drop(f);
+        let _ = std::fs::remove_file(&p);
+        let info = info.expect("書込で開いたハンドルでも file_info を取れる");
+        assert_ne!(info.index, 0);
+        assert!(info.unique, "NTFS の識別は信頼する");
+        assert_eq!(info.across_replace, IdAcrossReplace::Kept);
+    }
 
     #[test]
     fn 空き容量を取れる() {

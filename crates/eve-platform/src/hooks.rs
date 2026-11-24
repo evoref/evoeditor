@@ -7,7 +7,8 @@
 //!   `EVE_TEST_HOOK=fail_<点>=<errno>` (docs/review/v0.3-findings.md の STR-T10)。
 //! - `point`: 単体試験 (`cfg(test)`) が `on_point` で積んだ動作を、呼び出し点で 1 回だけ走らせる (同じプロセスの中で、
 //!   判定と開く間に差し替えを起こす。07 §12.1 の OWN-6)。呼び出し点は `read_checked_before_open` (ディレクトリを判定した後、
-//!   ファイルを開く前)。
+//!   ファイルを開く前)・`after_replace` (原子的保存の置換 (新規ファイルの移動を含む) の後、事後の確かめの前。05 §4.1 手順 7)・
+//!   `after_in_place_write` (直接上書きの書込と後片付けの後、事後の確かめの前)。
 
 /// 呼び出し点 `name` を通った。単体試験がこのスレッドで `on_point` に積んだ動作があれば、ここで 1 回だけ走らせる。
 #[inline]
@@ -38,6 +39,12 @@ thread_local! {
 #[cfg(test)]
 pub(crate) fn on_point(name: &str, f: impl FnOnce() + 'static) {
     ACTIONS.with(|v| v.borrow_mut().push((name.to_owned(), Box::new(f))));
+}
+
+/// このスレッドで `on_point` に積んだ `name` の動作を、走らせずに捨てる (呼び出し点に届かずに終わった試験の後片付け)。
+#[cfg(test)]
+pub(crate) fn forget_point(name: &str) {
+    ACTIONS.with(|v| v.borrow_mut().retain(|(p, _)| p != name));
 }
 
 /// 切断点 `name` に到達した。環境変数が `name` (または `name=<値>`) なら、ここでプロセスを終了する。

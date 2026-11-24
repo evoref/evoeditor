@@ -15,6 +15,8 @@ use std::path::Path;
 
 use eve_core::FileTime;
 
+use crate::save_check::IdAcrossReplace;
+
 pub(crate) use fs::{
     can_write, clear_nonblocking, fallocate_keep_size, fsync, get_xattr, list_xattrs,
     rename_noreplace, set_xattr,
@@ -51,20 +53,24 @@ pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
 }
 
 /// FS の種類 (05 §5.5 の `FsKind` の判定) と、そこの `(st_dev, st_ino)` を同じファイルの判定に使ってよいか (05 §5.4 の (1)、
-/// `FileMeta.file_id_unique`)。
+/// `FileMeta.file_id_unique`)、置換 (`rename`・`link`) をまたいで識別が保たれるか (05 §5.4 の「置換をまたいで識別が保たれる FS」、
+/// §4.1 手順 7)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct FsClass {
     /// FS の種類。
     pub kind: eve_core::FsKind,
     /// 識別を同じファイルの判定に使ってよい。
     pub id_trusted: bool,
+    /// 置換をまたいで識別が保たれるか (`id_trusted` とは別の性質。今は材料が同じ)。
+    pub across_replace: IdAcrossReplace,
 }
 
 impl FsClass {
-    /// 判定できなかった (`Unknown`。識別は信頼しない)。
+    /// 判定できなかった (`Unknown`。識別は信頼せず、置換をまたいで保たれるとも見ない)。
     const UNKNOWN: FsClass = FsClass {
         kind: eve_core::FsKind::Unknown,
         id_trusted: false,
+        across_replace: IdAcrossReplace::MayChange,
     };
 }
 
@@ -89,7 +95,9 @@ const NETWORK_FS: [(u32, &str); 13] = [
     (0x0116_1970, "gfs2"),
 ];
 
-/// 識別を使い回す FS の `f_type` (`linux/magic.h` の MSDOS (vfat を含む)・`exFAT`)。項目の位置から作られ、削除の後に使い回される。
+/// 識別を信頼しない FS の `f_type` (`linux/magic.h` の MSDOS (vfat を含む)・`exFAT`)。識別はカーネルが割り当てる番号
+/// (`iunique()`) で、ディスクには無い。rename では保たれるが、inode のキャッシュから追い出された後に読み直すと別の番号になる
+/// ことがあり、削除の後に使い回される (05 §5.4)。
 #[cfg(any(target_os = "linux", test))]
 const REUSED_ID_FS: [u32; 2] = [0x4D44, 0x2011_BAB0];
 
@@ -126,14 +134,22 @@ pub(crate) fn owner_unknown_fs(f_type: u32) -> Option<&'static str> {
 #[cfg(any(target_os = "linux", test))]
 pub(crate) fn classify(f_type: u32) -> FsClass {
     if NETWORK_FS.iter().any(|(t, _)| *t == f_type) {
+        // FUSE・9p (WSL の DrvFs) を含む: 後ろの FS 次第なので、置換をまたいで保たれるとも見ない
         FsClass {
             kind: eve_core::FsKind::Network,
             id_trusted: false,
+            across_replace: IdAcrossReplace::MayChange,
         }
     } else {
+        let fat = REUSED_ID_FS.contains(&f_type);
         FsClass {
             kind: eve_core::FsKind::Local,
-            id_trusted: !REUSED_ID_FS.contains(&f_type),
+            id_trusted: !fat,
+            across_replace: if fat {
+                IdAcrossReplace::MayChange
+            } else {
+                IdAcrossReplace::Kept
+            },
         }
     }
 }
@@ -288,22 +304,29 @@ mod tests {
         let net = FsClass {
             kind: FsKind::Network,
             id_trusted: false,
+            across_replace: IdAcrossReplace::MayChange,
         };
-        let local = |id_trusted| FsClass {
+        let local = |id_trusted, across_replace| FsClass {
             kind: FsKind::Local,
             id_trusted,
+            across_replace,
         };
         // ネットワーク・共有の FS は識別を信頼しない (値は linux/magic.h・linux/gfs2_ondisk.h)
         for (t, name) in NETWORK_FS {
             assert_eq!(classify(t), net, "{name} ({t:#x})");
         }
-        // ローカルでも FAT (msdos・vfat)・exFAT は識別を使い回す
-        assert_eq!(classify(0x4D44), local(false), "msdos");
-        assert_eq!(classify(0x2011_BAB0), local(false), "exfat");
-        // ext4・tmpfs・btrfs・xfs は信頼する
+        // ローカルでも FAT (msdos・vfat)・exFAT は識別を信頼せず、置換をまたいで保たれるとも見ない
+        let fat = local(false, IdAcrossReplace::MayChange);
+        assert_eq!(classify(0x4D44), fat, "msdos");
+        assert_eq!(classify(0x2011_BAB0), fat, "exfat");
+        // ext4・tmpfs・btrfs・xfs は信頼し、置換をまたいで保たれる
         for t in [0xEF53, 0x0102_1994, 0x9123_683E, 0x5846_5342] {
-            assert_eq!(classify(t), local(true), "{t:#x}");
+            assert_eq!(classify(t), local(true, IdAcrossReplace::Kept), "{t:#x}");
         }
+        // FUSE・9p (WSL の DrvFs) はネットワークの側 (保たれない側)
+        assert_eq!(classify(0x6573_5546), net, "fuse");
+        assert_eq!(classify(0x0102_1997), net, "9p");
+        assert_eq!(FsClass::UNKNOWN.across_replace, IdAcrossReplace::MayChange);
     }
 
     #[test]

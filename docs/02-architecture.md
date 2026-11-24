@@ -623,7 +623,11 @@ enum SaveWarning {                 // 保存は成功したが知らせること
     FsyncFailed,                   // FS が fsync を受け付けなかった (ネットワーク FS・リムーバブル。Unix の一時ファイルは EINVAL / ENOTSUP / EOPNOTSUPP / ENOSYS だけ)。保存は続けた。
                                    // Unix の一時ファイルの EIO・ENOSPC 等は警告ではなくエラー (05 §4.1 手順 3。docs/review/v0.3-findings.md の SAF-46)。ディレクトリの fsync (手順 6) の失敗は警告
     AclNarrowed,                   // (Windows。S-09 の結果次第で置く) 置換のあと DACL が元より狭くなった。PermissionNarrowed との統合も含めて S-09 で決める
-    ChangedAfterSave,              // (v0.1 の案の名前は FileIdMismatch) 置換のあとの T の FileId が自分の書いた tmp のものと違う (保存の直後に他のプログラムが変更した可能性、05 §4.1 手順 7 の FileId の確認)。new_stamp には自分の書いた値を入れる
+    ChangedAfterSave,              // (v0.1 の案の名前は FileIdMismatch) 置換・直接上書きのあとの T が自分の書いたものと確かめられない (FileId か len が自分の書いた tmp
+                                   // (直接上書きは開いたハンドル) のものと違う。置換をまたいで識別が保たれない FS (FAT 系・ネットワーク等、05 §5.4) の置換では len か mtime が違う。
+                                   // 直接上書きでは、保たれない FS なら mtime の違いでも。
+                                   // 保存の直後に他のプログラムが変更した可能性、05 §4.1 手順 7 の確かめ)。new_stamp には自分の書いた値を入れる
+                                   // (直接上書きで事後の metadata を取れなかったときは書く前の値)。次の保存の照合は、中身が同じでなければ Conflict
     BackupNotRemoved { path: FsPath }, // Windows。置換の成功後に退避名を消せなかった (保存は成功。フラグを残す、05 §4.1 手順 7)
     TempNotRemoved { path: FsPath },   // Unix。新規ファイルの link + unlink の退路で、link の後に一時ファイルを消せなかった (保存は成功。一時ファイルは T と同じ実体。フラグを残す、
                                    // 05 §4.1「新規ファイル」・手順 7。docs/review/v0.3-findings.md の SAF-40)

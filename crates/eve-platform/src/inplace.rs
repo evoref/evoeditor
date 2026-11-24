@@ -32,6 +32,7 @@ use crate::inflight::{FlagGuard, create_dir_all_private};
 use crate::rescue::timestamp_basic;
 #[cfg(windows)]
 use crate::save::{ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION, SHARING_RETRY_MS};
+use crate::save_check::{self, IdAcrossReplace, Written};
 use crate::sys::{delete, map_io_error, matches, resolve_target, same_file_state};
 
 #[cfg(windows)]
@@ -112,13 +113,20 @@ fn is_sharing_violation(e: &io::Error) -> bool {
     )
 }
 
-/// 開いたハンドルの `FileId`。
+/// 開いたハンドルの `FileId` と、その FS で識別が使い回されないか (置換をまたいで識別が保たれる FS か。05 §5.4。
+/// 取れなければ識別なしで、保たれない側)。
 #[cfg(windows)]
-fn handle_file_id(file: &File) -> Option<eve_core::FileId> {
-    crate::sys::file_info(file).ok().map(|i| eve_core::FileId {
-        volume: i.volume,
-        index: i.index,
-    })
+fn handle_identity(file: &File, _target: &Path) -> (Option<eve_core::FileId>, IdAcrossReplace) {
+    match crate::sys::file_info(file) {
+        Ok(i) => (
+            Some(eve_core::FileId {
+                volume: i.volume,
+                index: i.index,
+            }),
+            i.across_replace,
+        ),
+        Err(_) => (None, IdAcrossReplace::MayChange),
+    }
 }
 
 /// T を読み書きで開く (切り詰めない。Unix には共有モードが無い)。
@@ -134,12 +142,13 @@ fn is_sharing_violation(_: &io::Error) -> bool {
 }
 
 #[cfg(unix)]
-fn handle_file_id(file: &File) -> Option<eve_core::FileId> {
+fn handle_identity(file: &File, target: &Path) -> (Option<eve_core::FileId>, IdAcrossReplace) {
     use std::os::unix::fs::MetadataExt;
-    file.metadata().ok().map(|m| eve_core::FileId {
+    let id = file.metadata().ok().map(|m| eve_core::FileId {
         volume: m.dev(),
         index: u128::from(m.ino()),
-    })
+    });
+    (id, crate::sys::fs_class(target).across_replace)
 }
 
 /// 領域の事前確保 (Linux: `fallocate(FALLOC_FL_KEEP_SIZE)`。長さは延ばさない)。使えない FS では空き容量の確認にする。
@@ -266,7 +275,7 @@ pub(crate) fn write_in_place(
     };
     // 開いたハンドルで (mtime, len, FileId) を再照合する
     let handle_meta = file.metadata().ok();
-    let handle_id = handle_file_id(&file);
+    let (handle_id, across_replace) = handle_identity(&file, &target);
     if opts.expected != Expect::Any
         && let Some(hm) = &handle_meta
     {
@@ -426,6 +435,11 @@ pub(crate) fn write_in_place(
         return Err(in_place_failed(e));
     }
     drop(file);
+    // 事後の確かめ (05 §4.1 手順 7) の控え: ハンドルの FileId (取れなければ手順 1 の FileId。パスで取った値なので `verify` は
+    // 更新時刻も比べる) と書いた長さ、閉じた直後にパスで取り直した mtime (FAT 系は閉じるときに更新時刻を付け直す)
+    let mine = Written::in_place(handle_id, written)
+        .or_reread_id(orig.file_id)
+        .with_reread(fsys.metadata(&target_path).ok().as_ref());
 
     // 9. 後片付け: 先にフラグ (他の記録も)、その後でバックアップ
     if let Some(f) = flag.as_mut() {
@@ -440,24 +454,23 @@ pub(crate) fn write_in_place(
         });
     }
 
-    // 事後: FileId は変わらない。自分の書いたものか確かめる。書込はもう済んでフラグもバックアップも消したので、
-    // metadata の失敗で保存の失敗にしない (失敗にすると利用者が書けたファイルを別名で保存し直す)。確かめられなかったことを
-    // 警告にし、Stamp は元のもので返す (次の保存は外部変更の確認になる、安全側。docs/review/v0.3-findings.md の SAF-20)
-    let after = match fsys.metadata(&target_path) {
-        Ok(after) => {
-            if after.file_id != orig.file_id {
-                warnings.push(SaveWarning::ChangedAfterSave);
-            }
-            after
-        }
+    hooks::point("after_in_place_write");
+
+    // 事後: 自分の書いたものか確かめる (05 §4.1 手順 7)。改名しないので FileId はどの FS (FAT 系を含む) でも変わらない:
+    // FileId と長さを必ず比べ、FAT 系は識別を使い回すので、保たれない FS では mtime も比べる。確かめられなければ自分の書いた値を返して
+    // 警告を積む。書込はもう済んでフラグもバックアップも消したので、metadata の失敗で保存の失敗にしない (失敗にすると利用者が
+    // 書けたファイルを別名で保存し直す)。metadata を取れなければ警告にし、Stamp は書く前のもので返す (次の保存は外部変更の
+    // 確認になる、安全側。docs/review/v0.3-findings.md の SAF-20)
+    let new_stamp = match fsys.metadata(&target_path) {
+        Ok(after) => save_check::verify(&mine, &after, across_replace).into_stamp(&mut warnings),
         Err(_) => {
             warnings.push(SaveWarning::ChangedAfterSave);
-            orig
+            FileStamp::from_meta(&orig, None)
         }
     };
     Ok(SaveReport {
         method: SaveMethod::InPlace,
-        new_stamp: FileStamp::from_meta(&after, None),
+        new_stamp,
         warnings,
     })
 }
