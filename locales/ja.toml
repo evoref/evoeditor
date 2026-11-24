@@ -62,6 +62,14 @@ title = "行へ移動"
 description = "カーソルを行の先頭へ動かします。"
 title = "行頭へ移動"
 
+[cmd.cursor.jump_back]
+description = "行へ移動・検索・ファイルの切り替えなどの前にいた位置へ戻ります"
+title = "前の位置へ戻る"
+
+[cmd.cursor.jump_forward]
+description = "戻った位置から進みます"
+title = "次の位置へ進む"
+
 [cmd.cursor.move_down]
 description = "カーソルを下の行へ動かします。"
 title = "下へ移動"
@@ -556,6 +564,10 @@ clamped = "行 {line} はありません。最後の行 ({last}) へ移動しま
 
 [info.history]
 copied = "{count} 件のメッセージをコピーしました"
+
+[info.jump]
+no_back = "戻る位置はありません"
+no_forward = "進む位置はありません"
 
 [info.hint_bar]
 hidden = "ヒントバーを隠しました (その行を本文に使います)"

@@ -349,7 +349,12 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
         _ => None,
     };
     let keep = m.keeps_goal().then_some(primary_goal).flatten();
+    // 文書の端への移動 (選択を伸ばさないもの) はジャンプにする (03 §5.9 の JMP-1 (a))
+    let jump = (!extend && matches!(m, Motion::DocStart | Motion::DocEnd))
+        .then(|| ctx.state.jump_mark(view_id))
+        .flatten();
     ctx.state.set_selection_with_goal(view_id, sel, keep);
+    ctx.state.commit_jump(jump);
     ctx.state.set_cursor_affinity(view_id, primary_aff);
     if let Some(d) = page_scroll {
         // カーソルの画面上の相対位置を保つので、余白は適用しない
@@ -459,7 +464,10 @@ pub(crate) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
     let p = line_col_byte(t, line, col);
+    // 行へ移動はジャンプにする (主のカーソルが動いたときだけ記録する、03 §5.9 の JMP-1 (a))
+    let jump = ctx.state.jump_mark(view_id);
     ctx.state.set_selection(view_id, Selection::point(p));
+    ctx.state.commit_jump(jump);
     // 範囲外の行番号は最終行に丸めて通知する (FR-306 AC-1)
     if let Some(want) = clamped_from {
         ctx.state.show_message(

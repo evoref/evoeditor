@@ -123,6 +123,9 @@ pub(crate) struct WsJump {
     line: u32,
     /// 最初の一致 (行の中のバイト位置)。
     range: Range<u32>,
+    /// 移った時点で、移る前の位置をジャンプ履歴に記録する (読込中の今の文書の中の一致。新しく開く文書・切り替えた文書は、
+    /// 切り替えで記録しているので記録しない。03 §5.9 の JMP-1 (c))。
+    record: bool,
 }
 
 /// トグルの種類 (`search.toggle_case` / `_regex` / `_word`)。
@@ -601,6 +604,7 @@ impl EditorState {
             pane: self.focused_pane(),
             line: h.line,
             range: h.ranges.first().cloned().unwrap_or(0..0),
+            record: false,
         };
         self.take_overlay();
         self.mark_dirty_render();
@@ -615,6 +619,9 @@ impl EditorState {
         // 走らせずに、その文書へ切り替えて移る (「既に開いています」「…として開いています」を出さない)。読込中なら、読込の
         // 完了で移る
         if let Some((id, ready)) = self.ws_open_doc_of(&path) {
+            // 結果へのジャンプの前の位置 (03 §5.9 の JMP-1 (c))。別の文書なら、切り替え (`show_document_in`) でも同じ位置を
+            // 記録する (同じ行の項目は重ねない)。読込を待つ文書の位置へ移るときは、切り替えの記録だけ
+            let mark = self.focused_view().and_then(|v| self.jump_mark(v));
             if self.active_document() != Some(id) {
                 self.activate_document(id);
             }
@@ -623,9 +630,12 @@ impl EditorState {
                     && let Some(view) = self.focused_view()
                 {
                     self.apply_ws_jump(view, id, &jump);
+                    self.commit_jump(mark);
                 }
             } else {
-                self.io.ws_jumps.insert(id, jump);
+                // 読込中の今の文書の中の一致: 読込の完了で移るときに、その時点の位置を記録する
+                let record = mark.is_some_and(|(_, e)| e.doc == id);
+                self.io.ws_jumps.insert(id, WsJump { record, ..jump });
             }
             self.mark_dirty_render();
             return CommandResult::Done;
@@ -686,7 +696,9 @@ impl EditorState {
             return;
         };
         if let Some(view) = self.pane_view(pane) {
+            let mark = jump.record.then(|| self.jump_mark(view)).flatten();
             self.apply_ws_jump(view, doc, &jump);
+            self.commit_jump(mark);
         }
     }
 

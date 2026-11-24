@@ -11,6 +11,7 @@ use eve_view::{CellRect, CellSize, DocumentId, ViewId, WindowId};
 
 use crate::editor::state::{EditorState, View};
 use crate::layout::panes::{LeafRect, PANE_MIN, PaneLayout, layout, min_size};
+use crate::view::jump::JumpHistory;
 
 /// ペインの識別子 (core の内部。Window の中で一意で、閉じた後も再利用しない)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -66,6 +67,8 @@ pub(crate) struct Pane {
     pub(crate) views: BTreeMap<DocumentId, ViewId>,
     /// このペインで表示した文書 (表示した順。末尾が直近。PANE-9 の閉じた後に表示する文書の選択に使う)。
     pub(crate) recent: Vec<DocumentId>,
+    /// ジャンプ履歴 (03 §5.9 の JMP-2。ペインの中で文書を切り替えても同じ履歴が続く。分割は写し、閉じると捨てる)。
+    pub(crate) jumps: JumpHistory,
 }
 
 /// frontend の画面 1 つ (v0.x は 1 つ)。レイアウトの木と、フォーカスのあるペインを持つ (03 §9.9)。
@@ -95,6 +98,7 @@ impl Window {
                     view,
                     views,
                     recent: Vec::new(),
+                    jumps: JumpHistory::default(),
                 },
             )]),
             root: LayoutNode::Leaf(pane),
@@ -308,14 +312,30 @@ impl EditorState {
     /// 文書 `doc` をペイン `at` に表示する (PANE-1 / PANE-8 (a))。そのペインの表に文書の View があればそれを、無ければ
     /// ペインに属さない View を移し、それも無ければ最後にフォーカスのあった View を写した View を作る。表示を替える前の
     /// 文書を、そのペインの `recent` と Window 全体の `recent` に記録する。フォーカスのペインなら検索バーを閉じる
-    /// (検索の状態はペインごとに持たない、03 §9.8)。
+    /// (検索の状態はペインごとに持たない、03 §9.8)。表示を替える前の文書の位置を、そのペインのジャンプ履歴に記録する
+    /// (03 §5.9 の JMP-1 (d))。
     pub(crate) fn show_document_in(&mut self, at: PaneRef, doc: DocumentId) {
+        self.switch_document_in(at, doc, SwitchJump::Record);
+    }
+
+    /// `show_document_in` と同じだが、ジャンプ履歴に記録しない (閉じる文書の代わりを出す・`cursor.jump_back` /
+    /// `cursor.jump_forward` の移動・表示する View の決まっている所。03 §5.9 の JMP-1)。
+    pub(crate) fn show_document_in_without_jump(&mut self, at: PaneRef, doc: DocumentId) {
+        self.switch_document_in(at, doc, SwitchJump::Skip);
+    }
+
+    fn switch_document_in(&mut self, at: PaneRef, doc: DocumentId, jump: SwitchJump) {
         if !self.docs.documents.contains_key(&doc) || self.pane(at).is_none() {
             return;
         }
         let prev = self.pane_document(at);
         if prev == Some(doc) {
             return;
+        }
+        if jump == SwitchJump::Record
+            && let Some(e) = self.jump_point(at)
+        {
+            self.note_jump(at, e);
         }
         let focused = self.focused_pane() == Some(at);
         if focused {
@@ -366,7 +386,7 @@ impl EditorState {
                 .any(|(id, p)| (w.id, *id) != at && p.view == view)
         });
         if shown_elsewhere {
-            return self.show_document_in(at, doc);
+            return self.show_document_in_without_jump(at, doc);
         }
         self.put_view_in(at, doc, view);
         if self.focused_pane() == Some(at) {
@@ -534,8 +554,16 @@ impl EditorState {
                 return Err(format!("{doc:?} の最後の View {view:?} が無い・別の文書"));
             }
         }
-        Ok(())
+        // ジャンプ履歴 (03 §5.9 の JMP-2 / JMP-4 / JMP-5)
+        self.check_jumps()
     }
+}
+
+/// 文書の切り替えをジャンプ履歴に記録するか (03 §5.9 の JMP-1 (d))。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SwitchJump {
+    Record,
+    Skip,
 }
 
 /// 配置の不変条件 (09 §3.2 の「eve-core 複数ペイン」の (a)): 縮退表示でなければ、全ペインの本文と見出しと区切りの矩形が

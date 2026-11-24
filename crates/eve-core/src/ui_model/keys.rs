@@ -27,6 +27,8 @@ pub(crate) const INFO_GOTO_LINE_CLAMPED: &str = "info.goto_line.clamped";
 pub(crate) const INFO_HINT_BAR_HIDDEN: &str = "info.hint_bar.hidden";
 pub(crate) const INFO_HINT_BAR_SHOWN: &str = "info.hint_bar.shown";
 pub(crate) const INFO_HISTORY_COPIED: &str = "info.history.copied";
+pub(crate) const INFO_JUMP_NO_BACK: &str = "info.jump.no_back";
+pub(crate) const INFO_JUMP_NO_FORWARD: &str = "info.jump.no_forward";
 pub(crate) const INFO_LEFTOVER_DELETED: &str = "info.leftover.deleted";
 pub(crate) const INFO_LEFTOVER_RESTORED: &str = "info.leftover.restored";
 pub(crate) const INFO_MOUSE_DISABLED: &str = "info.mouse.disabled";
@@ -424,6 +426,8 @@ const ALL: &[&str] = &[
     INFO_HINT_BAR_HIDDEN,
     INFO_HINT_BAR_SHOWN,
     INFO_HISTORY_COPIED,
+    INFO_JUMP_NO_BACK,
+    INFO_JUMP_NO_FORWARD,
     INFO_LEFTOVER_DELETED,
     INFO_LEFTOVER_RESTORED,
     INFO_MOUSE_DISABLED,

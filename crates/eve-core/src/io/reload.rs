@@ -21,13 +21,13 @@ use crate::editor::state::EditorState;
 /// 書記素は、旧本文では行ごとに行頭から 1 回だけ、新本文では行ごとに桁の昇順に 1 回だけ数える (同じ行の複数のカーソルを
 /// 行頭から数え直さない。数える回数は「行の長さ + カーソルの数」で、カーソルの数 × 行の長さにならない)。`next` は
 /// 次の書記素の境界 (試験が数える回数を確かめるために渡す)。
-fn same_line_cols(
-    old: &eve_text::Text,
-    new: &eve_text::Text,
+pub(crate) fn same_line_cols(
+    old: &dyn eve_text::TextRead,
+    new: &dyn eve_text::TextRead,
     heads: &[eve_text::ByteOff],
-    mut next: impl FnMut(&eve_text::Text, eve_text::ByteOff) -> eve_text::ByteOff,
+    mut next: impl FnMut(&dyn eve_text::TextRead, eve_text::ByteOff) -> eve_text::ByteOff,
 ) -> Vec<eve_text::ByteOff> {
-    use eve_text::{ByteOff, LineIdx, TextRead};
+    use eve_text::{ByteOff, LineIdx};
     // 旧本文: (行, 桁)。同じ行の続きは、直前のカーソルの位置から数え続ける
     let mut at: Option<(usize, ByteOff, usize)> = None;
     let targets: Vec<(usize, usize)> = heads
@@ -384,6 +384,10 @@ impl EditorState {
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
+                // ジャンプ履歴の項目は、差し替えの前に旧本文の行:桁から新本文の同じ行:桁へ写す (03 §5.9 の JMP-4、§9.5)
+                if let Some(old) = self.docs.documents.get(&doc_id).map(Document::snapshot) {
+                    self.remap_jumps_line_col_to(doc_id, &old, d.text());
+                }
                 // 本文・書式・理由を一括で差し替え、履歴は新しい根 (保存点 = 根)。開き直しは Undo できない (03 §8.8)
                 self.put_document(doc_id, d);
                 // 文書の全 View (全ペイン・ペインに属さない View) を先頭に戻す。開き直しを実行したペインの View だけを戻すと、

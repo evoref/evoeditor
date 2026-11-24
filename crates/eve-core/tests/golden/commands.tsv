@@ -18,6 +18,8 @@ cursor.end	Motion	Read	—
 cursor.goto_bracket	Motion	Read	—
 cursor.goto_line	Motion	Read	—
 cursor.home	Motion	Read	—
+cursor.jump_back	Motion	Read	—
+cursor.jump_forward	Motion	Read	—
 cursor.move_down	Motion	Read	—
 cursor.move_left	Motion	Read	—
 cursor.move_right	Motion	Read	—

@@ -27,6 +27,7 @@ use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
 use crate::layout::cell_text;
 use crate::search::search_state::{Found, SearchCount, SearchStep};
+use crate::view::jump::JumpEntry;
 
 impl SearchBarState {
     /// 今の入力とトグルから作る問い合わせ。条件が前と同じなら前のもの (コンパイル済みの照合器を共有する) を返す (PRF-09)。
@@ -126,6 +127,8 @@ pub(crate) struct SearchBarState {
     pub all_selected: bool,
     /// Frame を作るたびの計算の覚え。
     pub memo: SearchBarMemo,
+    /// 検索バーを開いてから、検索の移動の前の位置をジャンプ履歴に記録した (続く移動では記録しない、03 §5.9 の JMP-1 (b))。
+    pub jump_noted: bool,
 }
 
 /// この件数以上のすべて置換は、Undo の記録を 1 件の置き換えにしてよい (`REPLACE_COARSE_UNDO_MIN`、03 §12.5)。
@@ -197,6 +200,7 @@ impl EditorState {
             focus: BarFocus::Search,
             all_selected: false,
             memo: SearchBarMemo::default(),
+            jump_noted: false,
         });
         self.set_bar_rows();
         CommandResult::Done
@@ -631,10 +635,12 @@ impl EditorState {
             && let Some(cur) = bar.current
             && let Some(view) = self.focused_view()
         {
+            let jump = self.search_jump_mark(view);
             self.set_selection(
                 view,
                 Selection::single(eve_text::Range::new(cur.start, cur.end)),
             );
+            self.commit_search_jump(jump);
             self.ensure_cursor_visible(view);
             if let Some(bar) = &mut self.find.search_bar {
                 bar.current = None;
@@ -1460,7 +1466,9 @@ impl EditorState {
         {
             let view = self.focused_view();
             if let Some(v) = view {
+                let jump = self.search_jump_mark(v);
                 self.set_selection(v, Selection::point(range.end));
+                self.commit_search_jump(jump);
             }
             if let Some(bar) = &mut self.find.search_bar {
                 bar.anchor = range.end;
@@ -1480,6 +1488,11 @@ impl EditorState {
         };
         let view = self.focused_view();
         let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
+        // 置換の後の移動の前の位置 (03 §5.9 の JMP-1 (b))。置換の後の本文の位置に写しておく
+        let jump = view.and_then(|v| self.search_jump_mark(v)).map(|(at, e)| {
+            let pos = changes.map_pos(e.pos, eve_text::Bias::Before);
+            (at, JumpEntry { pos, ..e })
+        });
         let mut tx = Transaction::new(
             changes,
             Origin::Command(eve_view::CommandId::new(ids::SEARCH_REPLACE)),
@@ -1499,6 +1512,7 @@ impl EditorState {
         // 次の一致は、置換した文字列の後ろから探す。カーソルも置換の後ろに置く
         if let Some(v) = view {
             self.set_selection(v, Selection::point(after));
+            self.commit_search_jump(jump);
         }
         if let Some(bar) = &mut self.find.search_bar {
             bar.anchor = after;

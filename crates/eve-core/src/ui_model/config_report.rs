@@ -373,6 +373,8 @@ impl EditorState {
                 .find(|(_, d)| d.path.as_ref() == Some(path))
                 .map(|(id, d)| (*id, d.load_state == crate::document::LoadState::Ready))
         };
+        // 移動の前の位置 (03 §5.9 の JMP-1 (c) と同じジャンプ。別の文書なら切り替えでも同じ位置を記録し、同じ行は重ねない)
+        let mark = self.focused_view().and_then(|v| self.jump_mark(v));
         let res = match find_doc(self) {
             Some((id, _)) => {
                 self.activate_document(id);
@@ -384,6 +386,7 @@ impl EditorState {
             Some((id, true)) if self.active_document() == Some(id) => {
                 if let Some(view) = self.focused_view() {
                     self.jump_to_line_col(view, id, line, col);
+                    self.commit_jump(mark);
                 }
             }
             Some((id, _)) => {

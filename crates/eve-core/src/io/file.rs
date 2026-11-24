@@ -154,6 +154,8 @@ impl EditorState {
         self.docs.views.retain(|_, v| v.doc != doc);
         // 全ペインの表・最近使った順からも消す (表示中のペインは呼び側が先に別の文書へ替える。03 §9.9 の PANE-1 / PANE-9)
         self.forget_document_in_panes(doc);
+        // 全ペインのジャンプ履歴からも消す (閉じた文書を開き直さない、03 §5.9 の JMP-5)
+        self.forget_jumps_of(doc);
         let saving = self
             .io
             .pending

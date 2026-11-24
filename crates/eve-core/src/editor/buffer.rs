@@ -312,7 +312,8 @@ impl EditorState {
                 .filter(|(p, d)| *p == at && *d != doc && self.docs.documents.contains_key(d))
                 .map(|(_, d)| d);
             match preferred.or_else(|| self.next_document_for(at, doc)) {
-                Some(n) => self.show_document_in(at, n),
+                // 閉じる文書の代わりを出すのはジャンプにしない (閉じる文書の項目は消す、03 §5.9 の JMP-5)
+                Some(n) => self.show_document_in_without_jump(at, n),
                 None => {
                     // 最後の 1 件を閉じる: 無題の文書を新しく作る (終了はしない、03 §9.8)
                     let blank = self.blank_document();
