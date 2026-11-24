@@ -85,6 +85,7 @@ pub fn map_io_error(e: io::Error, path: &FsPath) -> FsError {
 
 use crate::hooks;
 use crate::inflight::FlagGuard;
+use crate::save_check::{self, Written};
 use crate::sys::{
     can_write, euid, fsync, get_xattr, list_xattrs, matches, rename_noreplace, same_file_state,
     set_xattr,
@@ -480,7 +481,8 @@ impl FileSystem for UnixFs {
             }
         }
 
-        // 2. 本文
+        // 2. 本文 (書いたバイト数は手順 7 で控える長さ)
+        let mut written_len: u64 = 0;
         loop {
             match data.next_chunk() {
                 Ok(Some(chunk)) => {
@@ -488,6 +490,7 @@ impl FileSystem for UnixFs {
                         abort(Some(file), &mut flag);
                         return Err(map_io_error(e, path));
                     }
+                    written_len += chunk.len() as u64;
                 }
                 Ok(None) => break,
                 Err(e) => {
@@ -580,8 +583,18 @@ impl FileSystem for UnixFs {
                 warnings.push(SaveWarning::PermissionNarrowed);
             }
         }
-        let tmp_meta = file.metadata().ok().map(|m| meta_of(&tmp, &m));
+        // 3b. 閉じる前に fd で識別を控え、閉じた後にパスで更新時刻と、置換をまたいで識別が保たれる FS かを控える
+        // (fstat が失敗したら、取り直したパスの識別に退く (`Written::with_reread`。別のファイルのものかもしれないので、`verify`
+        // は更新時刻も比べる)。statfs が失敗したら保たれない側)
+        // (閉じるときに更新時刻を付け直す FS (Windows の FAT 系と、それを後ろに持つ 9p など) がある。05 §4.1 手順 7)
+        let tmp_id = file.metadata().ok().map(|m| FileId {
+            volume: m.dev(),
+            index: u128::from(m.ino()),
+        });
         drop(file);
+        let written = Written::replaced(tmp_id, written_len)
+            .with_reread(self.metadata(&FsPath::new(tmp.clone())).ok().as_ref());
+        let across_replace = crate::sys::fs_class(&tmp).across_replace;
         hooks::hit("kill_after_flush");
 
         // 4b. 置換の直前の照合
@@ -655,17 +668,14 @@ impl FileSystem for UnixFs {
             warnings.push(SaveWarning::FsyncFailed);
         }
 
-        // 7. 事後: 置換後の T が自分の書いたものか (FileId) を確かめて new_stamp にする
-        let after = self.metadata(&target_path).ok();
-        let new_stamp = match (&after, &tmp_meta) {
-            (Some(a), Some(t)) if a.file_id == t.file_id => FileStamp::from_meta(a, None),
-            (Some(_), Some(t)) => {
-                warnings.push(SaveWarning::ChangedAfterSave);
-                FileStamp::from_meta(t, None)
-            }
-            (Some(a), None) => FileStamp::from_meta(a, None),
-            (None, _) => return Err(FsError::new(FsErrorKind::Other)),
+        hooks::point("after_replace");
+        // 7. 事後: 置換後の T が自分の書いたものかを確かめて new_stamp にする (rename・renameat2・link の退路のどれも同じ規則)。
+        // 確かめられなければ自分の書いた値を返して警告を積む (次の保存の照合は、中身が同じでなければ Conflict になる)
+        let Ok(after) = self.metadata(&target_path) else {
+            return Err(FsError::new(FsErrorKind::Other));
         };
+        let new_stamp =
+            save_check::verify(&written, &after, across_replace).into_stamp(&mut warnings);
         // 8. 成功: フラグ (と同じキーに残る他の記録) を消す。一時ファイルが残ったときは自分のフラグを残す (SAF-40)
         if !leftover_tmp {
             flag.finish_success();

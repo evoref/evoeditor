@@ -1,7 +1,8 @@
 //! 原子的保存 `write_atomic` の Windows 実装 (docs/05 §4.1 の共通手順と §4.2、§5.6)。
 //!
 //! 順序: 0 事前検査 (リンクの解決・親・照合・ハードリンク) → 1 一時ファイル (所有者のみの DACL) → 2 チャンク書込 → 3 fsync・ハンドルを閉じる
-//! → 4 属性 (HIDDEN / SYSTEM) の複製 → 4b 置換の直前の照合 → 5 `ReplaceFileW` (新規ファイルは `MoveFileExW`) → 7 事後 (`FileId` の確認・退避名の削除)。
+//! → 4 属性 (HIDDEN / SYSTEM) の複製 → 4b 置換の直前の照合 → 5 `ReplaceFileW` (新規ファイルは `MoveFileExW`) → 7 事後 (自分の書いたものかの
+//! 確かめ (`save_check`)・退避名の削除)。
 //! 失敗では一時ファイルを消し、元のファイルは無傷に保つ。置換は `ReplaceFileW` だけで、フラグは 0 (ACL・ADS・作成日時は
 //! `ReplaceFileW` が保つ)。置換に失敗して T が無傷なら `AtomicUnsupported` (確認付きの直接上書きは core 側)。
 //!
@@ -28,6 +29,7 @@ use crate::fs::{WinFs, map_io_error};
 use crate::hooks;
 use crate::inflight::FlagGuard;
 use crate::path::simplify_verbatim;
+use crate::save_check::{self, IdAcrossReplace, Written};
 use crate::sys::{
     OwnerOnly, attributes, create_new, delete, flush, matches, move_no_replace, replace_file_once,
     same_file_state, set_attributes,
@@ -240,7 +242,8 @@ impl WinFs {
 
         hooks::hit("kill_after_tmp_alloc");
 
-        // 2. 本文をチャンクで書く
+        // 2. 本文をチャンクで書く (書いたバイト数は手順 7 で控える長さ)
+        let mut written_len: u64 = 0;
         loop {
             match data.next_chunk() {
                 Ok(Some(chunk)) => {
@@ -249,6 +252,7 @@ impl WinFs {
                         abort(&tmp, &mut flag);
                         return Err(map_io_error(e, path));
                     }
+                    written_len += chunk.len() as u64;
                 }
                 Ok(None) => break,
                 // 供給側の失敗・取消し: 一時ファイルを消し、元のファイルは無傷
@@ -271,10 +275,23 @@ impl WinFs {
         }
         hooks::hit("kill_after_flush");
 
-        // 3b. ハンドルを閉じる (開いたまま `ReplaceFileW` を呼ぶと共有違反)
+        // 3b. ハンドルを閉じる (開いたまま `ReplaceFileW` を呼ぶと共有違反)。閉じる前にハンドルで識別と、置換をまたいで識別が
+        // 保たれる FS かを控え、閉じた後にパスで更新時刻を控える (FAT 系は閉じるときに更新時刻を付け直す。05 §4.1 手順 7)
+        // ハンドルで取れなければ、閉じた後にパスで取り直した識別に退き (`with_reread`)、FS の判定は保たれない側に倒す
+        // (取り直した識別は差し替えられた別のファイルのものかもしれないので、`verify` は更新時刻も比べる)
+        let handle = crate::sys::file_info(&file).ok();
         drop(file);
-        let tmp_path = FsPath::new(tmp.clone());
-        let tmp_meta = self.metadata(&tmp_path).ok();
+        let across_replace = handle
+            .as_ref()
+            .map_or(IdAcrossReplace::MayChange, |i| i.across_replace);
+        let written = Written::replaced(
+            handle.map(|i| eve_core::FileId {
+                volume: i.volume,
+                index: i.index,
+            }),
+            written_len,
+        )
+        .with_reread(self.metadata(&FsPath::new(tmp.clone())).ok().as_ref());
 
         // 4. 属性の複製 (HIDDEN / SYSTEM は置換の前に tmp へ付ける。READONLY は付けない)
         if opts.preserve.file_attributes
@@ -399,20 +416,14 @@ impl WinFs {
             }
         }
 
-        // 7. 事後: 置換後の T が自分の書いたものか (FileId) を確かめて new_stamp にする
-        let after = self.metadata(&target_path).ok();
-        let new_stamp = match (&after, &tmp_meta) {
-            (Some(a), Some(t)) if a.file_id == t.file_id => FileStamp::from_meta(a, None),
-            (Some(_), Some(t)) => {
-                // 置換の直後に他のプログラムが T を置き換えた可能性: 自分の書いた内容の値を返す (次の保存は照合で Conflict になる)
-                warnings.push(SaveWarning::ChangedAfterSave);
-                FileStamp::from_meta(t, None)
-            }
-            (Some(a), None) => FileStamp::from_meta(a, None),
-            (None, _) => {
-                return Err(FsError::new(FsErrorKind::Other));
-            }
+        hooks::point("after_replace");
+        // 7. 事後: 置換後の T が自分の書いたものかを確かめて new_stamp にする。確かめられなければ (置換の直後に他のプログラムが
+        // T を置き換えた可能性) 自分の書いた値を返して警告を積む (次の保存の照合は、中身が同じでなければ Conflict になる)
+        let Ok(after) = self.metadata(&target_path) else {
+            return Err(FsError::new(FsErrorKind::Other));
         };
+        let new_stamp =
+            save_check::verify(&written, &after, across_replace).into_stamp(&mut warnings);
         // 退避名を消せたらフラグを消す。消せなければフラグを残す (v0.2 の起動時の走査の手掛かり)
         let mut bak_gone = true;
         if let Some(bak) = backup

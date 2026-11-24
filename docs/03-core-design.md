@@ -1500,8 +1500,9 @@ file.save(doc)  [main]
           05 §4.4 の手順 6 (元ファイルへの書き始め) 以降は CancelToken を見ず、本書込のエンコーダは `Aborted` を返さない (5d から来た場合も同じ。手順 7 の `Cancelled` の箇条)
   6. JobResult::Saved { node, report: SaveReport { method, new_stamp, warnings }, canonical, meta } / JobResult::Failed { err: JobError }
   [main]  (採否は 02 §9.3 の採否表が正本 (§17.2)。Revision が進んでいても採用する)
-  7. 成功: history.saved = node; disk_stamp = report.new_stamp (置換の後の T の FileId が書いた一時ファイルのものと違えば、Port は書いた内容の stamp を入れて警告を積む。
-     ディスクの T とは一致しないので次の保存は照合で Conflict になり、外部変更として扱われる。05 §4.1 手順 7); path 確定 (新規ファイル・名前を付けて保存の場合);
+  7. 成功: history.saved = node; disk_stamp = report.new_stamp (置換の後の T が書いた一時ファイルのものと確かめられなければ (FileId か len が違う。置換をまたいで識別が保たれない FS
+     (FAT 系・ネットワーク等、05 §5.4) では len か mtime が違う。直接上書きは開いたハンドルの FileId と len を必ず比べ、保たれない FS では mtime も比べる)、Port は書いた内容の stamp を入れて警告 (ChangedAfterSave) を積む。
+     ディスクの T とは一致しないので、次の保存は照合で、中身が同じでなければ Conflict になり、外部変更として扱われる。05 §4.1 手順 7); path 確定 (新規ファイル・名前を付けて保存の場合);
      canonical = Saved.canonical; file_id = Saved.meta.file_id; 名前を付けて保存では読み取り専用の理由 (FileAttribute / NoWritePermission、§9.6) を Saved.meta から付け直す; dirty 再計算; DocumentSaved 通知; スワップを削除 (§10.2)
      report.method == InPlace なら `info.save.in_place` (04 §15.2) のメッセージで直接上書きで保存したことを 1 回示す (ステータスの項目にはしない。05 §4.4)。report.warnings (権限複製失敗等。v0.3 までの仕様にあった EscapeMerge の警告は、v0.4 の M23 で書く前の確認 (`JobResult::EscapeMerge`、§8.3.1) に替えたので無い) をメッセージで提示 (保存の完了のメッセージの後に、最も重い 1 つを警告として出す。重さの順は TempNotRemoved → FsyncFailed → ChangedAfterSave → BackupNotRemoved → PermissionNarrowed → AttrsNotPreserved → InflightFlagNotWritten。文言は 04 §15.2)
      失敗: Document は dirty のまま。JobError と FsError.kind (と detail) で分類し、**§9.7 (e) の「保存失敗の後の選択肢」の表** (MessageKey・選択肢・次の状態・後続処理) に従って提示する。
