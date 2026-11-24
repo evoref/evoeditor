@@ -335,6 +335,8 @@ pub(crate) struct TermState {
     pub(crate) viewport: (u16, u16),
     /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
     pub(crate) mouse_drag: Option<crate::view::mouse::Drag>,
+    /// 直前の左の押下 (多重クリックの数え。docs/03 §5.8.2 の CLK-1)。ほかの入力で捨てる。
+    pub(crate) mouse_click: Option<crate::view::mouse::Click>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
     pub(crate) mouse_on: bool,
     /// ヒントバーを出すか (`ui.hint_bar` の初期値。`ui.toggle_hint_bar` で変わる、FR-504)。
@@ -366,6 +368,7 @@ impl EditorState {
                 surface: (80, 24),
                 view_sizes: None,
                 mouse_drag: None,
+                mouse_click: None,
                 mouse_on: true,
                 hint_bar_on: true,
             },

@@ -1,8 +1,11 @@
 //! マウス (docs/03 §5.8.1、01 FR-307): 左クリックで移動、Shift+クリックで拡張、ドラッグで選択、ホイールでスクロール。
+//! ダブル / トリプルクリック (03 §5.8.2 の CLK-1〜CLK-7、01 FR-311): 押下の回数を Editor の「今」と位置で数え、単語・行を選ぶ。
 //!
 //! 位置は面の左上を原点とするセルで届く。折り返し・タブ・全角を考慮した文書位置の確定は、ここでスクロール位置とレイアウトから直接引く。
+//!
+//! spec: 03 §5.8.1, 03 §5.8.2
 
-use eve_text::{ByteOff, LineIdx, Range, Selection, TextRead};
+use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead, unit_at, unit_before};
 use eve_view::{
     ChromeMouseEvent, ChromeTarget, Effect, MessageLevel, Modifiers, MouseAt, MouseButton,
     MouseEvent, MouseKind, ViewId,
@@ -14,18 +17,64 @@ use crate::editor::state::EditorState;
 use crate::layout::{Affinity, line_rows, wrap_ctx};
 use crate::time::{Millis, Tick};
 use crate::ui_model::keys;
+use crate::view::text_object::{WORD_WINDOW, line_whole};
 
 /// Shift+ホイールの横スクロール量 (列)。
 const WHEEL_COLUMNS: i64 = 4;
 /// ドラッグが面の外にあるとき、1 表示行スクロールする間隔。
 const AUTO_SCROLL_INTERVAL: Millis = Millis(50);
+/// 多重クリックの間隔 (03 §5.8.2 の CLK-1)。直前の左の押下からこの時間以内 (ちょうどを含む) の押下を続けて数える。
+/// Windows の既定のダブルクリックの時間と同じ。
+pub const DOUBLE_CLICK_MS: Millis = Millis(500);
+/// 数える回数の上限。4 回目より後も 3 回目 (行の全体) と同じに扱う (CLK-3)。
+const MAX_CLICK_COUNT: u8 = 3;
+
+/// 直前の左の押下 (修飾なし) の記録 (03 §5.8.2 の CLK-1。Editor に 1 つ)。ほかの入力で捨てる。
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Click {
+    view: ViewId,
+    /// 押した面の表示行 (`MouseAt.row`)。
+    row: i32,
+    /// 押した位置を確定した文書の位置。
+    pos: ByteOff,
+    /// 押したときの Editor の「今」。
+    at: Tick,
+    /// 続けて数えた回数 (1〜`MAX_CLICK_COUNT`)。
+    count: u8,
+}
+
+/// ドラッグで選択を伸ばす単位 (03 §5.8.2 の CLK-4)。
+#[derive(Clone, Copy, Debug)]
+enum DragUnit {
+    /// 1 回の押下: 文字の単位 (03 §5.8.1)。選択の起点 (動かさない側)。
+    Char(ByteOff),
+    /// 2 回の押下: §13.3 の単位 (CLK-2)。起点の単位 (空の行では空の範囲) と、直前に求めた位置の単位 (位置がその中に
+    /// あれば読み直さない)。
+    Word {
+        origin: ByteRange,
+        last: Option<ByteRange>,
+    },
+    /// 3 回以上の押下: 行の全体 (CLK-3)。起点の行の全体。
+    Line(ByteRange),
+}
+
+/// ドラッグの位置と起点の単位の関係 (03 §5.8.2 の CLK-4)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Side {
+    /// 位置の単位が起点の単位より前。
+    Earlier,
+    /// 位置の単位が起点の単位。
+    Inside,
+    /// 位置の単位が起点の単位より後ろ。
+    Later,
+}
 
 /// 左ボタンのドラッグ中の状態。
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Drag {
     view: ViewId,
-    /// 選択の起点 (動かさない側)。
-    anchor: ByteOff,
+    /// 選択を伸ばす単位と起点。
+    unit: DragUnit,
     /// 最後に届いたマウスの位置。
     at: MouseAt,
     /// 次の自動スクロールの時刻 (面の外にいる間だけ)。
@@ -34,12 +83,23 @@ pub(crate) struct Drag {
 
 impl EditorState {
     pub(crate) fn on_mouse(&mut self, m: MouseEvent) {
+        // 多重クリックを数えるのは修飾なしの左の押下だけ。左のドラッグと離すは回数を変えず、ほかの操作 (ホイール・ほかの
+        // ボタン・修飾付きの押下) は数え直す (03 §5.8.2 の CLK-1)
+        let plain_left_down = m.kind == MouseKind::Down(MouseButton::Left) && m.mods.is_empty();
+        let keeps_count = matches!(
+            m.kind,
+            MouseKind::Drag(MouseButton::Left) | MouseKind::Up(MouseButton::Left)
+        );
+        if !plain_left_down && !keeps_count {
+            self.reset_click_count();
+        }
         // オーバーレイ・検索バーが開いている間は、編集面のマウスを無視する
         if self.ui.overlay.is_some()
             || self.find.search_bar.is_some()
             || !self.docs.views.contains_key(&m.at.view)
         {
             self.term.mouse_drag = None;
+            self.reset_click_count();
             return;
         }
         // 押す・ホイールは、指す View を表示中のペインに対して行う。どのペインの表示中の View でもなければ (Frame を
@@ -53,6 +113,7 @@ impl EditorState {
             {
                 let Some(at) = shown else {
                     self.term.mouse_drag = None;
+                    self.reset_click_count();
                     return;
                 };
                 // フォーカスの無いペインを押した: そのペインにフォーカスを移してから、同じクリックの処理をする (PANE-7 (a))
@@ -73,6 +134,8 @@ impl EditorState {
     /// ペインが別の文書へ切り替わっても、フォーカスを移すだけなので)。ほかの操作 (中・右のボタン・ホイール) とオーバーレイ・
     /// 検索バーを開いている間は何もしない (PANE-6 (c))。
     pub(crate) fn on_chrome_mouse(&mut self, m: ChromeMouseEvent) {
+        // 編集面の外の操作は、多重クリックを数え直す (03 §5.8.2 の CLK-1。見出し・タブの押下は編集面の押下と続けない)
+        self.reset_click_count();
         if self.ui.overlay.is_some() || self.find.search_bar.is_some() {
             return;
         }
@@ -97,24 +160,111 @@ impl EditorState {
         }
     }
 
+    /// 多重クリックの数えを捨てる (03 §5.8.2 の CLK-1 の「数え直す」。次の左の押下は 1 回目になる)。
+    pub(crate) fn reset_click_count(&mut self) {
+        self.term.mouse_click = None;
+    }
+
+    /// 修飾なしの左の押下の回数を数えて記録する (03 §5.8.2 の CLK-1)。直前の押下と同じ View・同じ表示行で、確定した位置が
+    /// 同じで、間隔が `DOUBLE_CLICK_MS` 以内なら 1 増やし (上限 `MAX_CLICK_COUNT`)、そうでなければ 1。全角の左右の半分・
+    /// 行末より右の別のセルは位置が同じなので続けて数え、スクロールや本文の変化で同じセルが別の位置を指せば数え直す。
+    fn count_click(&mut self, at: MouseAt, pos: ByteOff) -> u8 {
+        let now = self.now;
+        let count = match self.term.mouse_click {
+            Some(c)
+                if c.view == at.view
+                    && c.row == at.row
+                    && c.pos == pos
+                    && now.saturating_sub(c.at) <= DOUBLE_CLICK_MS =>
+            {
+                c.count.saturating_add(1).min(MAX_CLICK_COUNT)
+            }
+            _ => 1,
+        };
+        self.term.mouse_click = Some(Click {
+            view: at.view,
+            row: at.row,
+            pos,
+            at: now,
+            count,
+        });
+        count
+    }
+
     fn mouse_down(&mut self, m: MouseEvent) {
         let view = m.at.view;
         let Some((pos, aff)) = self.mouse_position(m.at) else {
+            self.reset_click_count();
             return;
         };
-        // Undo の結合はカーソル移動と同じく封印する
+        // Undo の結合はカーソル移動と同じく封印する (2 回・3 回の押下も同じ。03 §5.8.2 の CLK-6)
         self.seal_active_history();
-        let anchor = match self.docs.views.get(&view) {
-            Some(v) if m.mods.contains(Modifiers::SHIFT) => v.selection.primary().anchor,
-            _ => pos,
+        let shift = m.mods.contains(Modifiers::SHIFT);
+        let count = if shift {
+            // `Shift` 付きの押下は数え直す (CLK-1)。次の修飾なしの押下は 1 回目
+            self.reset_click_count();
+            1
+        } else {
+            self.count_click(m.at, pos)
         };
-        self.mouse_select(view, anchor, pos, aff);
+        let unit = match count {
+            1 => {
+                let anchor = match self.docs.views.get(&view) {
+                    Some(v) if shift => v.selection.primary().anchor,
+                    _ => pos,
+                };
+                self.mouse_select(view, anchor, pos, aff);
+                DragUnit::Char(anchor)
+            }
+            // 単位を前向きに選ぶ (CLK-2 / CLK-3。空の行の単位は空なので、1 回目のカーソルのまま)
+            2 => {
+                let u = self.click_unit(view, pos, aff);
+                self.mouse_select(view, u.start, u.end, word_head_affinity(u.start, u.end));
+                DragUnit::Word {
+                    origin: u,
+                    last: None,
+                }
+            }
+            _ => {
+                let u = self.click_line(view, pos);
+                self.mouse_select(view, u.start, u.end, Affinity::After);
+                DragUnit::Line(u)
+            }
+        };
         self.term.mouse_drag = Some(Drag {
             view,
-            anchor,
+            unit,
             at: m.at,
             next_scroll: None,
         });
+    }
+
+    /// 位置 `pos` (帰属 `aff`) の §13.3 の単位 (03 §5.8.2 の CLK-2。窓は 64 KiB)。位置が表示行の末尾 (`Before` に帰属する
+    /// 折り返し位置。論理行の行末は `unit_at` が扱う) なら直前の書記素の単位。空の行では空の範囲 (何も選ばない)。
+    fn click_unit(&self, view: ViewId, pos: ByteOff, aff: Affinity) -> ByteRange {
+        self.view_text(view)
+            .and_then(|t| {
+                if aff == Affinity::Before {
+                    unit_before(t, pos, WORD_WINDOW).or_else(|| unit_at(t, pos, WORD_WINDOW))
+                } else {
+                    unit_at(t, pos, WORD_WINDOW)
+                }
+            })
+            .unwrap_or(ByteRange::new(pos, pos))
+    }
+
+    /// 位置 `pos` の行の全体 (03 §5.8.2 の CLK-3。折り返し ON でも論理行。本文は読まず、行の番号を引くだけ)。
+    fn click_line(&self, view: ViewId, pos: ByteOff) -> ByteRange {
+        self.view_text(view).map_or(ByteRange::new(pos, pos), |t| {
+            line_whole(t, t.byte_to_line(pos).0)
+        })
+    }
+
+    /// View `view` の文書の本文。
+    fn view_text(&self, view: ViewId) -> Option<&dyn TextRead> {
+        let v = self.docs.views.get(&view)?;
+        let d = self.docs.documents.get(&v.doc)?;
+        Some(d.text())
     }
 
     fn mouse_move(&mut self, at: MouseAt) {
@@ -128,14 +278,46 @@ impl EditorState {
         } else {
             drag.next_scroll = None;
         }
+        self.drag_select(&mut drag);
         self.term.mouse_drag = Some(drag);
-        self.drag_select(drag);
     }
 
-    /// 起点からマウスの位置までを選ぶ (面の外の行は端の行に丸める)。
-    fn drag_select(&mut self, drag: Drag) {
-        if let Some((pos, aff)) = self.mouse_position(drag.at) {
-            self.mouse_select(drag.view, drag.anchor, pos, aff);
+    /// 起点からマウスの位置までを選ぶ (面の外の行は端の行に丸める)。2 回・3 回の押下に続くドラッグは、起点の単位を含めて
+    /// 位置の単位の端まで選ぶ (03 §5.8.2 の CLK-4。`head` は位置の側。自動スクロールもここを通る)。位置が起点の単位の中
+    /// なら位置の単位を求めず、直前に求めた単位の中なら読み直さない (CLK-7)。
+    fn drag_select(&mut self, drag: &mut Drag) {
+        let Some((pos, aff)) = self.mouse_position(drag.at) else {
+            return;
+        };
+        let view = drag.view;
+        match &mut drag.unit {
+            DragUnit::Char(anchor) => self.mouse_select(view, *anchor, pos, aff),
+            DragUnit::Word { origin, last } => {
+                let origin = *origin;
+                let side = side_of(origin, pos, aff);
+                let target = match (side, *last) {
+                    (Side::Inside, _) => origin,
+                    (_, Some(t)) if unit_holds(t, pos, aff) => t,
+                    _ => {
+                        let t = self.click_unit(view, pos, aff);
+                        *last = Some(t);
+                        t
+                    }
+                };
+                let (anchor, head) = unit_drag_range(origin, target, side);
+                self.mouse_select(view, anchor, head, word_head_affinity(anchor, head));
+            }
+            DragUnit::Line(origin) => {
+                let origin = *origin;
+                let side = side_of(origin, pos, aff);
+                let target = if side == Side::Inside {
+                    origin
+                } else {
+                    self.click_line(view, pos)
+                };
+                let (anchor, head) = unit_drag_range(origin, target, side);
+                self.mouse_select(view, anchor, head, Affinity::After);
+            }
         }
     }
 
@@ -159,8 +341,8 @@ impl EditorState {
         let up = drag.at.row < 0;
         self.scroll_lines(drag.view, if up { -1 } else { 1 });
         drag.next_scroll = Some(self.now + AUTO_SCROLL_INTERVAL);
+        self.drag_select(&mut drag);
         self.term.mouse_drag = Some(drag);
-        self.drag_select(drag);
     }
 
     pub(crate) fn mouse_deadline(&self) -> Option<Tick> {
@@ -238,11 +420,53 @@ impl EditorState {
     }
 }
 
+/// 位置 `pos` (帰属 `aff`) の単位が `r` と分かるか (03 §5.8.2 の CLK-2 の定義で、`r` を読み直さずに決められる場合)。
+/// 単位の中の位置、`After` の始まり (直後の書記素が `r` の最初)、`Before` の終わり (直前の書記素が `r` の最後)。論理行の
+/// 行末など、ほかの場合は `false` (読み直して求める)。
+fn unit_holds(r: ByteRange, pos: ByteOff, aff: Affinity) -> bool {
+    (r.start < pos && pos < r.end)
+        || (pos == r.start && pos < r.end && aff == Affinity::After)
+        || (pos == r.end && r.start < pos && aff == Affinity::Before)
+}
+
+/// ドラッグの位置 `pos` (帰属 `aff`) と起点の単位 `origin` の関係 (03 §5.8.2 の CLK-4)。
+fn side_of(origin: ByteRange, pos: ByteOff, aff: Affinity) -> Side {
+    if unit_holds(origin, pos, aff) {
+        Side::Inside
+    } else if pos >= origin.end {
+        Side::Later
+    } else {
+        Side::Earlier
+    }
+}
+
+/// 単位のドラッグの `(anchor, head)` (03 §5.8.2 の CLK-4)。`origin` は起点の単位、`target` はドラッグの位置の単位。
+/// 位置が起点の単位より後ろなら位置の単位の終わりまで前向きに、前なら位置の単位の始まりまで後ろ向きに選び、起点の単位を常に
+/// 含める。位置が起点の単位の中なら起点の単位を前向きに選ぶ。
+fn unit_drag_range(origin: ByteRange, target: ByteRange, side: Side) -> (ByteOff, ByteOff) {
+    match side {
+        Side::Later => (origin.start, origin.end.max(target.end)),
+        Side::Earlier => (origin.end, origin.start.min(target.start)),
+        Side::Inside => (origin.start, origin.end),
+    }
+}
+
+/// 単語の単位の選択の `head` の帰属 (03 §5.8.2 の CLK-4)。前向きの `head` は単位の終わりなので、折り返し位置なら上の表示行の
+/// 末尾 (`Before`)。後ろ向き・空の選択は単位の始まりなので下の表示行の先頭 (`After`)。`Before` は折り返し位置でだけ効く。
+fn word_head_affinity(anchor: ByteOff, head: ByteOff) -> Affinity {
+    if head > anchor {
+        Affinity::Before
+    } else {
+        Affinity::After
+    }
+}
+
 /// `ui.toggle_mouse`: マウスの取得の ON/OFF。OFF の間は端末のネイティブ選択・スクロールが使える (04 §6.8)。
 fn toggle_mouse(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let enabled = !ctx.state.term.mouse_on;
     ctx.state.term.mouse_on = enabled;
     ctx.state.term.mouse_drag = None;
+    ctx.state.term.mouse_click = None;
     ctx.state.push_effect(Effect::SetMouseCapture { enabled });
     ctx.state.show_message(
         MessageLevel::Info,
@@ -288,4 +512,77 @@ pub(crate) fn register(r: &mut CommandRegistry) {
         "caps.mouse",
         toggle_mouse,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn r(start: usize, end: usize) -> ByteRange {
+        ByteRange::new(ByteOff(start), ByteOff(end))
+    }
+
+    // spec: 03 §5.8.2 (CLK-4)
+    #[test]
+    fn 位置と起点の単位の関係() {
+        use Affinity::{After, Before};
+        // (起点, 位置, 帰属, 関係)
+        let cases = [
+            (r(4, 7), 4, After, Side::Inside),
+            (r(4, 7), 5, After, Side::Inside),
+            (r(4, 7), 5, Before, Side::Inside),
+            (r(4, 7), 7, Before, Side::Inside),
+            (r(4, 7), 7, After, Side::Later),
+            (r(4, 7), 9, After, Side::Later),
+            (r(4, 7), 4, Before, Side::Earlier),
+            (r(4, 7), 2, After, Side::Earlier),
+            // 空の起点 (空の行)
+            (r(3, 3), 3, After, Side::Later),
+            (r(3, 3), 5, After, Side::Later),
+            (r(3, 3), 1, After, Side::Earlier),
+        ];
+        for (origin, pos, aff, want) in cases {
+            assert_eq!(
+                side_of(origin, ByteOff(pos), aff),
+                want,
+                "{origin:?} {pos} {aff:?}"
+            );
+        }
+    }
+
+    // spec: 03 §5.8.2 (CLK-4)
+    #[test]
+    fn 単位のドラッグの範囲() {
+        let at = |(a, h): (ByteOff, ByteOff)| (a.0, h.0);
+        // (起点, 位置の単位, 関係, (anchor, head))
+        let cases = [
+            (r(4, 7), r(8, 11), Side::Later, (4, 11)),
+            (r(4, 7), r(0, 3), Side::Earlier, (7, 0)),
+            (r(4, 7), r(4, 7), Side::Inside, (4, 7)),
+            // 位置の単位が空 (空の行): 起点の単位を含めて位置まで
+            (r(4, 7), r(9, 9), Side::Later, (4, 9)),
+            (r(4, 7), r(2, 2), Side::Earlier, (7, 2)),
+            // 起点が空 (空の行で 2 回押した)
+            (r(3, 3), r(4, 8), Side::Later, (3, 8)),
+            (r(3, 3), r(0, 2), Side::Earlier, (3, 0)),
+            (r(3, 3), r(3, 3), Side::Later, (3, 3)),
+            // 位置の単位が起点より手前で終わる (行末より右の位置が起点の終わりの直前の単位を指す) ときも起点を含める
+            (r(4, 7), r(4, 7), Side::Later, (4, 7)),
+        ];
+        for (origin, target, side, want) in cases {
+            assert_eq!(
+                at(unit_drag_range(origin, target, side)),
+                want,
+                "{origin:?} {target:?} {side:?}"
+            );
+        }
+    }
+
+    // spec: 03 §5.8.2 (CLK-4)
+    #[test]
+    fn 単語の_head_の帰属は前向きなら上の表示行の末尾() {
+        assert_eq!(word_head_affinity(ByteOff(4), ByteOff(7)), Affinity::Before);
+        assert_eq!(word_head_affinity(ByteOff(7), ByteOff(4)), Affinity::After);
+        assert_eq!(word_head_affinity(ByteOff(3), ByteOff(3)), Affinity::After);
+    }
 }
