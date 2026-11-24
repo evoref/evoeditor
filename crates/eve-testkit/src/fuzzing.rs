@@ -819,19 +819,11 @@ fn bracket_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("bracket {typed:?} + goto_bracket ×{n}")
 }
 
-/// 行コメントの切替 (docs/03 §15.6、docs/09 §3.3 の `fuzz_editor`。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
-/// (`#`・`//`・`;`) か `plain` に替え、フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を
-/// 含む) を置いて `edit.toggle_comment` を 1〜2 回実行し、ときどき Undo する。
-fn toggle_comment_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
-    const LANGS: [&str; 4] = ["python", "rust", "ini", "plain"];
-    let lang = (b.u8() & 1 == 0).then(|| LANGS[usize::from(b.u8()) % LANGS.len()]);
-    if let Some(l) = lang {
-        h.cmd_with("lang.set", Args::new().with_str("language", l));
-    }
+/// フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、
+/// 置いた数を返す。View が無ければ `None`。
+fn place_ranges(h: &mut Harness, b: &mut Bytes<'_>) -> Option<usize> {
     let st = h.editor.state();
-    let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
-        return "toggle_comment (View なし)".to_owned();
-    };
+    let view = st.first_window().and_then(|w| st.window_view(w))?;
     let len = st
         .view(view)
         .and_then(|v| st.document(v.doc))
@@ -852,6 +844,58 @@ fn toggle_comment_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     if let Some(sel) = eve_text::Selection::new(ranges, primary) {
         h.set_selection(sel);
     }
+    Some(n)
+}
+
+/// フォーカスのペインの View の Selection。
+fn focused_selection(h: &Harness) -> Option<eve_text::Selection> {
+    let st = h.editor.state();
+    let view = st.first_window().and_then(|w| st.window_view(w))?;
+    st.view(view).map(|v| v.selection.clone())
+}
+
+/// 選択の拡張 (docs/03 §5.7 の SEL-1〜SEL-7、§15.9.1 と docs/09 §3.3 の `fuzz_editor`。v0.5 の M34 の段 5)。フォーカスの
+/// ペインの View に 1〜8 個の Range を置き、`select.expand` を k 回 (1〜6)、`select.shrink` を k 回実行して、元の Selection に
+/// 戻ることを確かめる。半分は続けて `select.line` を 1〜2 回実行する。どれも文書を変えない (Motion)。
+fn select_expand_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    let Some(n) = place_ranges(h, b) else {
+        return "select_expand (View なし)".to_owned();
+    };
+    let before = h.doc_text();
+    let start = focused_selection(h);
+    let k = 1 + b.u8() % 6;
+    for _ in 0..k {
+        h.cmd("select.expand");
+    }
+    for _ in 0..k {
+        h.cmd("select.shrink");
+    }
+    assert_eq!(
+        focused_selection(h),
+        start,
+        "select.expand ×{k} と select.shrink ×{k} で元の Selection に戻る"
+    );
+    let lines = if b.u8() & 1 == 0 { 1 + b.u8() % 2 } else { 0 };
+    for _ in 0..lines {
+        h.cmd("select.line");
+    }
+    assert_eq!(h.doc_text(), before, "選択の拡張は文書を変えない");
+    let _ = h.frame();
+    format!("select_expand ranges {n} ×{k} line ×{lines}")
+}
+
+/// 行コメントの切替 (docs/03 §15.6、docs/09 §3.3 の `fuzz_editor`。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
+/// (`#`・`//`・`;`) か `plain` に替え、フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を
+/// 含む) を置いて `edit.toggle_comment` を 1〜2 回実行し、ときどき Undo する。
+fn toggle_comment_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const LANGS: [&str; 4] = ["python", "rust", "ini", "plain"];
+    let lang = (b.u8() & 1 == 0).then(|| LANGS[usize::from(b.u8()) % LANGS.len()]);
+    if let Some(l) = lang {
+        h.cmd_with("lang.set", Args::new().with_str("language", l));
+    }
+    let Some(n) = place_ranges(h, b) else {
+        return "toggle_comment (View なし)".to_owned();
+    };
     let times = 1 + b.u8() % 2;
     for _ in 0..times {
         h.cmd("edit.toggle_comment");
@@ -1135,7 +1179,7 @@ pub fn editor_sequence(data: &[u8]) {
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
         // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
-        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で選ぶ
+        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1152,6 +1196,9 @@ pub fn editor_sequence(data: &[u8]) {
                         | "edit.sort_lines_ascending"
                         | "edit.sort_lines_descending"
                         | "edit.trim_trailing_whitespace"
+                        | "select.line"
+                        | "select.expand"
+                        | "select.shrink"
                 )
         })
         .collect();
@@ -1174,7 +1221,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 30 {
+        match b.u8() % 31 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1346,6 +1393,11 @@ pub fn editor_sequence(data: &[u8]) {
             29 => {
                 // テキスト変換 (v0.5 の M34 の段 2。docs/03 §15.8)
                 let what = text_transform_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            30 => {
+                // 選択の拡張 (v0.5 の M34 の段 5。docs/03 §5.7)
+                let what = select_expand_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

@@ -225,6 +225,27 @@ const WORD_AT_FIRST_WINDOW: usize = 256;
 /// 読み直す。窓は `max_window` で止め、それより長い単語は窓の中の部分を返す (長大行で、カーソルごとに行の全体を読まない。
 /// 03 §11.5.1 の窓と同じ考え)。
 pub fn word_at(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteRange> {
+    unit_near(text, pos, max_window, word_in)
+}
+
+/// 位置 `pos` の §13.3 の単位 (同じ文字種のラン・空白のラン・記号 1 書記素。03 §5.8.2 の CLK-2 のダブルクリックの単位)。
+/// `pos` の直後の書記素を含む単位で、`pos` が行末 (直後が区切りか文書の末尾) なら直前の書記素の単位。空の行では `None`。
+/// `word_at` と違い、空白のランも単位にする。窓の読み方は `word_at` と同じ (`max_window` まで)。
+pub fn unit_at(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteRange> {
+    let at = ByteOff(pos.0.min(text.len_bytes()));
+    let (_, _, le) = line_of(text, at);
+    let at_line_end = at.0 >= le;
+    unit_near(text, at, max_window, |s, rel| unit_in(s, rel, at_line_end))
+}
+
+/// `pos` の行の窓を読み、`pick(窓の文字列, 窓の中の pos)` が選んだ単位を返す (`word_at` / `unit_at` の本体)。単位が窓の端
+/// (行の端でないところ) に届いたら窓を倍にして読み直し、`max_window` で止める。
+fn unit_near(
+    text: &dyn TextRead,
+    pos: Pos,
+    max_window: usize,
+    pick: impl Fn(&str, usize) -> Option<(usize, usize)>,
+) -> Option<ByteRange> {
     let pos = ByteOff(pos.0.min(text.len_bytes()));
     let (_, ls, le) = line_of(text, pos);
     let pos = pos.0.min(le);
@@ -233,9 +254,9 @@ pub fn word_at(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteR
         let from = floor_char(text, pos.saturating_sub(window).max(ls));
         let to = ceil_char(text, pos.saturating_add(window).min(le));
         let s = line_text(text, from, to);
-        let (a, b) = word_in(&s, pos - from)?;
+        let (a, b) = pick(&s, pos - from)?;
         // 窓が行の途中で始まるとき、最初の書記素は信用しない: 書記素の途中で切れていることがあり、直前の文字種に従う文字
-        // (`ー`・`々` など、§13.3) を直前なしで分類している。単語がその書記素の後ろまで届いていれば、窓を広げて読み直す
+        // (`ー`・`々` など、§13.3) を直前なしで分類している。単位がその書記素の後ろまで届いていれば、窓を広げて読み直す
         let lead = if from > ls {
             str_graphemes(&s).next().map_or(0, |(i, g)| i + g.len())
         } else {
@@ -251,28 +272,23 @@ pub fn word_at(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteR
     }
 }
 
-/// 1 行の部分 `s` の中で、位置 `rel` の単語 (`word_at` の本体。`s` の中の (始まり, 終わり))。
-fn word_in(s: &str, rel: usize) -> Option<(usize, usize)> {
-    // (始まり, 終わり, 文字種) の並び
-    let mut units: Vec<(usize, usize, ScriptClass)> = Vec::new();
+/// 1 行の部分 `s` の書記素ごとの (始まり, 終わり, 文字種)。
+fn classified(s: &str) -> Vec<(usize, usize, ScriptClass)> {
+    let mut units = Vec::new();
     let mut prev: Option<ScriptClass> = None;
     for (i, g) in str_graphemes(s) {
         let class = classify_grapheme(g, prev);
         units.push((i, i + g.len(), class));
         prev = Some(class);
     }
-    let after = units
-        .iter()
-        .position(|&(a, _, c)| a == rel && c != ScriptClass::Space);
-    let before = || {
-        units
-            .iter()
-            .position(|&(_, b, c)| b == rel && c != ScriptClass::Space)
-    };
-    let k = after.or_else(before)?;
+    units
+}
+
+/// `units` の `k` 番目の書記素を含む単位 (同じ文字種のラン。`Punct` は 1 書記素) の (始まり, 終わり)。
+fn run_around(units: &[(usize, usize, ScriptClass)], k: usize) -> (usize, usize) {
     let class = units[k].2;
     if class == ScriptClass::Punct {
-        return Some((units[k].0, units[k].1));
+        return (units[k].0, units[k].1);
     }
     let mut first = k;
     while first > 0 && units[first - 1].2 == class {
@@ -282,7 +298,34 @@ fn word_in(s: &str, rel: usize) -> Option<(usize, usize)> {
     while last + 1 < units.len() && units[last + 1].2 == class {
         last += 1;
     }
-    Some((units[first].0, units[last].1))
+    (units[first].0, units[last].1)
+}
+
+/// 1 行の部分 `s` の中で、位置 `rel` の単語 (`word_at` の本体。`s` の中の (始まり, 終わり))。
+fn word_in(s: &str, rel: usize) -> Option<(usize, usize)> {
+    let units = classified(s);
+    let after = units
+        .iter()
+        .position(|&(a, _, c)| a == rel && c != ScriptClass::Space);
+    let before = || {
+        units
+            .iter()
+            .position(|&(_, b, c)| b == rel && c != ScriptClass::Space)
+    };
+    let k = after.or_else(before)?;
+    Some(run_around(&units, k))
+}
+
+/// 1 行の部分 `s` の中で、位置 `rel` の単位 (`unit_at` の本体)。`at_line_end` なら直前の書記素、そうでなければ `rel` を含む
+/// (直後の) 書記素の単位。
+fn unit_in(s: &str, rel: usize, at_line_end: bool) -> Option<(usize, usize)> {
+    let units = classified(s);
+    let k = if at_line_end {
+        units.iter().position(|&(_, b, _)| b == rel)
+    } else {
+        units.iter().position(|&(a, b, _)| a <= rel && rel < b)
+    }?;
+    Some(run_around(&units, k))
 }
 
 #[cfg(test)]
@@ -556,7 +599,7 @@ mod boundary_tests {
 
 #[cfg(test)]
 mod word_at_tests {
-    use super::word_at;
+    use super::{unit_at, word_at};
     use crate::text::Text;
     use crate::types::ByteOff;
 
@@ -659,5 +702,55 @@ mod word_at_tests {
             (2 + 1500, 2 + 3500),
             "上限の窓の中の部分"
         );
+    }
+
+    /// `s` の `|` の位置の単位 (`unit_at`。03 §5.8.2 の CLK-2)。
+    fn unit(marked: &str, window: usize) -> Option<String> {
+        let p = marked.find('|').expect("| がある");
+        let s = marked.replacen('|', "", 1);
+        let t = Text::from(s.as_str());
+        unit_at(&t, ByteOff(p), window).map(|r| s[r.start.0..r.end.0].to_owned())
+    }
+
+    #[test]
+    fn 単位は直後の書記素を含み_行末なら直前で_空白のランも単位() {
+        let u = |m: &str| unit(m, 1 << 16);
+        assert_eq!(u("foo |bar").as_deref(), Some("bar"));
+        assert_eq!(u("fo|o bar").as_deref(), Some("foo"));
+        assert_eq!(u("foo|  bar").as_deref(), Some("  "), "空白のラン");
+        assert_eq!(u("foo|.bar").as_deref(), Some("."), "記号は 1 書記素");
+        assert_eq!(u("foo|\nbar").as_deref(), Some("foo"), "行末は直前");
+        assert_eq!(u("foo  |\nbar").as_deref(), Some("  "), "行末の空白");
+        assert_eq!(u("foo|\r\nbar").as_deref(), Some("foo"), "CRLF の前");
+        assert_eq!(u("foo\n|bar").as_deref(), Some("bar"), "行頭");
+        assert_eq!(u("a\n|\nb"), None, "空の行");
+        assert_eq!(u("|"), None, "空の文書");
+        assert_eq!(u("a\n|"), None, "区切りで終わる文書の最後の空の行");
+        assert_eq!(u("食|べる").as_deref(), Some("べる"));
+        assert_eq!(u("コ|ーヒー").as_deref(), Some("コーヒー"));
+        assert_eq!(
+            u("x|\u{3000}\u{3000}y").as_deref(),
+            Some("\u{3000}\u{3000}"),
+            "全角の空白"
+        );
+        assert_eq!(
+            u("|e\u{301}tude x").as_deref(),
+            Some("e\u{301}tude"),
+            "結合文字"
+        );
+    }
+
+    #[test]
+    fn 単位の窓は単語と同じく広げ_上限で止める() {
+        let long = " ".repeat(5000);
+        let s = format!("x{long}|y");
+        assert_eq!(unit(&s, 1 << 16).map(|w| w.len()), Some(1), "y");
+        let s = format!("x{}|{}y", &long[..2500], &long[2500..]);
+        assert_eq!(
+            unit(&s, 1 << 16).map(|w| w.len()),
+            Some(5000),
+            "空白のランの全体"
+        );
+        assert_eq!(unit(&s, 1000).map(|w| w.len()), Some(2000), "上限の窓");
     }
 }

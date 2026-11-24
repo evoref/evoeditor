@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1096 件)。
+/// `locales/en.toml` の文言 (1104 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -193,6 +193,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.select.all.title"), B("Select All")),
     (B("cmd.select.all_matches.description"), B("Select every occurrence of the selected text, with a cursor at each.")),
     (B("cmd.select.all_matches.title"), B("Select All Matches")),
+    (B("cmd.select.expand.description"), B("Grow the selection to the next larger range that contains it (word, brackets, line, document)")),
+    (B("cmd.select.expand.title"), B("Expand Selection")),
     (B("cmd.select.extend_down.description"), B("Extend the selection down one line.")),
     (B("cmd.select.extend_down.title"), B("Select Down")),
     (B("cmd.select.extend_end.description"), B("Extend the selection to the end of the line.")),
@@ -217,6 +219,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.select.extend_word_left.title"), B("Select Word Left")),
     (B("cmd.select.extend_word_right.description"), B("Extend the selection to the next word.")),
     (B("cmd.select.extend_word_right.title"), B("Select Word Right")),
+    (B("cmd.select.line.description"), B("Select the whole line at the cursor; repeat to add the next line")),
+    (B("cmd.select.line.title"), B("Select Line")),
+    (B("cmd.select.shrink.description"), B("Return to the selection before the last expand")),
+    (B("cmd.select.shrink.title"), B("Shrink Selection")),
     (B("cmd.ui.cancel.description"), B("Close the open input field or dialog.")),
     (B("cmd.ui.cancel.title"), B("Cancel")),
     (B("cmd.ui.confirm.description"), B("Accept the input or the selected item.")),
@@ -1006,9 +1012,11 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.help.section.terminal"), B("Terminal settings")),
     (B("ui.help.terminal.alt"), B("On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives")),
     (B("ui.help.terminal.chord"), B("Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels")),
+    (B("ui.help.terminal.ctrl_shift_l"), B("Some terminals send Ctrl+Shift+L as Ctrl+L (Select Line); use Ctrl+K E to select all matches")),
     (B("ui.help.terminal.ime"), B("While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter")),
     (B("ui.help.terminal.multi_cursor_paste"), B("To paste one line per cursor, use Ctrl+K V (a short terminal paste cannot be split per cursor)")),
     (B("ui.help.terminal.readme"), B("Per-terminal settings and known limitations are described in the README")),
+    (B("ui.help.terminal.redraw"), B("If the screen looks garbled, press Ctrl+K R to redraw (Ctrl+L selects the line)")),
     (B("ui.help.terminal.stdin_keys"), B("When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input")),
     (B("ui.help.terminal.stdin_powershell"), B("Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\"")),
     (B("ui.help.terminal.stdin_redraw"), B("If the writer's error output garbles the screen, redraw it with {key:ui.redraw}")),
@@ -1109,7 +1117,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1096 件)。
+/// `locales/ja.toml` の文言 (1104 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1294,6 +1302,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.select.all.title"), B("すべて選択")),
     (B("cmd.select.all_matches.description"), B("選択と同じ文字列をすべて選び、それぞれにカーソルを置きます。")),
     (B("cmd.select.all_matches.title"), B("一致をすべて選択")),
+    (B("cmd.select.expand.description"), B("今の選択を含む、次に大きい範囲 (単語・括弧・行・文書) へ広げます")),
+    (B("cmd.select.expand.title"), B("選択を広げる")),
     (B("cmd.select.extend_down.description"), B("選択範囲を下の行へ広げます。")),
     (B("cmd.select.extend_down.title"), B("下へ選択")),
     (B("cmd.select.extend_end.description"), B("選択範囲を行の末尾まで広げます。")),
@@ -1318,6 +1328,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.select.extend_word_left.title"), B("単語の左へ選択")),
     (B("cmd.select.extend_word_right.description"), B("選択範囲を次の単語まで広げます。")),
     (B("cmd.select.extend_word_right.title"), B("単語の右へ選択")),
+    (B("cmd.select.line.description"), B("カーソルの行の全体を選びます。続けると次の行を足します")),
+    (B("cmd.select.line.title"), B("行を選択")),
+    (B("cmd.select.shrink.description"), B("選択を広げる前に戻します")),
+    (B("cmd.select.shrink.title"), B("選択を縮める")),
     (B("cmd.ui.cancel.description"), B("開いている入力欄やダイアログを閉じます。")),
     (B("cmd.ui.cancel.title"), B("取り消し")),
     (B("cmd.ui.confirm.description"), B("入力内容や選択中の項目を決定します。")),
@@ -2107,9 +2121,11 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.help.section.terminal"), B("端末の設定")),
     (B("ui.help.terminal.alt"), B("Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります")),
     (B("ui.help.terminal.chord"), B("Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます")),
+    (B("ui.help.terminal.ctrl_shift_l"), B("一部の端末では Ctrl+Shift+L が Ctrl+L (行を選択) として届きます。一致をすべて選ぶには Ctrl+K E を使ってください")),
     (B("ui.help.terminal.ime"), B("IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください")),
     (B("ui.help.terminal.multi_cursor_paste"), B("複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません)")),
     (B("ui.help.terminal.readme"), B("端末ごとの設定と既知の制約は README に書いてあります")),
+    (B("ui.help.terminal.redraw"), B("画面が乱れたときは Ctrl+K R で描き直します (Ctrl+L は行の選択です)")),
     (B("ui.help.terminal.stdin_keys"), B("標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います")),
     (B("ui.help.terminal.stdin_powershell"), B("Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください")),
     (B("ui.help.terminal.stdin_redraw"), B("書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください")),

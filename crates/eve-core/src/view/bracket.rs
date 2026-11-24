@@ -170,11 +170,12 @@ fn visit(
     }
 }
 
-/// `target` の括弧の対応を `window` の中だけで探す (03 §5.7 の BRK-3)。前向き (開き括弧) は `window.end` まで、後ろ向き
-/// (閉じ括弧) は `window.start` まで。(対応の範囲, 読んだバイト数)。
+/// 括弧の対応を `window` の中だけで探す (03 §5.7 の BRK-3)。`from` は探し始める位置 (対象の括弧の、前向きなら終端、後ろ向き
+/// なら始端) で、そこでの深さを 1 とする。前向き (開き括弧) は `window.end` まで、後ろ向き (閉じ括弧) は `window.start` まで。
+/// (対応の範囲, 読んだバイト数)。
 fn scan(
     text: &dyn TextRead,
-    target: ByteRange,
+    from: ByteOff,
     pair: usize,
     open: bool,
     window: ByteRange,
@@ -197,7 +198,7 @@ fn scan(
     };
     let mut read = 0;
     if open {
-        let (mut pos, hi) = (target.end.0, window.end.0);
+        let (mut pos, hi) = (from.0, window.end.0);
         while pos < hi {
             let (chunk, cs) = text.chunk_at(ByteOff(pos));
             let bytes = chunk.as_bytes();
@@ -214,7 +215,7 @@ fn scan(
             pos = end;
         }
     } else {
-        let (mut pos, lo) = (target.start.0, window.start.0);
+        let (mut pos, lo) = (from.0, window.start.0);
         while pos > lo {
             let (chunk, cs) = text.chunk_at(ByteOff(pos - 1));
             let bytes = chunk.as_bytes();
@@ -269,7 +270,8 @@ fn find_pair_within(
         }
         window = ByteRange::new(window.start.max(s.start), window.end.min(s.end));
     }
-    let (found, read) = scan(text, target, pair, open, window);
+    let from = if open { target.end } else { target.start };
+    let (found, read) = scan(text, from, pair, open, window);
     let lookup = match found {
         Some(p) => Lookup::Found { target, pair: p },
         // 文書の端まで探したなら対応なし、上限で止めたなら範囲を超えた
@@ -277,6 +279,188 @@ fn find_pair_within(
         None => Lookup::TooFar,
     };
     (lookup, read)
+}
+
+/// 組の括弧になり得るバイト (ASCII の 6 つの括弧と、全角の括弧の UTF-8 の先頭バイト `E3` / `EF`)。
+const BRACKET_LEAD: [bool; 256] = {
+    let mut t = [false; 256];
+    let mut i = 0;
+    while i < PAIRS.len() {
+        let (o, c) = PAIRS[i];
+        let mut ob = [0u8; 4];
+        let mut cb = [0u8; 4];
+        t[o.encode_utf8(&mut ob).as_bytes()[0] as usize] = true;
+        t[c.encode_utf8(&mut cb).as_bytes()[0] as usize] = true;
+        i += 1;
+    }
+    t
+};
+
+/// 全角の組の括弧の UTF-8 の先頭 2 バイト (`（）［］｛｝` は `EF BC` / `EF BD`、`「」『』【】〔〕` は `E3 80`)。前へ探す走査は、
+/// 先頭バイトが `E3` / `EF` の文字のうち、この 2 バイトで始まるものだけを読み直す (かな・漢字を 1 文字ずつ復号しない)。
+const WIDE_PREFIXES: [[u8; 2]; 3] = [[0xE3, 0x80], [0xEF, 0xBC], [0xEF, 0xBD]];
+
+/// `hay[i..]` から始まる組の括弧 (組の番号, 開きか, バイト数)。括弧の全体が `hay` に入るものだけ。
+fn bracket_at(hay: &[u8], i: usize) -> Option<(usize, bool, usize)> {
+    let b = *hay.get(i)?;
+    if b.is_ascii() {
+        let (pair, open) = classify(char::from(b))?;
+        return Some((pair, open, 1));
+    }
+    let s = hay.get(i..i + 3)?;
+    if !WIDE_PREFIXES.contains(&[s[0], s[1]]) {
+        return None;
+    }
+    let c = std::str::from_utf8(s).ok()?.chars().next()?;
+    let (pair, open) = classify(c)?;
+    Some((pair, open, 3))
+}
+
+/// 範囲 `r` を囲む、対応のある括弧の組 (03 §5.7 の SEL-2 の (2) / (3))。`r.start` にある開き括弧 (始まりが `r.start` 以前。
+/// 対応の閉じ括弧の終わりが `r.end` より後ろのときだけ) と、`r.start` から前へ組ごとに深さを数えて (BRK-3) まだ閉じていない
+/// 開き括弧を近い順に取り、その対応の閉じ括弧 (BRK-3。開き括弧から 1 MiB まで、BRK-4) の終わりが `r.end` 以降にある最初の
+/// 組 (内側から外側へ。開き括弧・閉じ括弧を含む Range も、その組に囲まれる) を返す。前へ探すのは `r.start` から 1 MiB まで。
+/// 範囲を超えた組は候補にしない。
+///
+/// 読んだ量が `budget` に達したら、それより後の対応は探さずに `None` (03 §5.7 の SEL-5)。((開き, 閉じ), 読んだバイト数)。
+pub(crate) fn enclosing_pair(
+    text: &dyn TextRead,
+    r: ByteRange,
+    budget: usize,
+) -> (Option<(ByteRange, ByteRange)>, usize) {
+    enclosing_pair_within(text, r, BRACKET_SCAN_MAX_BYTES, budget)
+}
+
+/// `enclosing_pair` の本体。探す範囲の上限 (`limit` バイト。前へ探す量と、対応を探す量の両方) を引数にする (試験は小さな
+/// 上限で窓の端を確かめる)。
+///
+/// 同じ組の外側の開き括弧の対応は、内側の開き括弧の対応の後ろから深さ 1 で探し続ける (間の同じ組の括弧は釣り合っている
+/// ので、開き括弧から BRK-3 で探すのと同じ結果になり、同じところを読み直さない)。内側の開き括弧に範囲の中の対応が無ければ、
+/// 同じ組の外側の開き括弧にも無い (内側の対応より後ろでしか閉じない) ので、その組はそれ以上探さない。
+fn enclosing_pair_within(
+    text: &dyn TextRead,
+    r: ByteRange,
+    limit: usize,
+    budget: usize,
+) -> (Option<(ByteRange, ByteRange)>, usize) {
+    let mut st = Enclosing {
+        text,
+        r,
+        limit,
+        budget,
+        resume: [None; PAIRS.len()],
+        dead: [false; PAIRS.len()],
+        read: 0,
+    };
+    // Range の始まりにある開き括弧 (`(` を選んだ Range・`|(` のカーソル) は、最も内側の候補。その組は Range を真に囲むとき
+    // (対応の閉じ括弧の終わりが Range の終わりより後ろ) だけ取る
+    if let Some(c) = char_at(text, r.start)
+        && let Some((pair, true)) = classify(c)
+    {
+        let o = ByteRange::new(r.start, ByteOff(r.start.0 + c.len_utf8()));
+        st.read += o.end.0 - o.start.0;
+        match st.try_open(o, pair, true) {
+            Step::Found(o, c) => return (Some((o, c)), st.read),
+            Step::Stop => return (None, st.read),
+            Step::Next => {}
+        }
+    }
+    let lo = r.start.0.saturating_sub(limit);
+    // 組ごとの、後ろ向きに数えた閉じ括弧の深さ
+    let mut depth = [0usize; PAIRS.len()];
+    let mut pos = r.start.0;
+    while pos > lo {
+        let (chunk, cs) = text.chunk_at(ByteOff(pos - 1));
+        let bytes = chunk.as_bytes();
+        let begin = cs.0.max(lo);
+        if begin >= pos {
+            break;
+        }
+        let hay = &bytes[begin - cs.0..pos - cs.0];
+        st.read += hay.len();
+        let mut end = hay.len();
+        while let Some(i) = hay[..end]
+            .iter()
+            .rposition(|&b| BRACKET_LEAD[usize::from(b)])
+        {
+            end = i;
+            let Some((pair, open, n)) = bracket_at(hay, i) else {
+                continue;
+            };
+            if !open {
+                depth[pair] += 1;
+                continue;
+            }
+            if depth[pair] > 0 {
+                depth[pair] -= 1;
+                continue;
+            }
+            let o = ByteRange::new(ByteOff(begin + i), ByteOff(begin + i + n));
+            match st.try_open(o, pair, false) {
+                Step::Found(o, c) => return (Some((o, c)), st.read),
+                Step::Stop => return (None, st.read),
+                Step::Next => {}
+            }
+        }
+        pos = begin;
+    }
+    (None, st.read)
+}
+
+/// `enclosing_pair_within` の、閉じていない開き括弧を 1 つ調べた結果。
+enum Step {
+    /// Range を囲む組。
+    Found(ByteRange, ByteRange),
+    /// 囲まない (対応が Range の中・範囲の外)。外側を探し続ける。
+    Next,
+    /// 読む量の予算を使い切った。
+    Stop,
+}
+
+/// `enclosing_pair_within` の状態: 組ごとの、対応を探し続ける位置とそれ以上探さない印、読んだ量。
+struct Enclosing<'t> {
+    text: &'t dyn TextRead,
+    r: ByteRange,
+    limit: usize,
+    budget: usize,
+    resume: [Option<ByteOff>; PAIRS.len()],
+    dead: [bool; PAIRS.len()],
+    read: usize,
+}
+
+impl Enclosing<'_> {
+    /// 閉じていない開き括弧 `o` (組 `pair`) の対応を探し、Range を囲むか調べる。`at_start` は Range の始まりにある開き括弧
+    /// (囲むのは閉じ括弧の終わりが Range の終わりより後ろのとき。それ以外は、閉じ括弧の終わりが Range の終わり以降のとき)。
+    fn try_open(&mut self, o: ByteRange, pair: usize, at_start: bool) -> Step {
+        if self.dead[pair] {
+            return Step::Next;
+        }
+        if self.read >= self.budget {
+            return Step::Stop;
+        }
+        let len = self.text.len_bytes();
+        let bound = ByteOff(o.end.0.saturating_add(self.limit).min(len));
+        let from = self.resume[pair].unwrap_or(o.end);
+        let (found, k) = if from < bound {
+            scan(self.text, from, pair, true, ByteRange::new(o.end, bound))
+        } else {
+            (None, 0)
+        };
+        self.read += k;
+        match found {
+            Some(c) if c.end > self.r.end || (!at_start && c.end >= self.r.end) => {
+                Step::Found(o, c)
+            }
+            Some(c) => {
+                self.resume[pair] = Some(c.end);
+                Step::Next
+            }
+            None => {
+                self.dead[pair] = true;
+                Step::Next
+            }
+        }
+    }
 }
 
 /// 括弧の位置のセル (書記素の始まり)。括弧のコードポイントは、ふつうは書記素の始まりにある。前の文字に結合する
@@ -739,5 +923,177 @@ mod tests {
         ));
         // 範囲の端で止まれば、範囲を超えた
         assert_eq!(find_pair(&t, ByteOff(0), Some(br(0, 3))).0, Lookup::TooFar);
+    }
+
+    // ---------- 範囲を囲む括弧の組 (03 §5.7 の SEL-2 の (2) / (3)) ----------
+
+    /// 素朴な参照: `r.start` にある開き括弧を先に見て、`r.start` の前の `limit` バイトの窓のコードポイントを後ろから 1 つずつ読み、組ごとの深さで閉じていない
+    /// 開き括弧を近い順に取り、その対応を開き括弧から素朴に探して (BRK-3 / BRK-4。窓は `limit`)、閉じ括弧の終わりが `r.end`
+    /// 以降にある最初の組。組ごとに対応を探し直す (`enclosing_pair_within` の続きから探す近道を使わない)。
+    fn naive_enclosing(s: &str, r: ByteRange, limit: usize) -> Option<(ByteRange, ByteRange)> {
+        // Range の始まりにある開き括弧は、閉じ括弧の終わりが Range の終わりより後ろなら囲む
+        if let Some(ch) = s[r.start.0..].chars().next()
+            && classify(ch).is_some_and(|(_, open)| open)
+            && let Lookup::Found { target, pair: c } = naive(s, r.start.0, limit)
+            && c.end > r.end
+        {
+            return Some((target, c));
+        }
+        let lo = r.start.0.saturating_sub(limit);
+        let mut depth = [0usize; PAIRS.len()];
+        for (i, ch) in s[..r.start.0].char_indices().rev() {
+            if i < lo {
+                break;
+            }
+            let Some((pair, open)) = classify(ch) else {
+                continue;
+            };
+            if !open {
+                depth[pair] += 1;
+                continue;
+            }
+            if depth[pair] > 0 {
+                depth[pair] -= 1;
+                continue;
+            }
+            let o = ByteRange::new(ByteOff(i), ByteOff(i + ch.len_utf8()));
+            if let Lookup::Found { pair: c, .. } = naive(s, i, limit)
+                && c.end >= r.end
+            {
+                return Some((o, c));
+            }
+        }
+        None
+    }
+
+    fn enclosing(s: &str, a: usize, b: usize) -> Option<(usize, usize)> {
+        enclosing_pair(&Text::from(s), br(a, b), usize::MAX)
+            .0
+            .map(|(o, c)| (o.start.0, c.start.0))
+    }
+
+    // spec: 03 §5.7
+    #[test]
+    fn 範囲を囲む最も近い組を内側から探す() {
+        // `f(a, (b))` の各位置
+        let s = "f(a, (b))";
+        assert_eq!(enclosing(s, 7, 7), Some((5, 7)), "(b) の中");
+        assert_eq!(enclosing(s, 6, 7), Some((5, 7)), "b");
+        assert_eq!(enclosing(s, 5, 8), Some((1, 8)), "(b) を含む範囲は外側の組");
+        assert_eq!(enclosing(s, 2, 3), Some((1, 8)), "a");
+        assert_eq!(enclosing(s, 1, 9), None, "外側の組を含む");
+        assert_eq!(enclosing(s, 0, 0), None, "f の前");
+        // 範囲が閉じ括弧をまたいで外へ出る組は候補にせず、外側を探す
+        assert_eq!(enclosing("[(a)b]", 2, 5), Some((0, 5)));
+        // 閉じ括弧で終わる範囲 (閉じ括弧を含む) は、その組に囲まれる
+        assert_eq!(enclosing("f(a)", 3, 4), Some((1, 3)), "`)` だけ");
+        assert_eq!(enclosing("f(a)", 2, 4), Some((1, 3)), "`a)`");
+        assert_eq!(enclosing("（a）", 3, 7), Some((0, 4)), "全角の閉じ括弧");
+        // 開き括弧で始まる範囲 (開き括弧を含む・開き括弧の直前のカーソル) も、その組に囲まれる
+        assert_eq!(enclosing("foo(bar)", 3, 4), Some((3, 7)), "`(` だけ");
+        assert_eq!(enclosing("foo(bar)", 3, 7), Some((3, 7)), "`(bar`");
+        assert_eq!(enclosing("foo(bar)", 3, 3), Some((3, 7)), "`|(` のカーソル");
+        assert_eq!(enclosing("「a」", 0, 3), Some((0, 4)), "全角の開き括弧");
+        // 組の全体を選んでいれば、その組は囲まない (外側を探す)
+        assert_eq!(enclosing("[foo(bar)]", 4, 9), Some((0, 9)));
+        assert_eq!(enclosing("foo(bar)", 3, 8), None);
+        // 入れ子: 外側の `(` なら外側の組、内側の `(` なら内側の組
+        assert_eq!(enclosing("((a))", 0, 1), Some((0, 4)));
+        assert_eq!(enclosing("((a))", 1, 2), Some((1, 3)));
+        assert_eq!(
+            enclosing("((a))", 1, 4),
+            Some((0, 4)),
+            "内側の組の全体は外側の組へ"
+        );
+        // 始まりの開き括弧の対応が範囲の中なら、同じ組の外側は続きから探す
+        assert_eq!(enclosing("((a) b)", 1, 6), Some((0, 6)));
+        // 対応しない開き括弧は飛ばす
+        assert_eq!(enclosing("[a ( b ]", 5, 6), Some((0, 7)));
+        // ほかの組は数えない
+        assert_eq!(enclosing("「(」)", 4, 4), Some((3, 7)));
+        // 同じ組の内側の組が範囲の中で閉じても、外側の組の対応は正しい
+        assert_eq!(enclosing("((a) b)", 1, 5), Some((0, 6)));
+        assert_eq!(enclosing("(()(x) y)", 4, 8), Some((0, 8)));
+    }
+
+    // spec: 03 §5.7
+    #[test]
+    fn 前へ探すのは_1_mib_までで_予算を使い切ると探さない() {
+        // 前へ: 範囲の始まりから 1 MiB の窓に開き括弧が入るか
+        let s = format!("({}x)", "a".repeat(BRACKET_SCAN_MAX_BYTES));
+        let x = 1 + BRACKET_SCAN_MAX_BYTES;
+        assert_eq!(enclosing(&s, x, x + 1), None, "開き括弧が 1 MiB の外");
+        // 対応: 開き括弧の終端から 1 MiB の窓に閉じ括弧の全体が入るか
+        let s = format!("({}x)", "a".repeat(BRACKET_SCAN_MAX_BYTES - 2));
+        let x = BRACKET_SCAN_MAX_BYTES - 1;
+        assert_eq!(enclosing(&s, x, x + 1), Some((0, x + 1)), "ちょうど 1 MiB");
+        let s = format!("({}x)", "a".repeat(BRACKET_SCAN_MAX_BYTES - 1));
+        let x = BRACKET_SCAN_MAX_BYTES;
+        assert_eq!(enclosing(&s, x, x + 1), None, "対応が 1 MiB の外");
+        let (found, read) = enclosing_pair(&Text::from("(ab)"), br(2, 2), 0);
+        assert_eq!(found, None, "予算が 0 なら対応を探さない");
+        assert!(read <= 2, "前へ読んだ量だけ: {read}");
+    }
+
+    #[test]
+    fn 全角の組の括弧はどれも先頭_2_バイトで絞る表に入る() {
+        for &(o, c) in &PAIRS {
+            for ch in [o, c] {
+                let mut b = [0u8; 4];
+                let s = ch.encode_utf8(&mut b).as_bytes();
+                assert!(
+                    s.len() == 1 || WIDE_PREFIXES.contains(&[s[0], s[1]]),
+                    "{ch} {s:?}"
+                );
+                if s.len() == 3 {
+                    assert_eq!(bracket_at(s, 0), classify(ch).map(|(p, op)| (p, op, 3)));
+                }
+            }
+        }
+        // かな・漢字・全角の句読点は括弧ではない
+        for ch in ['あ', 'ア', '漢', '、', '。', '　', '！'] {
+            let mut b = [0u8; 4];
+            assert_eq!(
+                bracket_at(ch.encode_utf8(&mut b).as_bytes(), 0),
+                None,
+                "{ch}"
+            );
+        }
+    }
+
+    // spec: 03 §5.7
+    #[test]
+    fn 対応の無い開き括弧が並んでも読む量は窓の程度() {
+        // 1 万個の対応しない `(` の後ろの範囲: 組ごとに対応を探し直さない (内側に対応が無ければ外側にも無い)
+        let s = format!("{}abc", "(".repeat(10_000));
+        let (found, read) = enclosing_pair(&Text::from(s.as_str()), br(10_001, 10_002), usize::MAX);
+        assert_eq!(found, None);
+        assert!(read < 3 * s.len(), "読んだ量 {read}");
+        // 対応のある内側の組が多数並んでも、外側の対応は続きから探す
+        let s = format!("[{}x]", "()".repeat(10_000));
+        let x = 1 + 20_000;
+        let (found, read) = enclosing_pair(&Text::from(s.as_str()), br(x, x + 1), usize::MAX);
+        assert_eq!(found.map(|(o, c)| (o.start.0, c.start.0)), Some((0, x + 1)));
+        assert!(read < 3 * s.len(), "読んだ量 {read}");
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(512))]
+
+        // 範囲を囲む組が、組ごとに探し直す素朴な参照と一致する (小さな窓を含む)
+        #[test]
+        fn 範囲を囲む組が素朴な参照と一致する(
+            pieces in proptest::collection::vec(piece(false), 0..60),
+            a in any::<proptest::sample::Index>(),
+            b in any::<proptest::sample::Index>(),
+            limit in prop_oneof![1usize..64, Just(BRACKET_SCAN_MAX_BYTES)],
+        ) {
+            let s: String = pieces.concat();
+            let t = Text::from(s.as_str());
+            let (x, y) = (cursor(&t, &s, a), cursor(&t, &s, b));
+            let r = ByteRange::new(x.min(y), x.max(y));
+            let got = enclosing_pair_within(&t, r, limit, usize::MAX).0;
+            prop_assert_eq!(got, naive_enclosing(&s, r, limit), "{:?} {:?} limit {}", s, r, limit);
+        }
     }
 }

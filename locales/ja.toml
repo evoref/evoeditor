@@ -366,6 +366,10 @@ title = "すべて選択"
 description = "選択と同じ文字列をすべて選び、それぞれにカーソルを置きます。"
 title = "一致をすべて選択"
 
+[cmd.select.expand]
+description = "今の選択を含む、次に大きい範囲 (単語・括弧・行・文書) へ広げます"
+title = "選択を広げる"
+
 [cmd.select.extend_down]
 description = "選択範囲を下の行へ広げます。"
 title = "下へ選択"
@@ -413,6 +417,14 @@ title = "単語の左へ選択"
 [cmd.select.extend_word_right]
 description = "選択範囲を次の単語まで広げます。"
 title = "単語の右へ選択"
+
+[cmd.select.line]
+description = "カーソルの行の全体を選びます。続けると次の行を足します"
+title = "行を選択"
+
+[cmd.select.shrink]
+description = "選択を広げる前に戻します"
+title = "選択を縮める"
 
 [cmd.ui.cancel]
 description = "開いている入力欄やダイアログを閉じます。"
@@ -1849,6 +1861,8 @@ ime = "IME が ON のとき、文字キーは確認ダイアログのアクセ�
 chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
 alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
 multi_cursor_paste = "複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません)"
+ctrl_shift_l = "一部の端末では Ctrl+Shift+L が Ctrl+L (行を選択) として届きます。一致をすべて選ぶには Ctrl+K E を使ってください"
+redraw = "画面が乱れたときは Ctrl+K R で描き直します (Ctrl+L は行の選択です)"
 stdin_keys = "標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います"
 stdin_redraw = "書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください"
 stdin_powershell = "Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください"

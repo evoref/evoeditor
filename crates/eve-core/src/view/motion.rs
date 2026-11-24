@@ -3,9 +3,8 @@
 //! 移動の起点はいつも `head`。`select.extend_*` は移動先を `with_head` で head にし (anchor は動かさない)、
 //! `cursor.*` は移動先へ潰す。複数 Range には各 Range 独立に適用し、`normalized()` で併合する。
 use eve_text::{
-    ByteOff, ByteRange, LineIdx, Range, Selection, TextRead, next_grapheme_boundary,
-    next_word_stop, next_word_stop_near, prev_grapheme_boundary, prev_word_stop,
-    prev_word_stop_near,
+    ByteOff, LineIdx, Range, Selection, TextRead, next_grapheme_boundary, next_word_stop,
+    next_word_stop_near, prev_grapheme_boundary, prev_word_stop, prev_word_stop_near,
 };
 use eve_view::{DocumentId, ViewId};
 
@@ -72,14 +71,28 @@ fn pos_at_dcol(doc: &Document, line: usize, dcol: u32) -> ByteOff {
 
 /// 行頭空白 (空白とタブ) の直後 (インデント終端)。空白の続く間だけを読む (長大行でも行全体を読まない)。
 pub(crate) fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
+    indent_end_text(doc.text(), ls, le)
+}
+
+/// `indent_end` の本体 (`TextRead` だけを読む。選択の拡張の候補、03 §5.7 の SEL-2 の (4) も使う)。空白の続く間のチャンクだけを
+/// 読む。
+pub(crate) fn indent_end_text(t: &dyn TextRead, ls: usize, le: usize) -> usize {
     let mut end = ls;
-    for chunk in doc.text().chunks(ByteRange::new(ByteOff(ls), ByteOff(le))) {
-        let n = chunk
-            .bytes()
+    while end < le {
+        let (chunk, cs) = t.chunk_at(ByteOff(end));
+        let Some(rest) = chunk.as_bytes().get(end - cs.0..) else {
+            break;
+        };
+        let rest = &rest[..rest.len().min(le - end)];
+        if rest.is_empty() {
+            break;
+        }
+        let n = rest
+            .iter()
             .take_while(|b| matches!(b, b' ' | b'\t'))
             .count();
         end += n;
-        if n < chunk.len() {
+        if n < rest.len() {
             break;
         }
     }

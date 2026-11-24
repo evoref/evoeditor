@@ -368,6 +368,10 @@ title = "Select All"
 description = "Select every occurrence of the selected text, with a cursor at each."
 title = "Select All Matches"
 
+[cmd.select.expand]
+description = "Grow the selection to the next larger range that contains it (word, brackets, line, document)"
+title = "Expand Selection"
+
 [cmd.select.extend_down]
 description = "Extend the selection down one line."
 title = "Select Down"
@@ -415,6 +419,14 @@ title = "Select Word Left"
 [cmd.select.extend_word_right]
 description = "Extend the selection to the next word."
 title = "Select Word Right"
+
+[cmd.select.line]
+description = "Select the whole line at the cursor; repeat to add the next line"
+title = "Select Line"
+
+[cmd.select.shrink]
+description = "Return to the selection before the last expand"
+title = "Shrink Selection"
 
 [cmd.ui.cancel]
 description = "Close the open input field or dialog."
@@ -1851,6 +1863,8 @@ ime = "While an IME is on, letter keys do not reach the confirmation dialog as a
 chord = "Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels"
 alt = "On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives"
 multi_cursor_paste = "To paste one line per cursor, use Ctrl+K V (a short terminal paste cannot be split per cursor)"
+ctrl_shift_l = "Some terminals send Ctrl+Shift+L as Ctrl+L (Select Line); use Ctrl+K E to select all matches"
+redraw = "If the screen looks garbled, press Ctrl+K R to redraw (Ctrl+L selects the line)"
 stdin_keys = "When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input"
 stdin_redraw = "If the writer's error output garbles the screen, redraw it with {key:ui.redraw}"
 stdin_powershell = "Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\""

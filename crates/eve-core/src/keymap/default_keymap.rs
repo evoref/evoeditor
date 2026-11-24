@@ -256,6 +256,17 @@ pub(crate) fn default_keymap() -> Keymap {
     ] {
         bind("editor", keys, cmd);
     }
+    // 選択の拡張 (v0.5 の M34、FR-309。07 §11.6 の「編集の拡張」。規則は 03 §5.7 の SEL-1〜SEL-7)。繰り返して押す操作なので、
+    // 1 打の `alt` + 文字と、全端末で届くチョードの代替の両方を持つ (2 打目に `shift` を使わない)
+    for (keys, cmd) in [
+        ("mod+l", "select.line"),
+        ("alt+u", "select.expand"),
+        ("alt+i", "select.shrink"),
+        ("ctrl+k u", "select.expand"),
+        ("ctrl+k i", "select.shrink"),
+    ] {
+        bind("editor", keys, cmd);
+    }
     // チョードの代替キー ((alt))
     for (keys, cmd) in [
         ("ctrl+k left", "cursor.home"),

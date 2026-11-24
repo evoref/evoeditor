@@ -38,5 +38,5 @@ pub use width::{
 };
 pub use word::{
     ScriptClass, classify_grapheme, next_word_stop, next_word_stop_near, prev_word_stop,
-    prev_word_stop_near, word_at, word_boundaries,
+    prev_word_stop_near, unit_at, word_at, word_boundaries,
 };
