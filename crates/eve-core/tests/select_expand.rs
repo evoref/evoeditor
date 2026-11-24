@@ -603,6 +603,28 @@ fn covers(outer: &Selection, inner: &Selection) -> bool {
     })
 }
 
+/// CI の proptest が見つけた例。文書の末尾までの後ろ向きの主は `select.line` で変わらず (03 §5.7 の細目 (d))、
+/// その前の行の選択と接して併合すると、併合した Range は主の向き (後ろ向き) になる (03 §4.4 の N3)。
+// spec: 03 §5.7, 03 §4.4
+#[test]
+fn 行の選択で後ろ向きの主に接して併合した_range_は主の向きになる() {
+    let text = "\r日本\n   foo   日本ba_r\u{3000}    日本   ";
+    let mut h = opened("/w/p.txt", text.as_bytes());
+    let end = text.len();
+    set_selection(
+        &mut h,
+        vec![
+            Range::new(ByteOff(0), ByteOff(1)),
+            Range::new(ByteOff(end), ByteOff(8)),
+        ],
+        1,
+    );
+    h.cmd("select.line");
+    let after = selection(&h);
+    assert_eq!(after.iter().count(), 1);
+    assert_eq!(*after.primary(), Range::new(ByteOff(end), ByteOff(0)));
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(160))]
 
@@ -661,7 +683,13 @@ proptest! {
                 r.end().0 == text.len() || line_starts.contains(&r.end().0),
                 "{:?} {:?}", text, r
             );
-            prop_assert!(r.is_forward() || before.iter().any(|b| b == r), "{:?} {:?}", text, r);
+            // 前向きか、元のままの Range か、後ろ向きの元の主を含んで併合した主の Range
+            // (併合した Range の向きは主に従う。03 §4.4 の N3)
+            let merged_into_primary = r == after.primary() && !before.primary().is_forward();
+            prop_assert!(
+                r.is_forward() || before.iter().any(|b| b == r) || merged_into_primary,
+                "{:?} {:?}", text, r
+            );
         }
     }
 }
