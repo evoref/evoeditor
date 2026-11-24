@@ -6,10 +6,10 @@
 //!
 //! spec: 03 §15.6, 03 §4.5.2
 
-use eve_text::{Bias, ByteOff, ByteRange, ChangeSet, Edit, LineIdx, Range, Selection, TextRead};
+use eve_text::{ByteOff, ByteRange, Edit, LineIdx, Selection, TextRead};
 use eve_view::MessageLevel;
 
-use crate::command::line_ops::{active, commit, target_blocks};
+use crate::command::line_ops::{active, commit, heads_at_line_start, map_range, target_blocks};
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason, ids,
 };
@@ -123,28 +123,6 @@ fn plan_edits(doc: &Document, lines: &[TargetLine], token: &str) -> Vec<Edit> {
         .collect()
 }
 
-/// 編集の後の Range (CMT-5)。インデントの操作と同じく、始まりは前寄り・終わりは後ろ寄りに写す (行全体を選んでいれば
-/// 行全体のまま)。空のカーソルは自分の編集の後ろへ写す (`MapPolicy::Own`) が、行頭 (列 0) のものは列 0 に留める。
-fn map_range(r: &Range, at_line_start: bool, cs: &ChangeSet) -> Range {
-    if r.is_empty() {
-        let bias = if at_line_start {
-            Bias::Before
-        } else {
-            Bias::After
-        };
-        return Range::point(cs.map_pos(r.head, bias));
-    }
-    let (start, end) = (
-        cs.map_pos(r.start(), Bias::Before),
-        cs.map_pos(r.end(), Bias::After),
-    );
-    if r.anchor <= r.head {
-        Range::new(start, end)
-    } else {
-        Range::new(end, start)
-    }
-}
-
 /// 言語の表示の名前 (`info.comment.unsupported` の `{language}`)。言語が決まっていなければ `plain`。
 fn language_display(ctx: &CommandCtx<'_>, doc: &Document) -> String {
     let name = match ctx.state.language_of(doc) {
@@ -189,11 +167,8 @@ fn toggle_comment(ctx: &mut CommandCtx<'_>) -> CommandResult {
         return CommandResult::Done;
     }
     let edits = plan_edits(doc, &lines, &token);
-    let t = doc.text();
-    let at_line_start: Vec<bool> = sel
-        .iter()
-        .map(|r| t.line_to_byte(t.byte_to_line(r.head)) == r.head)
-        .collect();
+    // 写し方は §15.4 のインデントの操作と同じ (CMT-5)
+    let at_line_start = heads_at_line_start(doc.text(), &sel);
     commit(ctx, ids::EDIT_TOGGLE_COMMENT, edits, move |_, cs| {
         sel.iter()
             .zip(&at_line_start)
