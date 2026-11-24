@@ -492,7 +492,10 @@ impl EditorState {
         {
             return;
         }
-        self.show_message(MessageLevel::Warn, key, &[(arg, file)]);
+        // 設定の自動の読み直しの回なら、表示中の (読み直しのものでない) 警告・エラーを置き換えない (07 §6 の RLD-3)
+        let auto = matches!(trigger, EditorConfigTrigger::Reload { round }
+            if self.watch.config.auto_ec_round == Some(round));
+        self.show_reload_message(auto, MessageLevel::Warn, key, &[(arg, file)]);
     }
 
     /// `ReadEditorConfig` の結果 (07 §10.3 の EC-1 / EC-2 / EC-6、§3.6 の LAYER-3 / LAYER-4)。

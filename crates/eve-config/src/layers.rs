@@ -115,6 +115,19 @@ impl Origins {
     fn set(&mut self, key: &'static str, origin: Origin) {
         self.0.insert(key, origin);
     }
+
+    /// `key` の由来を `from` の `key` の由来にする (値を前の値に戻したとき、由来も揃える。設定の自動の再読込で Undo の
+    /// 上限を下げる変化を効かせないとき、07 §6 の RLD-3)。`from` に無ければ既定 (由来の記録を外す)。
+    pub fn copy_from(&mut self, key: &'static str, from: &Origins) {
+        match from.0.get(key) {
+            Some(o) => {
+                self.0.insert(key, o.clone());
+            }
+            None => {
+                self.0.remove(key);
+            }
+        }
+    }
 }
 
 /// `ui.locale` を、使える言語 (同梱の言語と `available`。`available` は `locales/` を一覧して作る候補、07 §17.4) と

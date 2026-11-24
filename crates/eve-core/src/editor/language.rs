@@ -256,18 +256,24 @@ impl EditorState {
                 return;
             }
         }
-        self.spawn_languages_read(startup, false);
+        self.spawn_languages_read(startup, false, false);
+    }
+
+    /// `config.reload` (と設定の自動の読み直し。`auto` なら読む前と読んだ後に `languages/` を確かめる、07 §6 の RLD-3) で
+    /// 言語定義を読み直す (判定し直さない、LANG-7)。
+    pub(crate) fn spawn_languages_reread(&mut self, auto: bool) {
+        self.spawn_languages_read(false, false, auto);
     }
 
     /// 起動の後に届いたワークスペース層の言語定義を重ねて読み直す (届いたら明示の指定の無い文書を判定し直し、診断はワークスペース
     /// 層のファイルの分だけを足す。ユーザー層の言語定義の診断は既に出しているので、2 重にしない)。
     pub(crate) fn spawn_languages_read_for_workspace(&mut self) {
-        self.spawn_languages_read(true, true);
+        self.spawn_languages_read(true, true, false);
     }
 
     /// 言語定義の読込を積む。`redetect` なら、届いたときに明示の指定の無い文書の言語を判定し直す (起動時の読込と、起動の後に
-    /// ワークスペース層の言語定義が届いたとき。LANG-7)。
-    fn spawn_languages_read(&mut self, redetect: bool, workspace_only: bool) {
+    /// ワークスペース層の言語定義が届いたとき。LANG-7)。`auto` は設定の自動の読み直し。
+    fn spawn_languages_read(&mut self, redetect: bool, workspace_only: bool, auto: bool) {
         let dir = self.config_sources().languages;
         // 正規表現はジョブの中で組む (差し替えた集まりで主スレッドが判定するときに組まない)。起動時の 1 回だけは
         // `PrecompileLanguages` で組む (起動時の文書の読込を待たせない、07 §9.6 の段 2 の細目)
@@ -281,6 +287,7 @@ impl EditorState {
                 workspace: self.settings.workspace_languages.clone(),
                 precompile,
                 workspace_files: self.settings.workspace_files.clone(),
+                verify: auto,
             },
         );
         self.io.pending.insert(
@@ -289,6 +296,7 @@ impl EditorState {
                 startup: redetect,
                 workspace_only,
                 precompiled: precompile,
+                auto,
             },
         );
     }
@@ -344,22 +352,51 @@ impl EditorState {
     }
 
     /// 言語定義の読込の結果: 定義の集まりを差し替え、診断を出し、開いている文書の文書ごとの値を決め直す。起動時の読込なら、
-    /// 先に開き終わった文書 (標準入力など) の言語を判定し直す (LANG-7)。`config.reload` の読込では判定し直さない。
+    /// 先に開き終わった文書 (標準入力など) の言語を判定し直す (LANG-7)。`config.reload` の読込では判定し直さない。設定の
+    /// 自動の読み直し (`auto`) で、読む間に `languages/` が変わっていたら当てずに読み直す (07 §6 の RLD-3)。
     pub(crate) fn finish_languages_read(
         &mut self,
         r: JobResult,
         startup: bool,
         workspace_only: bool,
         precompiled: bool,
+        auto: bool,
     ) {
         let JobResult::LanguagesRead {
             set,
             workspace_set,
             reports,
+            unstable,
         } = r
         else {
             return;
         };
+        if auto && unstable {
+            self.config_watch_rearm();
+            return;
+        }
+        let read = LanguagesRead {
+            set,
+            workspace_set,
+            reports,
+        };
+        self.with_reload_scope(auto, |st| {
+            st.apply_languages_read(read, startup, workspace_only, precompiled);
+        });
+    }
+
+    fn apply_languages_read(
+        &mut self,
+        read: LanguagesRead,
+        startup: bool,
+        workspace_only: bool,
+        precompiled: bool,
+    ) {
+        let LanguagesRead {
+            set,
+            workspace_set,
+            reports,
+        } = read;
         self.settings.languages = set;
         self.settings.workspace_language_set = workspace_set;
         self.settings.ambiguous_noted.clear();
@@ -609,4 +646,11 @@ fn lang_set(ctx: &mut CommandCtx<'_>) -> CommandResult {
 /// `lang.set` (07 §11.6)。
 pub(crate) fn register(r: &mut CommandRegistry) {
     r.add(ids::LANG_SET, CommandKind::Ui, Permission::Ui, "", lang_set);
+}
+
+/// 言語定義の読込の結果 (`JobResult::LanguagesRead` の中身。当てる関数に渡す)。
+struct LanguagesRead {
+    set: std::sync::Arc<eve_config::LanguageSet>,
+    workspace_set: Option<std::sync::Arc<eve_config::LanguageSet>>,
+    reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
 }

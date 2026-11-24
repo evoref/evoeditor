@@ -192,6 +192,14 @@ impl EditorState {
         self.push_background_message(level, key, text, hint);
     }
 
+    /// 表示中のメッセージが警告・エラーか (非同期の知らせで置き換えない)。
+    pub(crate) fn message_is_alert(&self) -> bool {
+        self.ui
+            .message
+            .as_ref()
+            .is_some_and(|m| m.level != MessageLevel::Info)
+    }
+
     /// 解決した非同期の知らせを出す: 表示中が警告・エラーなら履歴にだけ積み、そうでなければ `push_message` と同じ。
     fn push_background_message(
         &mut self,
@@ -200,12 +208,7 @@ impl EditorState {
         text: String,
         hint: Option<String>,
     ) {
-        let alert = self
-            .ui
-            .message
-            .as_ref()
-            .is_some_and(|m| m.level != MessageLevel::Info);
-        if !alert {
+        if !self.message_is_alert() {
             self.push_message(level, key, text, hint);
             return;
         }

@@ -550,8 +550,9 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         Pending::SaveAsTarget(ask) => Some(ask.doc),
         Pending::WriteRecovery { release, .. } => *release,
         Pending::Search => state.find.search.as_ref().map(|s| s.doc()),
-        Pending::ConfigReload
-        | Pending::ThemeRead
+        Pending::ConfigReload { .. }
+        | Pending::ThemeRead { .. }
+        | Pending::ConfigWatchResolve { .. }
         | Pending::LanguagesRead { .. }
         | Pending::WorkspaceConfig { .. }
         | Pending::LanguagesPrecompile { .. }

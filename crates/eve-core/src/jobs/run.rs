@@ -334,9 +334,20 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
-        JobKind::ReadTheme { dir, name, origin } => {
+        JobKind::ReadTheme {
+            dir,
+            name,
+            origin,
+            verify,
+        } => {
+            let unstable = std::cell::Cell::new(false);
             let read = |n: &str| -> Result<Option<String>, String> {
-                match read_config_file(&*ports.fs, &dir.join(format!("{n}.toml"))) {
+                let (file, stable) =
+                    read_config_verified(&*ports.fs, &dir.join(format!("{n}.toml")), *verify);
+                if !stable {
+                    unstable.set(true);
+                }
+                match file {
                     Ok(Some(b)) => String::from_utf8(b)
                         .map(Some)
                         .map_err(|_| "not valid UTF-8".to_owned()),
@@ -350,21 +361,34 @@ pub fn run_job(
                 name: name.clone(),
                 theme,
                 reports,
+                unstable: unstable.get(),
             }
         }
         JobKind::ReadConfig {
             files,
             keymap,
             locales,
-        } => JobResult::ConfigRead {
-            config: files
-                .iter()
-                .map(|f| read_config_file(&*ports.fs, f))
-                .collect(),
-            keymap: keymap.as_ref().map(|k| read_config_file(&*ports.fs, k)),
-            locales: locales.as_ref().map(|(dir, chosen)| {
-                crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
-            }),
+            verify,
+        } => {
+            let mut unstable = false;
+            let mut read = |f: &FsPath| {
+                let (file, stable) = read_config_verified(&*ports.fs, f, *verify);
+                unstable |= !stable;
+                file
+            };
+            let config = files.iter().map(&mut read).collect();
+            let keymap = keymap.as_ref().map(&mut read);
+            JobResult::ConfigRead {
+                config,
+                keymap,
+                locales: locales.as_ref().map(|(dir, chosen)| {
+                    crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
+                }),
+                unstable,
+            }
+        }
+        JobKind::ResolveConfigWatch { targets } => JobResult::ConfigWatchResolved {
+            dirs: crate::io::watch_config::resolve_config_watch(&*ports.fs, targets),
         },
         JobKind::PrecompileLanguages {
             set,
@@ -392,11 +416,15 @@ pub fn run_job(
             workspace,
             precompile,
             workspace_files,
+            verify,
         } => {
+            let stamps = |d: &FsPath| crate::io::watch_config::toml_stamps(&*ports.fs, d);
+            let before = dir.as_ref().filter(|_| *verify).map(stamps);
             let (mut defs, mut reports) = match dir {
                 Some(d) => crate::io::languages::read_language_dir(&*ports.fs, d),
                 None => (Vec::new(), Vec::new()),
             };
+            let unstable = before.is_some_and(|b| dir.as_ref().map(stamps) != Some(b));
             let mut all = config.clone();
             all.append(&mut defs);
             let (set, more) = eve_config::LanguageSet::build(&all);
@@ -426,18 +454,32 @@ pub fn run_job(
                 set: std::sync::Arc::new(set),
                 workspace_set,
                 reports,
+                unstable,
             }
         }
         JobKind::ReadWorkspaceConfig {
             root,
             conditions,
             safe_dirs,
-        } => JobResult::WorkspaceConfigRead(crate::io::workspace_config::read_workspace_config(
-            &*ports.fs,
-            root,
-            *conditions,
-            safe_dirs,
-        )),
+            verify,
+        } => {
+            let files = crate::io::workspace_config::workspace_files(root);
+            let stamps = || {
+                files
+                    .iter()
+                    .map(|f| crate::io::watch_config::read_stamp(&*ports.fs, f))
+                    .collect::<Vec<_>>()
+            };
+            let before = verify.then(stamps);
+            let mut read = crate::io::workspace_config::read_workspace_config(
+                &*ports.fs,
+                root,
+                *conditions,
+                safe_dirs,
+            );
+            read.unstable = before.is_some_and(|b| b != stamps());
+            JobResult::WorkspaceConfigRead(read)
+        }
         JobKind::Metadata {
             path,
             purpose,
@@ -524,6 +566,22 @@ pub fn run_job(
 
 /// 設定ファイルの大きさの上限 (これを超えるものは設定ではないとみなして読まない)。
 const CONFIG_FILE_MAX: usize = 4 << 20;
+
+/// 設定ファイルを読む。`verify` なら、読む前と読んだ後の大きさと更新日時を比べ、同じだったか (`true`) も返す (07 §6 の
+/// RLD-3。`verify` でなければ常に `true`)。
+fn read_config_verified(
+    fs: &dyn crate::io::fs::FileSystem,
+    path: &FsPath,
+    verify: bool,
+) -> (ConfigFile, bool) {
+    if !verify {
+        return (read_config_file(fs, path), true);
+    }
+    let before = crate::io::watch_config::read_stamp(fs, path);
+    let file = read_config_file(fs, path);
+    let stable = crate::io::watch_config::read_stamp(fs, path) == before;
+    (file, stable)
+}
 
 fn read_config_file(fs: &dyn crate::io::fs::FileSystem, path: &FsPath) -> ConfigFile {
     let mut r = match fs.open_read(path) {

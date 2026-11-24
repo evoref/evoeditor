@@ -8,6 +8,9 @@
 //!   ジョブの間は延ばし、結果が届いてから待たずに照合する。
 //! - 知らせ方 (WATCH-6 / WATCH-7 / WATCH-8): 印 (`Document.external_pending`) とメッセージ。表示中の未編集の文書は確認なしで
 //!   読み直す。モーダルの確認は出さない。
+//! - 設定ファイルの監視 (WATCH-12、07 §6 の RLD-1〜RLD-5): 同じ表 (`dirs`) に設定の印 (`DirWatch.config`) を載せ、同じ
+//!   ディレクトリの文書と 1 つの要求を共有する。ディレクトリは、文書が無く設定の印も無くなったときに外す。本体は
+//!   `io/watch_config.rs`。
 //!
 //! spec: 03 §9.5.1, 05 §12.2, 02 §4.4
 
@@ -45,13 +48,13 @@ const WATCH_RETRY: [Millis; 2] = [Millis(500), Millis(2000)];
 #[derive(Default)]
 pub(crate) struct WatchState {
     /// 監視の Port (`Ports.watcher`)。`None` なら監視しない。
-    watcher: Option<Rc<dyn FileWatcher>>,
+    pub(super) watcher: Option<Rc<dyn FileWatcher>>,
     /// 監視を張っている (`file.watch.enabled` などから決めた、最後に当てた値)。
     enabled: bool,
-    /// ディレクトリ (比べる形の canonical のパス) → 監視。
-    dirs: BTreeMap<FsPath, DirWatch>,
+    /// ディレクトリ (比べる形の canonical のパス) → 監視。文書と設定ファイル (FR-706) の監視が共有する。
+    pub(super) dirs: BTreeMap<FsPath, DirWatch>,
     /// 要求の識別 → ディレクトリ。外した・張り直した古い識別は載せない (その知らせは捨てる)。
-    ids: BTreeMap<WatchId, FsPath>,
+    pub(super) ids: BTreeMap<WatchId, FsPath>,
     /// 文書 → 監視の登録 (ディレクトリと、照らす名前)。
     docs: BTreeMap<DocumentId, DocWatch>,
     /// 開く・読み直すジョブで、ネットワークの FS (`FsKind::Network`) の上と分かった文書 (`FileWatcher` に頼まない。05 §12.2 の 4)。
@@ -85,22 +88,26 @@ pub(crate) struct WatchState {
     no_parent: BTreeSet<DocumentId>,
     /// その文書のジョブの間で、やり直しを待っているフォーカス復帰の確認 (03 §9.5 の M9d、WATCH-8 の (b))。
     focus_pending: Option<DocumentId>,
+    /// 設定ファイルの監視と自動の再読込 (FR-706、07 §6 の RLD-1〜RLD-5)。
+    pub(crate) config: crate::io::watch_config::ConfigWatch,
 }
 
 /// 1 つのディレクトリの監視。
-struct DirWatch {
+pub(crate) struct DirWatch {
     /// 要求の識別 (ネットワークの FS で頼まなかったときは `None`)。
-    id: Option<WatchId>,
-    state: DirState,
+    pub(super) id: Option<WatchId>,
+    pub(super) state: DirState,
     /// このディレクトリの文書。
-    docs: BTreeSet<DocumentId>,
+    pub(super) docs: BTreeSet<DocumentId>,
     /// 照らす名前 → 文書 (WATCH-3 / WATCH-11 の表引き)。
-    names: BTreeMap<OsString, BTreeSet<DocumentId>>,
+    pub(super) names: BTreeMap<OsString, BTreeSet<DocumentId>>,
+    /// このディレクトリで見る設定ファイル (FR-706)。`None` は設定の監視なし。
+    pub(super) config: Option<crate::io::watch_config::ConfigNames>,
 }
 
 /// 監視の状態 (02 §4.4 の知らせの順の約束)。
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum DirState {
+pub(crate) enum DirState {
     /// 頼んで結果を待っている (この間の知らせも受ける)。
     Requested,
     /// 登録できた。
@@ -119,21 +126,21 @@ struct DocWatch {
 
 /// 待ち合わせ (WATCH-4)。`first` は打ち切りの数え始め (打ち切りの照合の後、次の知らせまで `None`)、`last` は最後の知らせ。
 #[derive(Clone, Copy, Debug)]
-struct Wait {
-    first: Option<Tick>,
-    last: Tick,
+pub(crate) struct Wait {
+    pub(super) first: Option<Tick>,
+    pub(super) last: Tick,
 }
 
 impl Wait {
-    fn settle_at(self) -> Tick {
+    pub(super) fn settle_at(self) -> Tick {
         self.last + WATCH_SETTLE
     }
 
-    fn cap_at(self) -> Option<Tick> {
+    pub(super) fn cap_at(self) -> Option<Tick> {
         self.first.map(|f| f + WATCH_SETTLE_MAX)
     }
 
-    fn due(self) -> Tick {
+    pub(super) fn due(self) -> Tick {
         self.cap_at()
             .map_or(self.settle_at(), |c| c.min(self.settle_at()))
     }
@@ -148,7 +155,7 @@ struct Round {
 }
 
 /// 照らす名前 (WATCH-3): Windows は大文字小文字を区別しない序数の比較、Unix はバイト列。
-fn name_key(name: &OsStr) -> OsString {
+pub(super) fn name_key(name: &OsStr) -> OsString {
     if cfg!(windows) {
         let folded: String = name
             .to_string_lossy()
@@ -169,7 +176,7 @@ fn name_key(name: &OsStr) -> OsString {
 
 /// Windows の短い名前 (8.3) の形の名前か (WATCH-3): 基の名前は 8 文字以下で、6 文字以下の前の部分・`~`・数字の並び、
 /// 拡張子は 3 文字以下 (`LONGNA~1.TXT`)。`~$x.docx` (Office の一時ファイル)・`a.txt~` (バックアップ) は当たらない。
-fn maybe_short_name(name: &OsStr) -> bool {
+pub(super) fn maybe_short_name(name: &OsStr) -> bool {
     cfg!(windows) && is_short_name_form(&name.to_string_lossy())
 }
 
@@ -232,8 +239,10 @@ impl EditorState {
             && self.config().reload_on_external_change != ExternalChangePolicy::Never
     }
 
-    /// 設定が変わった: 監視を張る・外す (WATCH-1。`config.reload` で即時に効く)。
+    /// 設定が変わった: 監視を張る・外す (WATCH-1。`config.reload` で即時に効く)。設定ファイルの監視 (RLD-4。
+    /// `file.watch.enabled` だけで決まる) も見る。
     pub(crate) fn watch_reconfigure(&mut self) {
+        self.config_watch_reconfigure();
         let on = self.watch_wanted();
         if on == self.watch.enabled {
             return;
@@ -283,14 +292,27 @@ impl EditorState {
                 }
                 self.reopen_restore(doc);
             }
-            if let Some(w) = self.watch.watcher.clone() {
-                for id in self.watch.ids.keys() {
-                    w.unwatch(*id);
+            // 文書の登録を外す。設定ファイルの監視 (FR-706) の載ったディレクトリは残す (`file.reload_on_external_change` は
+            // 設定の監視に効かない、07 §6 の RLD-4)
+            let ws = &mut self.watch;
+            let mut gone: Vec<FsPath> = Vec::new();
+            for (dir, e) in &mut ws.dirs {
+                e.docs.clear();
+                e.names.clear();
+                if e.config.is_none() {
+                    gone.push(dir.clone());
                 }
             }
-            let ws = &mut self.watch;
-            ws.dirs.clear();
-            ws.ids.clear();
+            for dir in gone {
+                if let Some(e) = ws.dirs.remove(&dir)
+                    && let Some(id) = e.id
+                {
+                    if let Some(w) = &ws.watcher {
+                        w.unwatch(id);
+                    }
+                    ws.ids.remove(&id);
+                }
+            }
             ws.docs.clear();
             ws.waits.clear();
             ws.due.clear();
@@ -378,6 +400,7 @@ impl EditorState {
                         state: DirState::Requested,
                         docs: BTreeSet::new(),
                         names: BTreeMap::new(),
+                        config: None,
                     }
                 }
                 // ネットワークの FS (開くジョブで分かった) は頼まない: 応答しない共有で `io` を止めない (05 §12.2 の 4)
@@ -388,6 +411,7 @@ impl EditorState {
                     }),
                     docs: BTreeSet::new(),
                     names: BTreeMap::new(),
+                    config: None,
                 },
             };
             let failed = match &entry.state {
@@ -396,7 +420,8 @@ impl EditorState {
             };
             self.watch.dirs.insert(dir.clone(), entry);
             if let Some(e) = failed {
-                self.watch_note_unavailable(&e, doc);
+                let path = self.watch_doc_path(doc);
+                self.watch_note_unavailable(&e, &path);
             }
         }
         if let Some(entry) = self.watch.dirs.get_mut(&dir) {
@@ -408,7 +433,7 @@ impl EditorState {
 
     /// 失効した (`Lost`)・ディレクトリが無くて登録できなかった監視を張り直す (新しい要求を積んでから古い要求を外す。
     /// 05 §12.2 の 9 の (b))。
-    fn watch_ensure_dir(&mut self, dir: &FsPath) {
+    pub(super) fn watch_ensure_dir(&mut self, dir: &FsPath) {
         let Some(w) = self.watch.watcher.clone() else {
             return;
         };
@@ -444,7 +469,8 @@ impl EditorState {
                     entry.names.remove(&reg.key);
                 }
             }
-            if entry.docs.is_empty() {
+            // 設定ファイルの監視 (FR-706) が載っていれば外さない
+            if entry.docs.is_empty() && entry.config.is_none() {
                 if let Some(id) = entry.id {
                     if let Some(w) = &self.watch.watcher {
                         w.unwatch(id);
@@ -509,6 +535,8 @@ impl EditorState {
             return;
         }
         let now = self.now;
+        // 設定ファイルの知らせ (FR-706): 待ち合わせてから読み直す (自分の保存も抑えない、07 §6 の RLD-2)
+        let config_hit = EditorState::config_watch_hit(entry, &ev.kind);
         let targets: Vec<DocumentId> = match ev.kind {
             FsEventKind::Started => {
                 entry.state = DirState::Active;
@@ -517,12 +545,22 @@ impl EditorState {
             FsEventKind::Failed { err } => {
                 entry.state = DirState::Failed(err.clone());
                 let docs: Vec<DocumentId> = entry.docs.iter().copied().collect();
+                // 設定だけのディレクトリ: 無い (`NotFound`。解いた後に消えた) なら知らせない (起動時に無かったディレクトリと
+                // 同じく見ない)。ほかの理由は文書と同じく理由の種類ごとに 1 回 (RLD-4)
+                let config_shown = entry
+                    .config
+                    .as_ref()
+                    .filter(|_| docs.is_empty() && err != WatchError::NotFound)
+                    .map(|c| c.shown.display());
                 // `Failed` の前に届いた同じ識別の知らせは捨てる (監視していない)
                 for d in &docs {
                     self.watch.waits.remove(d);
                 }
                 if let Some(first) = docs.first() {
-                    self.watch_note_unavailable(&err, *first);
+                    let path = self.watch_doc_path(*first);
+                    self.watch_note_unavailable(&err, &path);
+                } else if let Some(path) = config_shown {
+                    self.watch_note_unavailable(&err, &path);
                 }
                 Vec::new()
             }
@@ -549,6 +587,9 @@ impl EditorState {
                 w.first = Some(now);
             }
         }
+        if config_hit {
+            self.config_watch_arm();
+        }
     }
 
     /// 監視の次の期限 (待ち合わせ・時刻を決めた照合)。
@@ -562,7 +603,8 @@ impl EditorState {
             .held_since
             .filter(|_| self.watch.rounds.is_empty())
             .map(|t| t + WATCH_SETTLE);
-        waits.chain(due).chain(held).min()
+        let config = self.config_watch_deadline();
+        waits.chain(due).chain(held).chain(config).min()
     }
 
     /// 期限の来た照合を積む (Editor の `tick` から)。前に出た文書が変われば、切替の照合 (WATCH-8 の (a)) も積む。
@@ -609,6 +651,8 @@ impl EditorState {
         }
         self.watch_front_check();
         self.watch_flush_held();
+        // 設定ファイルの待ち合わせ (FR-706)
+        self.config_watch_tick();
     }
 
     /// 切替 (WATCH-8 の (a)): 前に出た文書に外部の状態があれば、照合のジョブを積む。
@@ -834,23 +878,27 @@ impl EditorState {
             .unwrap_or_default()
     }
 
-    /// 監視できない理由を、種類ごとにプロセスで 1 回知らせる (WATCH-2、01 FR-117 AC-9)。
-    fn watch_note_unavailable(&mut self, err: &WatchError, doc: DocumentId) {
+    /// 文書のパス (監視できないときの知らせに出す)。
+    fn watch_doc_path(&self, doc: DocumentId) -> String {
+        self.docs
+            .documents
+            .get(&doc)
+            .and_then(|d| d.path.as_ref())
+            .map(FsPath::display)
+            .unwrap_or_default()
+    }
+
+    /// 監視できない理由を、種類ごとにプロセスで 1 回知らせる (WATCH-2、01 FR-117 AC-9。設定ファイルの監視と共有する、
+    /// 07 §6 の RLD-4)。`path` はそのディレクトリの最初の文書か、設定ファイルのパス。
+    fn watch_note_unavailable(&mut self, err: &WatchError, path: &str) {
         let (kind, reason_key, fs) = reason_kind(err);
         if !self.watch.noted.insert(kind) {
             return;
         }
         let reason = self.catalog().render(reason_key, &[("fs", &fs)], &|_| None);
-        let path = self
-            .docs
-            .documents
-            .get(&doc)
-            .and_then(|d| d.path.as_ref())
-            .map(FsPath::display)
-            .unwrap_or_default();
         self.show_watch_message(
             keys::INFO_WATCH_UNAVAILABLE,
-            &[("path", &path), ("reason", &reason)],
+            &[("path", path), ("reason", &reason)],
         );
     }
 

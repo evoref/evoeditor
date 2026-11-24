@@ -17,10 +17,12 @@ use crate::editor::state::EditorState;
 /// 投入したジョブと、その結果の宛先。
 #[derive(Debug)]
 pub(crate) enum Pending {
-    /// `config.reload` の読込 (07 §6)。
-    ConfigReload,
-    /// テーマファイルの読込 (07 §8.6)。
-    ThemeRead,
+    /// `config.reload` の読込 (07 §6)。`auto` は設定ファイルの監視からの自動の読み直し (RLD-2)。
+    ConfigReload { auto: bool },
+    /// テーマファイルの読込 (07 §8.6)。`auto` は設定の自動の読み直しの続き。
+    ThemeRead { auto: bool },
+    /// 設定ファイルの監視の対象の解き直し (07 §6 の RLD-1)。`generation` は積んだ世代 (後に積んだものが勝つ)。
+    ConfigWatchResolve { generation: u64 },
     /// ワークスペース層の読込 (07 §12.5)。`reload` は届いた後に続ける `config.reload`。
     WorkspaceConfig {
         reload: Option<Box<crate::io::config_reload::ReloadPlan>>,
@@ -42,6 +44,8 @@ pub(crate) enum Pending {
         workspace_only: bool,
         /// ジョブの中で正規表現まで組んだ。
         precompiled: bool,
+        /// 設定の自動の読み直しの続き (読む間にファイルが変わっていたら当てない、07 §6 の RLD-3)。
+        auto: bool,
     },
     /// 言語定義の `first_line` の正規表現を組むジョブ (結果の組めない値を警告する、07 §9.6 の段 2 の細目)。
     LanguagesPrecompile { redetect: bool },
@@ -240,8 +244,9 @@ impl EditorState {
                 Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. }
-                | Pending::ConfigReload
-                | Pending::ThemeRead
+                | Pending::ConfigReload { .. }
+                | Pending::ThemeRead { .. }
+                | Pending::ConfigWatchResolve { .. }
                 | Pending::LanguagesRead { .. }
                 | Pending::WorkspaceConfig { .. }
                 | Pending::LanguagesPrecompile { .. }
@@ -415,13 +420,17 @@ impl EditorState {
             Pending::FinderMatch { generation, chunks } => {
                 self.finish_finder_match(generation, chunks, r);
             }
-            Pending::ConfigReload => self.finish_config_reload(r),
-            Pending::ThemeRead => self.finish_theme_read(r),
+            Pending::ConfigReload { auto } => self.finish_config_reload(r, auto),
+            Pending::ThemeRead { auto } => self.finish_theme_read(r, auto),
+            Pending::ConfigWatchResolve { generation } => {
+                self.finish_config_watch_resolve(generation, r);
+            }
             Pending::LanguagesRead {
                 startup,
                 workspace_only,
                 precompiled,
-            } => self.finish_languages_read(r, startup, workspace_only, precompiled),
+                auto,
+            } => self.finish_languages_read(r, startup, workspace_only, precompiled, auto),
             Pending::WorkspaceConfig { reload, safe_dirs } => {
                 self.finish_workspace_config(r, reload.map(|p| *p), safe_dirs);
             }

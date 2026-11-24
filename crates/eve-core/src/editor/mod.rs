@@ -282,6 +282,8 @@ impl Editor {
         self.finish_reload_keymap();
         // ワークスペース層の読込の結果: キーマップのワークスペース層を差し替える (07 §7.4 の WKEY-1。ユーザー層の後)
         self.finish_workspace_keymap();
+        // 設定の読み直しの最中に期限が来た自動の読み直し・待たせた `config.reload` を、連鎖が終わったら始める (07 §6 の RLD-2)
+        self.state.config_watch_resume();
         self.state.flush_open_switches();
         self.state.sync_tab_line();
     }
