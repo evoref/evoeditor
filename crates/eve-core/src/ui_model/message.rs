@@ -228,6 +228,19 @@ impl EditorState {
         });
     }
 
+    /// `show_message` の本文の後ろに `suffix` を空白をはさんで足したもの (保存時の変換の付記、04 §8.16)。対処 (`.hint`) は
+    /// そのまま。
+    pub(crate) fn show_message_appended(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        args: &[(&str, &str)],
+        suffix: &str,
+    ) {
+        let (text, hint) = self.resolve_message(self.catalog(), key, args);
+        self.push_message(level, key, format!("{text} {suffix}"), hint);
+    }
+
     /// `show_message` の、補う言語の **同梱の** カタログで解決するもの (言語ファイルの診断の要約。重ねた表が壊れていても
     /// 読めるように、07 §17.4)。
     pub(crate) fn show_builtin_message(

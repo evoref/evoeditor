@@ -631,6 +631,18 @@ in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
 unchanged = "変更はありません (ファイルは書き換えていません)"
 
+[info.save.suffix]
+transform_kept = "保存時の変換 (行末の空白・末尾の改行) は本文に残っています。{key:edit.undo} で戻せます"
+transform_remains = "保存時の変換 (行末の空白・末尾の改行) は本文に残っています"
+transform_reverted = "保存時の変換 (行末の空白・末尾の改行) は戻しました"
+transform_skipped_large = "(1 MiB を超える文書なので、行末の空白の除去と末尾の改行はしていません)"
+transformed = "({detail})"
+
+[info.save.transformed]
+final_newline = "末尾に改行を足しました"
+separator = "、"
+trimmed = "行末の空白を {lines} 行で除きました"
+
 [info.leftover]
 deleted = "{path} の後始末として削除しました"
 restored = "{path} を元に戻しました"
@@ -639,6 +651,9 @@ restored = "{path} を元に戻しました"
 done = "{saved} 件の文書を保存しました"
 done_skipped = "{saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません"
 none = "保存する文書はありません"
+
+[info.save_all.suffix]
+transformed = "(うち {count} 件は保存時に行末の空白・末尾の改行を整えました)"
 
 [info.select]
 no_more_matches = "ほかに一致はありません"

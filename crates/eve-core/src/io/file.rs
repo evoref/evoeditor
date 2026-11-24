@@ -166,6 +166,7 @@ impl EditorState {
             if let Some(snap) = retained {
                 self.io.closing_snapshots.insert(doc, snap);
             }
+            self.forget_save_transform(doc);
             // 退避用の公開物から外す (破棄した内容を緊急退避に残さない。保存中の文書は上で残している)
             self.mark_snapshot_update(doc);
             self.push_event(EditorEvent::DocumentClosed { doc });
@@ -269,6 +270,8 @@ impl EditorState {
         if self.reject_stateful_invalid(doc_id, None) {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
+        // 保存の連鎖を始める (保存時の変換の印、03 §9.3.1 の SVT-4 (c)。保存中なら前の連鎖の印を保つ)
+        self.begin_save_chain(doc_id, crate::command::ids::FILE_SAVE);
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -352,6 +355,7 @@ impl EditorState {
         if self.reject_stateful_invalid(doc_id, Some(fmt)) {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
+        self.begin_save_chain(doc_id, crate::command::ids::FILE_SET_ENCODING);
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };

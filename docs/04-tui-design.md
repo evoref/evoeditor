@@ -1286,7 +1286,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.16 編集の拡張 (Could) の文言の案 (v0.5 の M34)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.*` の 2 つの文言から組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
 
 **完了のメッセージと付記** (保存時の変換。03 §9.3.1 の SVT-5 / SVT-6 / SVT-8): 変換の知らせは独立のメッセージにせず、**その保存で最後に出す完了のメッセージの後ろに 1 つだけ付記する**。完了のメッセージの選び方は今のまま (`info.save.done`。つながりを承認した保存の成功は `info.save.escape_merged`、途中まで読んだ標準入力の文書は `info.save.partial_saved` が代わりに出る。直接上書きでは `info.save.in_place` が先に出て、続く完了のメッセージが最後)。付記は、変換で本文が変わったら `info.save.suffix.transformed`、設定は真だが 1 MiB を超えて変換しなかったら `info.save.suffix.transform_skipped_large` (2 つは同時に起きない)。`info.save.escape_merged` は要点が先頭にあるので、付記は後ろに足して先頭の要点を崩さない (80 桁を超えたら、メッセージ行の今の省略の規則で後ろから切る。全文はメッセージ履歴で読める)。書けずに終わったときは、失敗・中止のメッセージに `info.save.suffix.transform_kept` を付ける (完了の付記とは同時に起きない)。全保存の要約には `info.save_all.suffix.transformed` を付ける。
 
@@ -1311,10 +1311,13 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `msg.transform.failed` | 変換のジョブが失敗した (メモリの確保の失敗など。TXT-6) | 変換できませんでした (メモリが足りない可能性があります) / 対象を小さく選んで実行してください | Could not transform the text (possibly out of memory) / Select a smaller range and try again |
 | `msg.transform.target_gone` | 大きい対象の変換の間の編集で、対象の範囲が消えた (TXT-6) | 変換する範囲が編集で無くなったため、変換しませんでした / 範囲を選び直して、もう一度実行してください | The range to transform was removed by editing, so nothing was transformed / Select the range again and run it again |
 | `status.transforming.long` / `.short` | ステータスバーの左 6 の位置 (§8.7)。テキスト変換のジョブを待つ間 (TXT-6) | [変換中] / 変換中 | [Transforming] / Transforming |
-| `info.save.suffix.transformed` | 保存の成功で、保存時の変換で本文が変わったとき (03 §9.3.1 の SVT-5)。完了のメッセージの後ろに付ける (下の「完了のメッセージと付記」)。`{detail}` は下の 2 つを `、` (en は `; `) でつないだもの | ({detail}) | ({detail}) |
-| `info.save.transformed.trimmed` / `info.save.transformed.final_newline` | `{detail}` の部分 (`{lines}` は空白を除いた行の数) | 行末の空白を {lines} 行で除きました / 末尾に改行を足しました | trimmed trailing whitespace on {lines} lines / added a final newline |
+| `info.save.suffix.transformed` | 保存の成功で、保存時の変換で本文が変わったとき (03 §9.3.1 の SVT-5)。完了のメッセージの後ろに付ける (下の「完了のメッセージと付記」)。`{detail}` は下の 2 つを `info.save.transformed.separator` でつないだもの | ({detail}) | ({detail}) |
+| `info.save.transformed.trimmed` / `info.save.transformed.final_newline` | `{detail}` の部分 (`{lines}` は空白を除いた行の数。en は 1 行でも崩れないように数を括弧に入れる。段 3 のレビューで直した) | 行末の空白を {lines} 行で除きました / 末尾に改行を足しました | trimmed trailing whitespace (lines: {lines}) / added a final newline |
+| `info.save.transformed.separator` | `{detail}` の 2 つの部分の区切り (段 3 のレビューで言語ファイルのキーにした) | 、 | `; ` |
 | `info.save.suffix.transform_skipped_large` | 保存の成功で、設定は真だが文書が 1 MiB を超えたので変換しなかったとき (SVT-6)。完了のメッセージの後ろに付ける | (1 MiB を超える文書なので、行末の空白の除去と末尾の改行はしていません) | (the document is over 1 MiB, so trailing whitespace and the final newline were left as is) |
 | `info.save.suffix.transform_kept` | 保存時の変換を当てた後で、保存が書けずに終わった・中止したとき (SVT-8)。失敗・中止のメッセージ (`msg.save.*` の本文・`info.save.aborted`・`info.save.to_recovery`) と、全保存の失敗の一覧の各行の `{reason}` の後ろに付ける | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています。{key:edit.undo} で戻せます | The on-save cleanup (trailing whitespace, final newline) is still in the text; press {key:edit.undo} to undo it |
+| `info.save.suffix.transform_remains` | `transform_kept` と同じ場面で、変換の Undo のノードが履歴の今の位置でない (後に別の編集がある) とき (SVT-8。段 3 のレビューで足した) | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています | The on-save cleanup (trailing whitespace, final newline) is still in the text |
+| `info.save.suffix.transform_reverted` | 上書き保存が書込権限なしで失敗し、読み取り専用にする前に変換を戻したとき (SVT-8 の例外。段 3 のレビューで足した) | 保存時の変換 (行末の空白・末尾の改行) は戻しました | The on-save cleanup (trailing whitespace, final newline) was undone |
 | `info.save_all.suffix.transformed` | 全保存の要約 (`info.save_all.done` / `.done_skipped`) の後ろに付ける。保存時の変換で本文が変わった文書が 1 件以上あるとき。`{count}` はその件数 | (うち {count} 件は保存時に行末の空白・末尾の改行を整えました) | ({count} of them were cleaned up on save) |
 | `info.jump.no_back` / `info.jump.no_forward` | ジャンプ履歴の端 (03 §5.9 の JMP-3) | 戻る位置はありません / 進む位置はありません | No earlier position / No later position |
 | `status.box.long` / `.short` | ステータスバーの選択情報 (§8.7)。矩形選択のモードで矩形があるとき (03 §4.8 の BOX-7。右 1 のほかの項目と同じ丸括弧。曖昧幅の `×` は使わない) | (矩形 {rows}行 {cols}列) / 矩形{rows}x{cols} | (Box {rows}x{cols}) / Box {rows}x{cols} |
@@ -2021,6 +2024,15 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.transform.stale` (v0.5) | 1 MiB を超える対象の変換のジョブを待つ間に編集が続き、作り直しも古かった (03 §15.8 の TXT-6。文書は変わらない) | 編集が続いたため、変換しませんでした / 入力を止めてから、もう一度実行してください |
 | `msg.transform.target_gone` (v0.5) | 変換のジョブを待つ間の編集で、対象の範囲が 1 つでも消えた (Range の長さが 0 になった・ブロックの行が残らない・区切りだけが残った)、または待つ間にその文書の再読込を始めた (TXT-6。文書は変わらない) | 変換する範囲が編集で無くなったため、変換しませんでした / 範囲を選び直して、もう一度実行してください |
 | `msg.transform.failed` (v0.5) | 変換のジョブが失敗した (一時の領域の確保の失敗・パニック。TXT-6。文書は変わらない) | 変換できませんでした (メモリが足りない可能性があります) / 対象を小さく選んで実行してください |
+| `info.save.suffix.transformed` (v0.5) | 保存の成功で、保存時の変換 (03 §9.3.1 の SVT-5) で本文が変わったとき、その保存で最後に出す完了のメッセージ (`info.save.done` / `info.save.escape_merged` / `info.save.in_place` / `info.save.partial_saved`) の後ろに空白をはさんで付ける (§8.16 の「完了のメッセージと付記」)。`{detail}` は下の 2 つを `info.save.transformed.separator` でつないだもの | ({detail}) |
+| `info.save.transformed.trimmed` (v0.5) | 上の `{detail}` の部分。空白を除いた行があったとき (`{lines}` は空白を除いた行の数) | 行末の空白を {lines} 行で除きました |
+| `info.save.transformed.final_newline` (v0.5) | 上の `{detail}` の部分。末尾に改行を足したとき | 末尾に改行を足しました |
+| `info.save.transformed.separator` (v0.5) | 上の `{detail}` の 2 つの部分の区切り | 、 |
+| `info.save.suffix.transform_skipped_large` (v0.5) | 保存の成功で、保存時の変換の設定は真だが、文書が 1 MiB (`TRANSFORM_SYNC_BYTES`) を超えたので変換しなかったとき (SVT-6)。完了のメッセージの後ろに付ける | (1 MiB を超える文書なので、行末の空白の除去と末尾の改行はしていません) |
+| `info.save.suffix.transform_kept` (v0.5) | 保存時の変換を当てた連鎖が書けずに終わった・中止したとき (SVT-8)。失敗・中止のメッセージ (`msg.save.*` の本文 (`ui.confirm.save_failed` の本文を含む)・`info.save.aborted`・`info.save.escape_merge_cancelled`・`info.save.to_recovery`・`msg.save.recovery_failed`) と、全保存の失敗の一覧の各行の `{reason}` の後ろに付ける。外部変更・原子的置換不可などの確認と名前の入力のキャンセルは、変換が残っているときだけ `info.save.aborted` にこれを付けて出す (残っていなければ v0.4 と同じく出さない)。「保存を中止して終了」では出さない。変換の Undo のノードが履歴の今の位置のときだけ。今の位置でなければ下の `transform_remains`、Undo で戻されていれば付けない | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています。{key:edit.undo} で戻せます |
+| `info.save.suffix.transform_remains` (v0.5) | 上と同じ場面で、変換の Undo のノードが履歴の今の位置でない (後に別の編集がある) とき (03 §9.3.1 の SVT-8) | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています |
+| `info.save.suffix.transform_reverted` (v0.5) | 上書き保存が書込権限なしで失敗し、文書を読み取り専用にする前に変換を戻したとき (SVT-8 の例外)。`ui.confirm.save_failed` の本文と全保存の失敗の一覧の `{reason}` の後ろに付ける | 保存時の変換 (行末の空白・末尾の改行) は戻しました |
+| `info.save_all.suffix.transformed` (v0.5) | 全保存の要約 (`info.save_all.done` / `.done_skipped`) の後ろに付ける。保存時の変換で本文が変わって保存できた文書が 1 件以上あるとき (`{count}` はその件数) | (うち {count} 件は保存時に行末の空白・末尾の改行を整えました) |
 | `info.external.changed` (v0.5) | ファイル監視で、文書のファイルが外部で変更されたと分かった (03 §9.5.1 の WATCH-6。`{name}` はファイル名。照合の回の結果がまとまって 2 つ以上の文書に印が付いたら下の `changed_many`。まとめ方は WATCH-6: 回が終わったとき、ほかの文書の待ち合わせの期限が 100 ms の内なら保留して次の回と合わせる) | {name} が外部で変更されました |
 | `info.external.deleted` (v0.5) | ファイル監視で、文書のファイルが外部で削除されたと分かった (WATCH-6) | {name} が外部で削除されました |
 | `info.external.changed_many` (v0.5) | 照合の回 (保留して合わせた回を含む。WATCH-6) で 2 つ以上の文書に外部の変更・削除の印が付いた (出すときの今の印で数える。`{count}` は印の付いた文書の数) | {count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります) |

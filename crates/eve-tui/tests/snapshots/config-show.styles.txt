@@ -6,8 +6,8 @@
 5: 0-0 Rgb(128, 128, 128) Reset NONE | 42-75 Rgb(128, 128, 128) Reset NONE
 6: 0-0 Rgb(128, 128, 128) Reset NONE | 72-75 Rgb(128, 128, 128) Reset NONE
 7: 0-0 Rgb(128, 128, 128) Reset NONE | 71-75 Rgb(128, 128, 128) Reset NONE
-8: 0-0 Rgb(128, 128, 128) Reset NONE
-9: 0-0 Rgb(128, 128, 128) Reset NONE
+8: 0-0 Rgb(128, 128, 128) Reset NONE | 72-75 Rgb(128, 128, 128) Reset NONE
+9: 0-0 Rgb(128, 128, 128) Reset NONE | 72-75 Rgb(128, 128, 128) Reset NONE
 10: 0-0 Rgb(128, 128, 128) Reset NONE
 11: 0-0 Rgb(128, 128, 128) Reset NONE
 12: 0-0 Rgb(128, 128, 128) Reset NONE

@@ -26,6 +26,8 @@ pub(crate) struct SaveAll {
     saved: usize,
     /// 飛ばした文書 (名前が無い・読み取り専用) の数。
     skipped: usize,
+    /// 保存時の変換で本文が変わって保存できた文書の数 (`info.save_all.suffix.transformed`、03 §9.3.1 の SVT-5)。
+    transformed: usize,
     /// 保存できなかった文書: (パス, 理由)。
     failed: Vec<(String, String)>,
 }
@@ -67,6 +69,8 @@ impl EditorState {
                 batch.failed.push((path.display(), reason));
                 continue;
             }
+            // 文書ごとの保存は新しい連鎖 (保存ジョブを投入する文書だけに変換を当てる、03 §9.3.1 の SVT-4 (f))
+            self.begin_save_chain(id, ids::FILE_SAVE_ALL);
             match self.start_save(id, path.clone(), expected, None) {
                 CommandResult::Pending(job) => {
                     batch.jobs.insert(job);
@@ -121,23 +125,35 @@ impl EditorState {
             }
             _ => "failed".to_owned(),
         };
-        let batch = self.io.save_all.as_mut()?;
-        batch.jobs.remove(&job);
-        if matches!(r, JobResult::Saved { .. }) {
-            batch.saved += 1;
-            return Some(false);
-        }
-        batch.failed.push((shown, reason));
-        // 上書き保存が権限エラーで失敗したら書込権限なしにする (FR-116 AC-3、通常の保存と同じ)
+        // 上書き保存が権限エラーで失敗したら書込権限なしにする (FR-116 AC-3、通常の保存と同じ)。読み取り専用にすると
+        // 変換を Undo で戻せなくなるので、先に戻す (03 §9.3.1 の SVT-8 の例外)
         let denied = matches!(
             r,
             JobResult::Failed { err: JobError::Fs(e), .. }
                 if e.kind == crate::FsErrorKind::PermissionDenied
-        );
-        if denied
-            && let Some(d) = self.docs.documents.get_mut(&doc)
-            && d.path.as_ref() == Some(path)
-        {
+        ) && self
+            .docs
+            .documents
+            .get(&doc)
+            .is_some_and(|d| d.path.as_ref() == Some(path));
+        if denied {
+            self.revert_save_transform_before_read_only(doc);
+        }
+        // 保存時の変換が本文に残ったまま書けなかったら、理由の後ろに付ける (03 §9.3.1 の SVT-8)
+        let reason = match self.save_transform_kept_suffix(doc) {
+            Some(suffix) => format!("{reason} {suffix}"),
+            None => reason,
+        };
+        let transformed = self.save_transform_applied(doc);
+        let batch = self.io.save_all.as_mut()?;
+        batch.jobs.remove(&job);
+        if matches!(r, JobResult::Saved { .. }) {
+            batch.saved += 1;
+            batch.transformed += usize::from(transformed);
+            return Some(false);
+        }
+        batch.failed.push((shown, reason));
+        if denied && let Some(d) = self.docs.documents.get_mut(&doc) {
             d.read_only
                 .insert(crate::document::ReadOnlyReason::NoWritePermission);
             self.mark_dirty_render();
@@ -159,10 +175,18 @@ impl EditorState {
             _ => keys::INFO_SAVE_ALL_DONE_SKIPPED,
         };
         let (saved, skipped) = (b.saved.to_string(), b.skipped.to_string());
-        self.show_message(
+        // 保存時の変換で本文が変わった文書があれば、要約の後ろに件数を付ける (04 §8.16)
+        let suffix = (b.transformed > 0).then(|| {
+            self.message_text(
+                keys::INFO_SAVE_ALL_SUFFIX_TRANSFORMED,
+                &[("count", &b.transformed.to_string())],
+            )
+        });
+        self.show_message_with_suffix(
             MessageLevel::Info,
             key,
             &[("saved", &saved), ("skipped", &skipped)],
+            suffix.as_deref(),
         );
         if b.failed.is_empty() {
             return;

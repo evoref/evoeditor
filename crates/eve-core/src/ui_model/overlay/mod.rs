@@ -202,7 +202,19 @@ impl EditorState {
             self.open_aborted(&ask);
             return CommandResult::Done;
         }
+        // 名前を付けて保存の名前の入力の `Esc` は保存の連鎖の中止。保存時の変換が本文に残っていれば知らせる (03 §9.3.1 の
+        // SVT-8。残っていなければ v0.4 と同じく何も出さない)
+        let save_as_doc = match &self.ui.overlay {
+            Some(Overlay::Prompt(PromptState {
+                kind: PromptKind::SaveAs { doc, .. } | PromptKind::SaveAsFormat { doc, .. },
+                ..
+            })) => Some(*doc),
+            _ => None,
+        };
         if self.take_overlay().is_some() {
+            if let Some(doc) = save_as_doc {
+                self.notify_transform_kept_on_abort(doc);
+            }
             self.mark_dirty_render();
             return CommandResult::Done;
         }

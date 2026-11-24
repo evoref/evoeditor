@@ -187,6 +187,9 @@ pub struct Document {
     /// 文書に当たった `.editorconfig` の値 (07 §3.6 の LAYER-1 の (5)、§10.3 の EC-1)。届く前・パスの無い文書・読まない起動は
     /// `None`。
     pub(crate) editorconfig: Option<crate::io::editorconfig::EditorConfigApplied>,
+    /// 今のパスで `.editorconfig` の読込を 1 回終えた (値が無くても立つ。03 §9.3.1 の SVT-1 (b1))。読込の完了で立て、パスの
+    /// 変更で倒す。
+    pub(crate) editorconfig_resolved: bool,
     /// canonical のパス (同じファイルの判定に使う。03 §12.7.6 の 0、境界の型ではない)。開くジョブの `Identity` と、名前を
     /// 付けて保存の成功で直す。canonicalize できなかったときは正規化したパス。無題・`Identity` が届く前は `None`。
     pub(crate) canonical: Option<FsPath>,
@@ -327,6 +330,7 @@ impl Document {
             format_chosen: false,
             new_file: false,
             editorconfig: None,
+            editorconfig_resolved: false,
             canonical: None,
             file_id_unique: false,
             loading_file_id: None,
@@ -474,6 +478,11 @@ impl Document {
     /// Undo 履歴。
     pub fn history(&self) -> &UndoHistory {
         &self.history
+    }
+
+    /// Redo のノードを捨てる (Undo として戻した保存時の変換を Redo に残さない、03 §9.3.1 の SVT-8 の例外)。
+    pub(crate) fn discard_redo(&mut self) {
+        self.history.discard_redo();
     }
 
     /// 今の Undo のノードが `node` なら、その適用の後の選択を `sel` にする (Redo で戻す選択。03 §15.8 の TXT-5)。

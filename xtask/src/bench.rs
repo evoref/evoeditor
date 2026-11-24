@@ -150,6 +150,34 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         results.push(l.to_owned());
     }
 
+    // BM-216 (保存時の変換のメインスレッドの時間。1 MiB の上限の文書。参考値、09 §5.2。v0.5 の M34 の段 3)
+    println!("▶ BM-216 (保存時の変換)");
+    let mut cmd = Command::new("cargo");
+    cmd.args([
+        "bench",
+        "-p",
+        "eve-testkit",
+        "--bench",
+        "bm_216",
+        "--",
+        "--json",
+    ]);
+    if quick {
+        cmd.arg("--quick");
+    }
+    let out = run_capture(&mut cmd)?;
+    let lines: Vec<&str> = out
+        .lines()
+        .filter(|l| l.starts_with("{\"id\":\"BM-216-"))
+        .collect();
+    if lines.is_empty() {
+        return Err("BM-216 の結果の行が見つかりません".to_owned());
+    }
+    for l in lines {
+        println!("  {l}");
+        results.push(l.to_owned());
+    }
+
     // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)。
     // v0.4 から、区分 B の箇所が密なファイルの読込 (`-dense`) と、保存のジョブの時間 BM-107e (参考) も同じベンチが出す
     if cfg!(windows) {

@@ -122,6 +122,15 @@ impl EditorState {
                         format!("\"{}\"", v.default_encoding.value.name()),
                         &v.default_encoding.origin,
                     )),
+                    // 保存時の変換 (言語定義と `.editorconfig` で文書ごとに決まる、07 §3.6。v0.5 の M34 の段 3)
+                    "editor.trim_trailing_whitespace_on_save" => Some((
+                        v.trim_trailing_whitespace_on_save.value.to_string(),
+                        &v.trim_trailing_whitespace_on_save.origin,
+                    )),
+                    "editor.insert_final_newline_on_save" => Some((
+                        v.insert_final_newline_on_save.value.to_string(),
+                        &v.insert_final_newline_on_save.origin,
+                    )),
                     _ => None,
                 });
                 let (value, origin) = match per_doc {

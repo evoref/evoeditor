@@ -388,7 +388,7 @@ pub fn read_editorconfig(
 impl EditorState {
     /// `.editorconfig` を読むか (07 §10.3 の EC-7): Host が読込元を渡していて、`--no-workspace-config` でも `--no-config`
     /// でもない。
-    fn editorconfig_enabled(&self) -> bool {
+    pub(crate) fn editorconfig_enabled(&self) -> bool {
         self.io
             .config_sources
             .as_ref()
@@ -451,6 +451,8 @@ impl EditorState {
     pub(crate) fn editorconfig_on_path_changed(&mut self, doc: DocumentId) {
         if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.editorconfig = None;
+            // 新しいパスではまだ読んでいない (保存時の変換の値が決まっていない、03 §9.3.1 の SVT-1 (b1))
+            d.editorconfig_resolved = false;
         }
         self.refresh_doc_settings(doc);
         self.start_editorconfig_read(doc, EditorConfigTrigger::Open);
@@ -565,6 +567,8 @@ impl EditorState {
                         values: Arc::new(*values),
                         safe_dirs,
                     });
+                    // 値が無くても、今のパスの読込を終えた (03 §9.3.1 の SVT-1 (b1))
+                    d.editorconfig_resolved = true;
                 }
                 self.refresh_doc_settings(doc);
                 self.refresh_new_file_format(doc);

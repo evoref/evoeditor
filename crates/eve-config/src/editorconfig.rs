@@ -4,7 +4,7 @@
 //!   セクション (中身が glob、EC-4)、`=` を含む行は `キー = 値` (キーは小文字、値は大文字小文字を区別しない)。最初の
 //!   セクションの前は前置きで、`root` だけを読む。長さの上限を超えた行は飛ばし、10,000 行・1,000 セクションで止める。
 //! - 診断 (EC-6): 写すプロパティの誤った値 (`msg.editorconfig.invalid_value`)・写せない `charset`
-//!   (`msg.editorconfig.charset_unmapped`、情報)・v0.5 で写さないプロパティ (未対応の情報診断)・資源の上限を超える glob
+//!   (`msg.editorconfig.charset_unmapped`、情報)・v0.5 で写さないプロパティ (`max_line_length` の未対応の情報診断)・資源の上限を超える glob
 //!   (`msg.editorconfig.bad_glob`)。当たるかに依らず、ファイルの中身だけで決まる (同じ中身なら同じ診断)。
 //! - 重ね方 ([`resolve_editorconfig`]、EC-5): 遠いファイルから近いファイルの順に、各ファイルの中は書いた順に、当たる
 //!   セクションのプロパティを重ねる (後が勝つ。`unset`・誤った値・写せない `charset` は取り消す)。`tab_width` を書いていなくて `indent_size` が整数なら、
@@ -130,6 +130,10 @@ pub struct EditorConfigValues {
     pub line_ending: Option<(DefaultLineEnding, EcOrigin)>,
     /// `charset` → `file.default_encoding` (新しいファイルだけ、LAYER-4)。
     pub encoding: Option<(DefaultEncoding, EcOrigin)>,
+    /// `trim_trailing_whitespace` → `editor.trim_trailing_whitespace_on_save` (v0.5 の M34 の段 3、FR-216)。
+    pub trim_trailing_whitespace: Option<(bool, EcOrigin)>,
+    /// `insert_final_newline` → `editor.insert_final_newline_on_save` (同上。`false` は足さないだけで、取り除かない)。
+    pub insert_final_newline: Option<(bool, EcOrigin)>,
 }
 
 impl EditorConfigValues {
@@ -141,6 +145,8 @@ impl EditorConfigValues {
             && self.tab_width.is_none()
             && self.line_ending.is_none()
             && self.encoding.is_none()
+            && self.trim_trailing_whitespace.is_none()
+            && self.insert_final_newline.is_none()
     }
 }
 
@@ -152,6 +158,8 @@ enum Key {
     TabWidth,
     EndOfLine,
     Charset,
+    TrimTrailingWhitespace,
+    InsertFinalNewline,
 }
 
 /// 写すプロパティの、読んだ値。
@@ -164,6 +172,8 @@ enum Value {
     TabWidth(u8),
     EndOfLine(DefaultLineEnding),
     Charset(DefaultEncoding),
+    /// `trim_trailing_whitespace` / `insert_final_newline` の真偽値。
+    Flag(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -300,6 +310,11 @@ fn read_value(key: Key, v: &str) -> Result<Option<Value>, Vec<&'static str>> {
             "utf-16be" => Some(Value::Charset(DefaultEncoding::Utf16Be)),
             _ => None,
         }),
+        Key::TrimTrailingWhitespace | Key::InsertFinalNewline => match lower.as_str() {
+            "true" => Ok(Some(Value::Flag(true))),
+            "false" => Ok(Some(Value::Flag(false))),
+            _ => Err(vec!["true", "false", "unset"]),
+        },
     }
 }
 
@@ -310,16 +325,15 @@ fn key_of(name: &str) -> Option<Key> {
         "tab_width" => Key::TabWidth,
         "end_of_line" => Key::EndOfLine,
         "charset" => Key::Charset,
+        "trim_trailing_whitespace" => Key::TrimTrailingWhitespace,
+        "insert_final_newline" => Key::InsertFinalNewline,
         _ => return None,
     })
 }
 
-/// v0.5 で写さないプロパティ (未対応の情報診断。§10.1)。
-const UNSUPPORTED_KEYS: [&str; 3] = [
-    "trim_trailing_whitespace",
-    "insert_final_newline",
-    "max_line_length",
-];
+/// v0.5 で写さないプロパティ (未対応の情報診断。§10.1。`trim_trailing_whitespace`・`insert_final_newline` は M34 の段 3 で
+/// 写すようにした)。
+const UNSUPPORTED_KEYS: [&str; 1] = ["max_line_length"];
 
 /// 行の中の位置 (1 始まりの文字数)。
 fn column_of(raw: &str, part: &str) -> u32 {
@@ -498,13 +512,15 @@ pub fn resolve_editorconfig_counted(
     steps: &mut usize,
 ) -> EditorConfigValues {
     count_work();
-    let mut slots: [Option<(Value, EcOrigin)>; 5] = Default::default();
+    let mut slots: [Option<(Value, EcOrigin)>; 7] = Default::default();
     let slot = |k: Key| match k {
         Key::IndentStyle => 0,
         Key::IndentSize => 1,
         Key::TabWidth => 2,
         Key::EndOfLine => 3,
         Key::Charset => 4,
+        Key::TrimTrailingWhitespace => 5,
+        Key::InsertFinalNewline => 6,
     };
     for (name, file, rel) in files {
         for s in &file.sections {
@@ -530,7 +546,13 @@ pub fn resolve_editorconfig_counted(
             }
         }
     }
-    let [style, size, tab, eol, charset] = slots;
+    let [style, size, tab, eol, charset, trim, final_newline] = slots;
+    let flag = |slot: Option<(Value, EcOrigin)>| {
+        slot.and_then(|(v, o)| match v {
+            Value::Flag(b) => Some((b, o)),
+            _ => None,
+        })
+    };
     let indent_width = size.and_then(|(v, o)| match v {
         Value::IndentSize(w) => Some((w, o)),
         _ => None,
@@ -558,6 +580,8 @@ pub fn resolve_editorconfig_counted(
             Value::Charset(e) => Some((e, o)),
             _ => None,
         }),
+        trim_trailing_whitespace: flag(trim),
+        insert_final_newline: flag(final_newline),
     }
 }
 

@@ -278,10 +278,13 @@ impl EditorState {
                     JobError::Cancelled => (MessageLevel::Info, keys::INFO_SAVE_ABORTED),
                     _ => (MessageLevel::Error, keys::MSG_SAVE_FAILED),
                 };
-                self.show_message(
+                // 置換の一覧を作れずに中止した: 保存時の変換が本文に残っていれば付記する (03 §9.3.1 の SVT-8)
+                let kept = self.save_transform_kept_suffix(ask.doc);
+                self.show_message_with_suffix(
                     level,
                     key,
                     &[("path", &ask.path.display()), ("reason", "replace")],
+                    kept.as_deref(),
                 );
             }
             _ => {}
@@ -394,7 +397,14 @@ impl EditorState {
             self.set_selection(view, eve_text::Selection::point(eve_text::ByteOff(off)));
             self.ensure_cursor_visible(view);
         }
-        self.show_message(MessageLevel::Info, keys::INFO_SAVE_ABORTED, &[]);
+        // 保存時の変換が本文に残っていれば付記する (03 §9.3.1 の SVT-8)
+        let kept = self.save_transform_kept_suffix(ask.doc);
+        self.show_message_with_suffix(
+            MessageLevel::Info,
+            keys::INFO_SAVE_ABORTED,
+            &[("path", &ask.path.display())],
+            kept.as_deref(),
+        );
     }
 }
 

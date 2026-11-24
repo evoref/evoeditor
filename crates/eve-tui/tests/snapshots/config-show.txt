@@ -6,9 +6,9 @@
 ~ │   editor.indent_width = 2             ユーザー: config.toml:4 [os.linux] │
 ~ │   editor.undo.total_max_bytes = 268435456                           既定 │
 ~ │   editor.backspace_unit = "codepoint"                              --set │
-~ └─────────────────────────────────────────────────────────────────── 5/45 ─┘
-~
-~
+~ │   editor.trim_trailing_whitespace_on_save = false                   既定 │
+~ │   editor.insert_final_newline_on_save = false                       既定 │
+~ └─────────────────────────────────────────────────────────────────── 7/47 ─┘
 ~
 ~
 ~

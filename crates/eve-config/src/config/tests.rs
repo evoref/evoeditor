@@ -492,6 +492,8 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "ui.locale",
         "editor.undo.total_max_bytes",
         "editor.backspace_unit",
+        "editor.trim_trailing_whitespace_on_save",
+        "editor.insert_final_newline_on_save",
         "view.wrap",
         "view.wrap_indent",
         "view.wrap_kinsoku",
@@ -549,6 +551,8 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("ui.locale", "auto"),
         ("editor.undo.total_max_bytes", "268435456"),
         ("editor.backspace_unit", "grapheme"),
+        ("editor.trim_trailing_whitespace_on_save", "false"),
+        ("editor.insert_final_newline_on_save", "false"),
         ("view.wrap", "off"),
         ("view.wrap_indent", "same"),
         ("view.wrap_kinsoku", "true"),
@@ -704,7 +708,9 @@ const INT_KEYS: [&str; 15] = [
     "search.max_matches",
     "search.count_limit",
 ];
-const BOOL_KEYS: [&str; 11] = [
+const BOOL_KEYS: [&str; 13] = [
+    "editor.trim_trailing_whitespace_on_save",
+    "editor.insert_final_newline_on_save",
     "search.workspace.respect_gitignore",
     "search.workspace.follow_symlinks",
     "file.swap.enabled",

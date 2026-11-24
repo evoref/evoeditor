@@ -278,6 +278,8 @@ pub(crate) fn file_save_as(ctx: &mut CommandCtx<'_>) -> CommandResult {
         ctx.state.notify_loading_busy();
         return CommandResult::Rejected(RejectReason::NotAvailable);
     }
+    // 保存の連鎖を始める (保存時の変換の印、03 §9.3.1 の SVT-4 (c))
+    ctx.state.begin_save_chain(doc, ids::FILE_SAVE_AS);
     match arg_path(ctx) {
         Some(p) => ctx.state.request_save_as(doc, &p, None),
         None => {
