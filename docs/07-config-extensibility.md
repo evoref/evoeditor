@@ -224,7 +224,7 @@ v0.4 までの本節の例は `[os.windows.editor]` の `line_ending` (キーの
 
 ### 3.6 文書ごとに決まる値 (v0.5 の M33。FR-704 / FR-705)
 
-言語定義 (§9) と `.editorconfig` (§10) は、値を文書ごとに変える。v0.5 で文書ごとに決まるキーは `editor.tab_width`・`editor.indent_unit`・`editor.indent_width` と、新しいファイルだけに効く `file.default_line_ending`・`file.default_encoding` の 5 つ (文書ごとのキー)。ほかのキーは、文書に依らず層 (§3.1) だけで決まる。
+言語定義 (§9) と `.editorconfig` (§10) は、値を文書ごとに変える。v0.5 で文書ごとに決まるキーは `editor.tab_width`・`editor.indent_unit`・`editor.indent_width` と、新しいファイルだけに効く `file.default_line_ending`・`file.default_encoding` の 5 つ (文書ごとのキー)。**v0.5 の M34 で、保存時の変換 (FR-216) の `editor.trim_trailing_whitespace_on_save`・`editor.insert_final_newline_on_save` を足して 7 つにする** (言語定義の同じ名前の項目 (§9.6 の LANG-3) が (3)(4)(7) の段、`.editorconfig` の `trim_trailing_whitespace`・`insert_final_newline` (§10.1) が (5) の段に入る。保存の時点の値を使う、03 §9.3.1 の SVT-1。M34 の仕様の PR、2026-11-24)。ほかのキー (`editor.auto_pairs` を含む。自動閉じの組は言語定義の `auto_pairs` で文書ごとに替わる、03 §15.7 の APR-1) は、文書に依らず層 (§3.1) だけで決まる。
 
 | ID | 規則 |
 |---|---|
@@ -319,15 +319,15 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `indent_unit` | `"tab" \| "space"` | `"space"` | インデント操作で挿入する単位。v0.5 の M33 から文書ごとに決まる (§3.6)。**v0.5 で変わる点**: 組込みの言語定義の `go` と `make` の文書では、この値に依らずタブになる (§9.6 の LANG-3。ユーザー層の `[[language]]` で替えられる) | FR-208 | v0.1 |
 | `indent_width` | int 1..16 | `4` | スペースインデントの幅。v0.5 の M33 から文書ごとに決まる (§3.6) | FR-208 | v0.1 |
 | `auto_indent` | bool | `true` | 改行時に直前行のインデントを継承 | FR-202 | v0.1 (定数、公開 v0.2) |
-| `auto_pairs` | bool | `false` | 括弧・引用符の自動閉じ | FR-210 | v0.5 |
+| `auto_pairs` | bool | `false` | 括弧・引用符の自動閉じ (03 §15.7。組は文書の言語の `auto_pairs` (§9.6 の LANG-3)、無ければ既定の 5 組)。文書ごとのキーではない (§3.6)。`config.reload` で即時に効く。**M34 の段 4 (03 §15.9.2) で公開・実装する** (それまでは予約のまま) | FR-210 | v0.5 |
 | `word_separators` | string | ASCII の空白・タブ・括弧・句読点・演算子記号 (`( ) [ ] { } < > , ; : . ! ? / = + - * & ^ % $ # @ ~`) と、引用符・バッククォート・バックスラッシュ・縦棒 | 単語境界の追加区切り。v0.1 の単語移動は **文字種の遷移規則** (03 §13.3、OQ-117) だけで、本キーは v0.2 で公開 | FR-302 | v0.1 (定数、公開 v0.2) |
 | `undo.max_steps` | int | `10000` | 文書あたり Undo 上限 (いずれか一方に達したら古い側から破棄。03 §7.5) | NFR-203 | v0.1 (定数、公開 v0.2) |
 | `undo.max_bytes` | int (bytes) | `67108864` (64 MiB) | 同上 (メモリ) | NFR-203 | v0.1 (定数、公開 v0.2) |
 | `undo.total_max_bytes` | int (bytes) | `268435456` (256 MiB) | **プロセス全体** の Undo 履歴上限 (02 §14.1 MR2、03 §7.5)。超えたら履歴の最も大きい文書から古い順に破棄 (直前の 1 操作は残す。破棄しても dirty 表示は変わらない)。範囲 1048576..=1099511627776 (範囲外は警告して既定値)。**v0.2 の M9a で公開・実装した** (`[editor.undo]` の表でも `[editor]` の `undo.total_max_bytes` でも書ける) | NFR-203 | v0.2 |
 | `undo.group_timeout_ms` | int | `1000` | 連続入力を 1 Undo にまとめる無入力時間 (03 §7.3、OQ-49) | FR-203 | v0.1 (定数、公開 v0.2) |
 | `pending_changes_max_bytes` | int (bytes) | `16777216` (16 MiB) | 未決ジョブ・AI 提案の写像用に保持する ChangeSet の合計上限 (02 §5.3 / 03 §17.1)。**v1.L より前には `pending_changes` 自体が無い** (ジョブは Revision 照合で破棄)。写像は v1.L (Proposal の生成と同時、01 §4.3) | NFR-306 | v1.L |
-| `trim_trailing_whitespace_on_save` | bool | `false` | 保存時に末尾空白除去 | FR-216 | v0.5 |
-| `insert_final_newline_on_save` | bool | `false` | 保存時に末尾改行付与 | FR-216 | v0.5 |
+| `trim_trailing_whitespace_on_save` | bool | `false` | 保存時に各行の末尾の ASCII の空白とタブを除く (03 §9.3.1 の SVT-2。カーソルの行も除く。未編集の保存には効かせない)。**文書ごとのキー** (§3.6。言語定義の同じ名前の項目と `.editorconfig` の `trim_trailing_whitespace` で替わる。組込みの `markdown` と `diff` は `false`、§9.6.1)。**M34 の段 3 で公開・実装する** | FR-216 | v0.5 |
+| `insert_final_newline_on_save` | bool | `false` | 保存時に、空でなく区切りで終わらない文書の末尾に `default_eol` を 1 つ足す (03 §9.3.1 の SVT-3。`false` は足さないだけで、末尾の改行を取り除かない)。**文書ごとのキー** (§3.6。言語定義の同じ名前の項目と `.editorconfig` の `insert_final_newline` で替わる)。**M34 の段 3 で公開・実装する** | FR-216 | v0.5 |
 | `multi_cursor` | bool | `true` | 複数カーソルを有効化。**公開しない** (v0.5 の M32 の仕様の PR で決めた。PO の決定 2026-11-22。複数カーソルは常に使え、使わない利用者はキーマップの `"none"` で足す操作の割当を外す。03 §4.7.3)。書いたときは、公開前のキーの「このバージョンでは未対応」ではなく、専用の情報診断 `msg.config.multi_cursor_always` (04 §8.14) を出して値を使わない (M32 の段 3 で `crates/eve-config/src/reserved.rs` の扱いを替えた: 公開前のキーの一覧 `RESERVED_KEYS` から外し、常に有効の機能のキーの一覧 `ALWAYS_ON_KEYS` に置く。診断の種類は `DiagKind::MultiCursorAlways`) | FR-211 | — (公開しない) |
 
 ### 5.2 `[file]` — ファイル I/O
@@ -367,7 +367,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー | 型 / 値 | 既定 | 説明 | 関連 | P |
 |---|---|---|---|---|---|
-| `view.line_numbers` | `"absolute" \| "relative" \| "off"` | `"absolute"` | 行番号。`relative` は v0.5 (公開時 (v0.2) の許容値は `absolute` / `off`。`relative` を書くと列挙値不正の警告ではなく「このバージョンでは未対応」の情報診断にして `absolute` を使う) | FR-502 | v0.1 (定数、公開 v0.2) |
+| `view.line_numbers` | `"absolute" \| "relative" \| "off"` | `"absolute"` | 行番号 (03 §14.7)。`relative` は主のカーソルの行を絶対の番号、ほかの行を論理行の差で出す。`off` は行番号を出さない (ガターの幅 0)。v0.4 までの本行の「公開時 (v0.2) の許容値は `absolute` / `off`」は実装されず、キーは予約のままだった (`crates/eve-config/src/reserved.rs`)。**M34 の段 1 (03 §15.9.2) で 3 つの値で公開・実装する** (許容値以外は警告して `"absolute"`。`config.reload` で即時に効く) | FR-502 | v0.1 (定数、公開 v0.5 の M34) |
 | `view.wrap` | `"off" \| "soft" \| "word"` | `"off"` | 折り返し (ソフトラップは v0.2、OQ-110。v0.1 は横スクロールのみ)。`view.toggle_wrap` で ON にするときの方式にもなる (`off` のときは `word`)。**v0.2 の M9b で公開・実装した** | FR-506 | v0.2 |
 | `view.wrap_indent` | `"none" \| "same"` (`"plus_one"` は §5.13 のとおり後の版で値を追加) | `"same"` | 折り返し行のインデント継続。`none` = 継続しない、`same` = 論理行のインデント幅で揃える (03 §14.3)。最初から enum にしておき、値の追加は互換変更として扱う (§4.4。型を bool から変えない) (提案、OQ-175) | FR-506 | v0.2 |
 | `view.show_whitespace` | `"off" \| "minimal" \| "ideographic" \| "trailing" \| "all"` | `"minimal"` | 空白の可視化。`minimal` = 全角スペース (U+3000) とタブ文字だけを記号と属性で示す (03 §13.2、04 §6.7 I8)。`ideographic` (全角スペースのみ)、`trailing` (行末の空白) と `all` (半角の空白・改行も) は v0.5 (`ideographic` は §5.13 の表。公開時 (v0.2) の許容値は `off` / `minimal`。`ideographic` / `trailing` / `all` を書くと「このバージョンでは未対応」の情報診断にして `minimal` を使う)。**v0.2 の M9c で公開・実装した**: `off` ではタブを空白のセル、全角スペースを ASCII の空白 2 セルで描く (幅とカーソルの列は変えない) | FR-508 | v0.1 (定数 `"minimal"`、公開 v0.2) |
@@ -599,7 +599,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `editor.vertical_motion_at_edge` | `"doc_edge"` (`"stay"`) | 03 §5.2 |
 | `editor.paste_normalize_eol` | `true` | 03 §8.4、OQ-51 |
 | `editor.newline_keep_whitespace_only_line` | `true` | 03 §15.3 |
-| `editor.trim_trailing_whitespace_skip_cursor_line` (v0.5) | `true` | 03 §15.3 |
+| `editor.trim_trailing_whitespace_skip_cursor_line` (v0.5) | `true` の予約のまま (**v0.5 では使わない**。M34 の仕様の PR で決めた: 保存時の変換はカーソルの行も除く、03 §9.3.1 の SVT-5 / §15.9.3。キーは予約 (「このバージョンでは未対応」の情報診断) のまま残し、書いていた利用者の診断を変えない。自動保存を入れる版で、自動保存のときだけカーソルの行を除くかと一緒に、使うかを決める) | 03 §15.3 |
 | `view.wrap_indent` の値 `"plus_one"` (論理行のインデント幅 + 1 段) の追加 (公開版は未定。`"none" \| "same"` は v0.2 から公開、§5.3) | `"same"` (v0.1・v0.2 は `none` / `same` のみ) | 03 §14.3 |
 | `view.wrap_kinsoku` | `true` (禁則処理)。**v0.2 の M9b で公開・実装した** (真偽値。`false` で禁則を外す) | 03 §14.3、OQ-57 |
 | `view.width_risky_display` | `"unicode"` (`"replace"`) | 04 §4.7、OQ-64 |
@@ -1167,7 +1167,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 ### 9.1 言語定義の書式
 
-組込み定義 (バイナリ内 TOML、`evoeditor --dump-languages` で出力可) をユーザー層・ワークスペース層が `name` キーで併合する (§3.3)。**v0.5 の M33 で読む項目・組込みの持ち方・ファイル・誤りの扱いは §9.6** (下の例の項目のうち v0.5 で効くのは判定の項目と `indent`・`comment.line` だけで、ほかは「このバージョンでは未対応」の情報診断。組込みの定義は TOML ではなく静的な表で持つ)。
+組込み定義 (バイナリ内 TOML、`evoeditor --dump-languages` で出力可) をユーザー層・ワークスペース層が `name` キーで併合する (§3.3)。**v0.5 の M33 で読む項目・組込みの持ち方・ファイル・誤りの扱いは §9.6** (下の例の項目のうち v0.5 で効くのは判定の項目と `indent`・`comment.line` だけで、ほかは「このバージョンでは未対応」の情報診断。組込みの定義は TOML ではなく静的な表で持つ)。**v0.5 の M34 で `auto_pairs` (FR-210) と、保存時の変換の `trim_trailing_whitespace_on_save`・`insert_final_newline_on_save` (FR-216) を足す** (§9.6 の LANG-3)。
 
 ```toml
 [[language]]
@@ -1179,7 +1179,9 @@ file_globs      = []                             # glob (例 "*.d.ts", ".github/
 first_line      = ""                             # 先頭行の正規表現 (shebang 等。例 "^#!.*\\b(ba|z)?sh\\b")
 indent          = { unit = "space", width = 4 }  # editor.* を上書き (v0.5 の M33 で tab_width も書ける、§9.6)
 comment         = { line = "//", block = ["/*", "*/"] }
-auto_pairs      = { "(" = ")", "[" = "]", "{" = "}", '"' = '"' }
+auto_pairs      = { "(" = ")", "[" = "]", "{" = "}", '"' = '"' }   # v0.5 の M34 (FR-210)。表ごと既定の組を置き換える
+trim_trailing_whitespace_on_save = true          # v0.5 の M34 (FR-216)。editor.* の同じ名前のキーを上書き
+insert_final_newline_on_save     = true          # v0.5 の M34 (FR-216)
 word_separators = ""                             # 空なら editor.word_separators
 grammar         = "rust"                         # tree-sitter 文法名 (v0.6)。省略時 name
 highlight_query = "builtin"                      # "builtin" | ファイルパス (ユーザー層 queries/rust/highlights.scm)
@@ -1192,7 +1194,7 @@ max_line_length  = 100                           # ruler に反映 (EditorConfig
 
 | 項目 | 安全性 | 層 | 備考 |
 |---|---|---|---|
-| `file_types` / `file_names` / `file_globs` / `first_line` / `indent` / `comment` / `auto_pairs` / `word_separators` / `max_line_length` / `format_on_save` | **安全** (データのみ) | 全層 | `first_line` の正規表現は `regex` crate (線形時間) で、長さ上限 256、先頭 1 KB にのみ適用 |
+| `file_types` / `file_names` / `file_globs` / `first_line` / `indent` / `comment` / `auto_pairs` / `trim_trailing_whitespace_on_save` / `insert_final_newline_on_save` / `word_separators` / `max_line_length` / `format_on_save` | **安全** (データのみ) | 全層 | `first_line` の正規表現は `regex` crate (線形時間) で、長さ上限 256、先頭 1 KB にのみ適用 |
 | `grammar` / `highlight_query` | 準安全 | ユーザー層以上 (ワークスペースのクエリファイルは信頼後) | クエリは tree-sitter が解釈するデータだが、複雑なクエリは性能攻撃になり得るため信頼を要する |
 | `language_servers` / `formatter` (名前の参照) | 安全 (参照のみ) | 全層 | 参照先の **定義** (コマンド行) が危険項目 |
 | `[language-server.<name>]` / `[formatter.<name>]` の `command` / `args` / `env` | **危険** (プロセス起動) | ユーザー層以上。ワークスペース層は **信頼後のみ** (NFR-502) | §12.3 |
@@ -1265,8 +1267,8 @@ v0.5 の M33 の段 2 (§12.6.2) で入れる。受入基準は 01 §5.5 の FR-
 |---|---|
 | LANG-1 | **組込みの定義**: eve-config の静的な表 (Rust の定数の配列) で持ち、起動時に TOML を解析しない (BM-102a と同じ理由)。中身は下の §9.6.1 の表 (1 行 1 言語) が正本で (§9.3 はその要約)、表との一致は eve-core の試験が `eve-docs-tables` で §9.6.1 を読んで確かめる (`config_reserved` と同じ形。eve-config は `eve-docs-tables` に依存しないので eve-core に置く)。どの 2 つの組込みの言語も、同じ `file_names`・`file_types` を持たない (試験で確かめる)。`--dump-languages` (§18.3) は、組込みの表にユーザー層の定義を重ねた結果を `[[language]]` の TOML で出す (`--no-config` なら組込みだけ。ワークスペース層は含めない) |
 | LANG-2 | **読むファイル** (シンボリックリンクの `languages/*.toml` も読む。ユーザー層は所有者の検査を掛けない信頼した層なので、OWN-6 の「辿らない」は掛けない): ユーザー層は `config.toml` (と `--config` のファイル) の `[[language]]` と `<config_dir>/languages/*.toml` (名前の順。1 つのファイルに `[[language]]` を幾つ書いてもよく、ファイル名と言語の名前は結び付けない。拡張子が `.toml` でないもの・ディレクトリは読まない。256 ファイル・1 ファイル 256 KiB まで。超えた分は読まずに 1 件の警告。壊れたシンボリックリンクと読む前に消えたファイルは読み飛ばし、`languages/` 自体を読めない (権限など) ときは 1 件の警告にしてほかの設定を使う (FR-703))。ワークスペース層は `.eve/config.toml` の `[[language]]` だけ (§12.5)。`.eve/languages/` は v0.5 では読まない (ディレクトリがあれば「このバージョンでは未対応」の情報診断を 1 件)。`languages/` は起動時に `io` のジョブ (`ReadLanguages`、02 §9.3) で読み、起動時のパスを開くジョブより前に積む (`io` は直列なので、起動時の文書は定義が届いた後に開き終わる)。`config.reload` でも読み直す (§6)。v0.4 までの §3.2 の「起動時は索引 (拡張子表) のみ、本体は該当言語の文書を開いたとき (遅延)」は採らない (索引を作るにも各ファイルを読んで解析する必要があり、遅延で減る費用が無い)。`--check-config` は `languages/*.toml` と `config.toml` の `[[language]]` も検査し、診断をファイル名・行で出す (FR-704 AC-2) |
-| LANG-3 | **v0.5 で効く項目**: `name` (必須。`[a-z][a-z0-9_+-]*` で 32 バイトまで。`plain` (判定の行き先) と `auto` (`lang.set` の「自動で判定」の値) は定義できない。違反はその定義を使わずに警告)、`display_name` (64 文字まで。無ければ `name`)、`file_types` (拡張子。先頭の `.` は書かない (書くと当たらないので警告する。値は書いたとおり)。`d.ts` のように `.` を含んでよい)・`file_names` (ファイル名そのもの)・`file_globs` (§10.3 の EC-4 の glob)・`first_line` (正規表現。256 バイトまで。`regex` crate で、大きさの上限を付けて組む。組めなければその項目を使わずに警告)。配列はそれぞれ 64 要素・1 要素 256 バイトまで。1 つの層の定義 (`[[language]]`) は合わせて 256 個まで (重ねる順で超えた分は使わず、1 件警告する)。`indent = { unit = "tab" | "space", width = 1..16, tab_width = 1..16 }` (どれも省ける。省いたものは §3.6 の下の段の値。`tab_width` は v0.4 までの §9.1 の書式に無く、M33 で足した (Makefile のタブの表示の幅を言語ごとに変えられるように))。`comment = { line = "<記号>" }` (`line` は 1〜16 バイトで、空白・制御文字を含まない。違反は項目を使わずに警告)。組込みの定義の `indent` は、形式が字下げを決めている言語 (`go`・`make` の `tab`) だけが持つ (§3.6 の LAYER-2) |
-| LANG-4 | **v0.5 で効かない項目**: `comment.block`・`auto_pairs` (FR-210、M34)・`word_separators`・`grammar`・`highlight_query` (v0.6)・`language_servers`・`roots` (v1.L)・`formatter`・`format_on_save` (v0.6 以降)・`max_line_length` (`view.rulers` と一緒) は、書いても起動を妨げず、項目ごとに「このバージョンでは未対応」の情報診断 (§4.3。件数に数えない) にして使わない (FR-704 AC-2)。表に無いキーは未知のキーの警告 (綴りの候補を出す)。値の型・範囲の誤りはその項目だけを使わずに警告し、下の層の値を使う (FR-703) |
+| LANG-3 | **v0.5 で効く項目**: `name` (必須。`[a-z][a-z0-9_+-]*` で 32 バイトまで。`plain` (判定の行き先) と `auto` (`lang.set` の「自動で判定」の値) は定義できない。違反はその定義を使わずに警告)、`display_name` (64 文字まで。無ければ `name`)、`file_types` (拡張子。先頭の `.` は書かない (書くと当たらないので警告する。値は書いたとおり)。`d.ts` のように `.` を含んでよい)・`file_names` (ファイル名そのもの)・`file_globs` (§10.3 の EC-4 の glob)・`first_line` (正規表現。256 バイトまで。`regex` crate で、大きさの上限を付けて組む。組めなければその項目を使わずに警告)。配列はそれぞれ 64 要素・1 要素 256 バイトまで。1 つの層の定義 (`[[language]]`) は合わせて 256 個まで (重ねる順で超えた分は使わず、1 件警告する)。`indent = { unit = "tab" | "space", width = 1..16, tab_width = 1..16 }` (どれも省ける。省いたものは §3.6 の下の段の値。`tab_width` は v0.4 までの §9.1 の書式に無く、M33 で足した (Makefile のタブの表示の幅を言語ごとに変えられるように))。`comment = { line = "<記号>" }` (`line` は 1〜16 バイトで、空白・制御文字を含まない。違反は項目を使わずに警告)。組込みの定義の `indent` は、形式が字下げを決めている言語 (`go`・`make` の `tab`) だけが持つ (§3.6 の LAYER-2)。**v0.5 の M34 で足す項目** (M34 の仕様の PR、2026-11-24。各段の PR から読む、03 §15.9.2): `auto_pairs` (FR-210、段 4。開き字 → 閉じ字の表。キーと値はどちらも 1 つのコードポイントの 1 書記素で、空白・制御文字・不正バイトのエスケープ文字でないもの。16 組まで。`o == c` は引用符。違反はその項目を使わずに警告し、下の層の値を使う。**層を重ねるときは表ごと置き換える** (キーごとに重ねない。`auto_pairs = {}` でその言語の自動閉じを止められる。03 §15.7 の APR-1)。組込みの定義は持たない)、`trim_trailing_whitespace_on_save` / `insert_final_newline_on_save` (FR-216、段 3。bool。§3.6 の文書ごとのキーの (3)(4)(7) の段。組込みの定義は `markdown` と `diff` だけが `trim_trailing_whitespace_on_save = false` を持つ (行末の 2 つの空白が改行の意味を持つ・パッチの文脈の行が空白 1 つになるため。§9.6.1 の表)) |
+| LANG-4 | **v0.5 で効かない項目**: `comment.block`・`auto_pairs` (FR-210。**M34 の段 4 から読む** (LANG-3)。それまではこの行のまま)・`word_separators`・`grammar`・`highlight_query` (v0.6)・`language_servers`・`roots` (v1.L)・`formatter`・`format_on_save` (v0.6 以降)・`max_line_length` (`view.rulers` と一緒) は、書いても起動を妨げず、項目ごとに「このバージョンでは未対応」の情報診断 (§4.3。件数に数えない) にして使わない (FR-704 AC-2)。表に無いキーは未知のキーの警告 (綴りの候補を出す)。値の型・範囲の誤りはその項目だけを使わずに警告し、下の層の値を使う (FR-703) |
 | LANG-5 | **併合**: 同じ `name` の定義は、層の順 (組込み → ユーザー層 (`config.toml` → `--config` → `languages/*.toml` の名前の順) → ワークスペース層) に項目ごとに重ねる (§3.3。配列は置換で、`file_types+ = ["foo"]` は追加)。ユーザー層の `name = "rust"` は組込みの `rust` の `indent` だけを替えられる |
 | LANG-6 | **照らし方**: (a) `file_names` はファイル名全体、`file_types` はファイル名の末尾の `.<型>` (`.` で始まる名前の先頭の `.` は拡張子の区切りに数えない。`.bashrc` は `file_names` で当てる) と比べ、どちらも **ASCII の大文字小文字を区別しない** (Windows の `MAIN.RS` と Linux の `Makefile` / `makefile` を同じに扱う。誤っても字下げとコメントの記号が違うだけ)。複数の `file_types` が当たれば長いほう (`d.ts` が `ts` に勝つ)。(b) `file_globs` は、`/` を含む glob はワークスペースのルートからの相対パス (区切りは `/`。ルートの外のファイルには当てない) に、含まない glob はファイル名に当て、ASCII の大文字小文字を区別しない。(c) `first_line` は、文書の本文の最初の行 (先頭から 1 KiB までの、最初の改行の前) に当てる。(d) §9.2 の各段で、より強い層の定義が勝ち、同じ層で 2 つ以上が当たれば後の定義が勝って警告 (`msg.language.ambiguous`。同じ組について 1 回) を出す |
 | LANG-7 | **判定の時期**: 開く (読込の完了。標準入力の文書は名前が無いので `first_line` だけ)・名前を付けて保存でパスが変わったとき (明示の指定が無ければ判定し直す)・`lang.set` で `auto` を選んだとき。再読込 (`file.reload`・外部変更の再読込) と `config.reload` では判定し直さない (§6 の「新規文書から」)。ただし **ワークスペース層が起動の後に届いたとき** (§12.5 の WSC-3) は、明示の指定の無い文書の言語を判定し直す (ワークスペース層の `[[language]]` と、ルートからの相対パスの `file_globs` が、起動時に開いた文書にも効くように。起動時に開いた文書と後で開いた文書で言語が変わらない)。無題の文書は `plain`。判定は主スレッドで行う (定義の数 × 名前の比較と、最初の 1 KiB への正規表現。組んだ正規表現と glob は定義を読んだときに 1 回だけ作る)。開くジョブの結果が定義 (`ReadLanguages`) より先に届いたとき (LANG-2 の順なので起きない想定) は、定義が届いて `first_line` の正規表現を組み終えたとき (`PrecompileLanguages` の結果が届いたとき) に判定し直す (主スレッドで組まない。M33 の段 5 の再レビュー) |
@@ -1292,34 +1294,34 @@ v0.5 の M33 の段 2 (§12.6.2) で入れる。受入基準は 01 §5.5 の FR-
 
 #### 9.6.1 組込みの言語定義の表 (v0.5 の M33。LANG-1 の正本)
 
-1 行 1 言語。各列の値はバッククォートで囲み、`, ` で区切る (段 2 の試験が `eve-docs-tables` で読む)。`—` は無い。`display_name` は ID の表示の名前 (§9.3 の表の名前)。`first_line` は §9.6 の LANG-3 の正規表現。§9.3 の表はこの表の要約で、食い違ったらこの表を正とする。
+1 行 1 言語。各列の値はバッククォートで囲み、`, ` で区切る (段 2 の試験が `eve-docs-tables` で読む)。`—` は無い。`display_name` は ID の表示の名前 (§9.3 の表の名前)。`first_line` は §9.6 の LANG-3 の正規表現。§9.3 の表はこの表の要約で、食い違ったらこの表を正とする。最後の列 `trim_trailing_whitespace_on_save` は v0.5 の M34 で足した (FR-216。段 3 の PR で組込みの表と試験に足す。それまでは試験が読まない)。
 
-| ID | display_name | file_types | file_names | first_line | comment.line | indent.unit |
-|---|---|---|---|---|---|---|
-| `rust` | `Rust` | `rs` | — | — | `//` | — |
-| `markdown` | `Markdown` | `md`, `markdown` | — | — | — | — |
-| `toml` | `TOML` | `toml` | `Cargo.lock` | — | `#` | — |
-| `json` | `JSON` | `json` | — | — | — | — |
-| `jsonc` | `JSON with Comments` | `jsonc`, `json5` | — | — | `//` | — |
-| `yaml` | `YAML` | `yml`, `yaml` | — | — | `#` | — |
-| `python` | `Python` | `py`, `pyi` | — | `^#!.*\bpython[0-9.]*\b` | `#` | — |
-| `javascript` | `JavaScript` | `js`, `mjs`, `cjs` | — | `^#!.*\bnode\b` | `//` | — |
-| `typescript` | `TypeScript` | `ts`, `mts`, `cts` | — | — | `//` | — |
-| `tsx` | `TSX` | `tsx` | — | — | `//` | — |
-| `jsx` | `JSX` | `jsx` | — | — | `//` | — |
-| `c` | `C` | `c`, `h` | — | — | `//` | — |
-| `cpp` | `C++` | `cc`, `cpp`, `cxx`, `hpp`, `hh`, `hxx` | — | — | `//` | — |
-| `go` | `Go` | `go` | — | — | `//` | `tab` |
-| `bash` | `Bash` | `sh`, `bash` | `.bashrc`, `.bash_profile`, `.profile` | `^#!.*\b(ba)?sh\b` | `#` | — |
-| `zsh` | `Zsh` | `zsh` | `.zshrc`, `.zprofile` | `^#!.*\bzsh\b` | `#` | — |
-| `html` | `HTML` | `html`, `htm` | — | — | — | — |
-| `css` | `CSS` | `css` | — | — | — | — |
-| `diff` | `Diff` | `diff`, `patch` | — | — | — | — |
-| `gitcommit` | `Git Commit` | — | `COMMIT_EDITMSG`, `MERGE_MSG`, `TAG_EDITMSG` | — | `#` | — |
-| `gitrebase` | `Git Rebase` | — | `git-rebase-todo` | — | `#` | — |
-| `ini` | `INI` | `ini`, `cfg` | `.editorconfig`, `.gitconfig` | — | `;` | — |
-| `dockerfile` | `Dockerfile` | `dockerfile` | `Dockerfile`, `Containerfile` | — | `#` | — |
-| `make` | `Makefile` | `mk`, `mak` | `Makefile`, `GNUmakefile` | — | `#` | `tab` |
+| ID | display_name | file_types | file_names | first_line | comment.line | indent.unit | trim_trailing_whitespace_on_save |
+|---|---|---|---|---|---|---|---|
+| `rust` | `Rust` | `rs` | — | — | `//` | — | — |
+| `markdown` | `Markdown` | `md`, `markdown` | — | — | — | — | `false` |
+| `toml` | `TOML` | `toml` | `Cargo.lock` | — | `#` | — | — |
+| `json` | `JSON` | `json` | — | — | — | — | — |
+| `jsonc` | `JSON with Comments` | `jsonc`, `json5` | — | — | `//` | — | — |
+| `yaml` | `YAML` | `yml`, `yaml` | — | — | `#` | — | — |
+| `python` | `Python` | `py`, `pyi` | — | `^#!.*\bpython[0-9.]*\b` | `#` | — | — |
+| `javascript` | `JavaScript` | `js`, `mjs`, `cjs` | — | `^#!.*\bnode\b` | `//` | — | — |
+| `typescript` | `TypeScript` | `ts`, `mts`, `cts` | — | — | `//` | — | — |
+| `tsx` | `TSX` | `tsx` | — | — | `//` | — | — |
+| `jsx` | `JSX` | `jsx` | — | — | `//` | — | — |
+| `c` | `C` | `c`, `h` | — | — | `//` | — | — |
+| `cpp` | `C++` | `cc`, `cpp`, `cxx`, `hpp`, `hh`, `hxx` | — | — | `//` | — | — |
+| `go` | `Go` | `go` | — | — | `//` | `tab` | — |
+| `bash` | `Bash` | `sh`, `bash` | `.bashrc`, `.bash_profile`, `.profile` | `^#!.*\b(ba)?sh\b` | `#` | — | — |
+| `zsh` | `Zsh` | `zsh` | `.zshrc`, `.zprofile` | `^#!.*\bzsh\b` | `#` | — | — |
+| `html` | `HTML` | `html`, `htm` | — | — | — | — | — |
+| `css` | `CSS` | `css` | — | — | — | — | — |
+| `diff` | `Diff` | `diff`, `patch` | — | — | — | — | `false` |
+| `gitcommit` | `Git Commit` | — | `COMMIT_EDITMSG`, `MERGE_MSG`, `TAG_EDITMSG` | — | `#` | — | — |
+| `gitrebase` | `Git Rebase` | — | `git-rebase-todo` | — | `#` | — | — |
+| `ini` | `INI` | `ini`, `cfg` | `.editorconfig`, `.gitconfig` | — | `;` | — | — |
+| `dockerfile` | `Dockerfile` | `dockerfile` | `Dockerfile`, `Containerfile` | — | `#` | — | — |
+| `make` | `Makefile` | `mk`, `mak` | `Makefile`, `GNUmakefile` | — | `#` | `tab` | — |
 
 - `plain` は表に置かない (判定の行き先。定義できない、LANG-3)。`file_names` は ASCII の大文字小文字を区別しない (LANG-6) ので、`makefile` も `make` に当たる。`.editorconfig` は §10 の読み方とは別に、編集するときの言語として `ini` になる。
 - どの 2 つの行も同じ `file_types`・`file_names` を持たない (試験で確かめる)。`h` は `c` にだけ置く (C++ のヘッダを `.h` で書くプロジェクトは、ユーザー層・ワークスペース層の `[[language]]` で替える)。
@@ -1339,8 +1341,8 @@ v0.5 の M33 の段 6 (§12.6.2) で入れる。値の読み方は EditorConfig 
 | `tab_width` | ○ (整数 1〜16。書いていなくて `indent_size` が整数なら、仕様どおり `indent_size` の値を `tab_width` にも使う。`unset` や誤った値で取り消した `tab_width` も書いていないものとする) | `editor.tab_width` |
 | `end_of_line` | ○ (**新規ファイルのみ**。`lf` / `crlf` / `cr`) | `file.default_line_ending`。既存ファイルの改行コードは判定値を維持 (FR-113、P1 原則)。新しいファイルの文書にだけ効く時期は §3.6 の LAYER-4 |
 | `charset` | ○ (**新規ファイルのみ**) | `file.default_encoding`。`utf-8` / `utf-8-bom` (BOM 付き) / `utf-16le` / `utf-16be` を写す。`latin1` (と仕様に無い値) は写像せず「この値には対応していません」の情報診断 (`msg.editorconfig.charset_unmapped`。`file.default_encoding` の許容値が広がればその分だけ増える)。写せない値は `unset` と同じく、それまでに重ねた `.editorconfig` の `charset` を取り消す (遠いファイルの別の文字コードで作らない。M33 の段 6。確定 (推奨案、2026-11-24))。既存ファイルは判定値を維持する (違っても知らせない。v0.4 までの本表の「不一致なら情報メッセージ」は、開くたびに出て煩わしいので採らない) |
-| `trim_trailing_whitespace` | ○ (FR-216 と一緒に入れる。それまでは写像せず「このバージョンでは未対応」の情報診断。v0.5-plan WS-23) | `editor.trim_trailing_whitespace_on_save` |
-| `insert_final_newline` | ○ (同上) | `editor.insert_final_newline_on_save` |
+| `trim_trailing_whitespace` | ○ (FR-216 と一緒に入れる。それまでは写像せず「このバージョンでは未対応」の情報診断。v0.5-plan WS-23。**M34 の段 3 (03 §15.9.2) で写す**: `true` → `true`、`false` → `false`。(5) の段 (§3.6) なので、組込みの `markdown` / `diff` の `false` (3) より強い) | `editor.trim_trailing_whitespace_on_save` |
+| `insert_final_newline` | ○ (同上。**M34 の段 3 で写す**: `true` → `true`、`false` → `false`。`false` は「足さない」で、末尾の改行を **取り除かない** (EditorConfig の仕様の文言の「改行で終わらないようにする」とは意図して違える。頼んでいない差分を出さない。03 §9.3.1 の SVT-3)) | `editor.insert_final_newline_on_save` |
 | `max_line_length` | v0.5 では写像せず「このバージョンでは未対応」の情報診断 (写像先の `view.rulers` (§5.3) が v0.5 で公開・実装されないため。M33 の仕様の PR で決めた) | `view.rulers` に追加 (`off` で無し)。`view.rulers` を入れる版で写す |
 | `root` | ○ (ファイルの先頭 (最初のセクションの前) に書いたときだけ。値は `true` / `false`、大文字小文字を区別しない。ほかの値は `msg.editorconfig.invalid_value` の警告。セクションの中の `root` は読まない (診断なし)) | 探索停止 |
 | その他 (`spelling_language` 等) / ドメイン固有 (`ij_*`, `csharp_*`) | 無視 (診断なし) | — |
@@ -1369,7 +1371,7 @@ v0.5 の M33 の段 6 (§12.6.2) で入れる。値の読み方は EditorConfig 
 | EC-3 | **読み方** (INI): 行ごとに、前後の空白を落とし、空行と `#` / `;` で始まる行は注釈として飛ばす (行の途中の `#` / `;` は値の一部)。`[` で始まり `]` で終わる行はセクション (中身が glob)。`=` を含む行は `キー = 値` (最初の `=` で分け、前後の空白を落とす。キーは小文字にする)。どれでもない行は飛ばす (診断なし)。最初のセクションの前のキーは前置き (`root` だけを読む)。長さの上限: セクションの glob 4,096 バイト・キー 1,024 バイト・値 4,096 バイト (超えた行は飛ばす)。1 ファイル 10,000 行・1,000 セクションまで (超えた分は読まずにログ) |
 | EC-4 | **glob** (仕様の表のとおり): `*` (`/` 以外の 0 文字以上)、`**` (`/` を含む 0 文字以上)、`?` (`/` 以外の 1 文字)、`[name]` / `[!name]` (文字の集合と否定。範囲 `a-z`)、`{s1,s2,s3}` (どれか。入れ子にできる)、`{num1..num2}` (整数の範囲。負を含む。展開せずに、当てる所の数字の並びを整数として読んで比べる。20 桁を超える並びは範囲の外)、`\` (次の 1 文字をそのまま)。`/**/` (と glob の先頭の `**/`) は 0 個以上のディレクトリに当たる (`d/**/z.c` は `d/z.c` にも当たる。M33 の段 2 で、EditorConfig の公式の試験の集まりの `star_star` の場合と同じ振る舞いを確かめた (試験は写さずに自分で書いた))。glob に `/` を含まなければ、どの深さのファイル名にも当てる (`**/` を前に付けたのと同じ)。`/` を含めば、その `.editorconfig` のあるディレクトリからの相対パスに当てる (先頭の `/` は取る)。照らすのは文字 (コードポイント) の単位で、区切りは `/` (Windows も)。**大文字小文字を区別する** (仕様どおり。言語の判定 (§9.6 の LANG-6) とは違う)。資源の上限: `{` の入れ子は 8 段まで (選択肢でない字の `{...}` も数える)、1 つの glob の選択肢の合計は 1,024 個まで (超えたらそのセクションを使わずに警告)。照合の時間は glob の長さ × パスの長さに比例する上限に収める (選択肢を前もって全部に展開しない。`*` の後戻りを無制限にしない。fuzz の性質、09 §3.3)。glob の読み取り (パース) も glob の長さに比例する (閉じない `[` が多くても読み直さない)。0 個以上のディレクトリに当たる `/**/` は、星がちょうど 2 つで、前の `/` が `\` で逃がされていないときだけ (`a/***/b`・`a\/**/b` は `a/b` に当たらない)。**ほかの実装 (EditorConfig の C の実装など) と意図して違う所** (M33 の段 2 で決めた): (1) `/` を含む `[...]` も文字の集合のまま読み (`[a/]` は `a` の 1 文字。字の並び `[a/]` にはしない)、集合はどれも `/` に当たらない。(2) 集合の中の `/` は「`/` を含む glob」に数えない (`[/]a` はファイル名だけに当てるので、どのパスにも当たらない)。(3) `{num1..num2}` は、当てる所の数字の並び全体を 1 つの整数として読む (`{1..3}5` は `25` に当たらない。並びを途中で切って試さない)。どれも、照合の手数を長さに比例させ、書いた人の意図と違って当たる場合を作らないため |
 | EC-5 | **重ね方**: 遠いファイル (上のディレクトリ) から近いファイルの順に、各ファイルの中は書いた順に、当たるセクションのプロパティを重ね、後が勝つ (仕様どおり)。重ねた結果が §3.6 の LAYER-1 の (5) の値になる (由来はファイル・行・セクション) |
-| EC-6 | **診断**: 誤り (EC-2〜EC-4 の警告、§10.1 の誤った値) と、v0.5 で写さないプロパティ (`trim_trailing_whitespace`・`insert_final_newline`・`max_line_length` の情報診断、`charset` の写せない値) は、`config.show_diagnostics` に `.editorconfig` の絶対パスと行で出す。同じファイルの同じ内容について、セッションで 1 回だけ集める (文書を開くたびに同じ診断を積まない)。警告はメッセージ行の要約 (§4.3) にも出す |
+| EC-6 | **診断**: 誤り (EC-2〜EC-4 の警告、§10.1 の誤った値) と、v0.5 で写さないプロパティ (`trim_trailing_whitespace`・`insert_final_newline` (M34 の段 3 で写すまで)・`max_line_length` の情報診断、`charset` の写せない値) は、`config.show_diagnostics` に `.editorconfig` の絶対パスと行で出す。同じファイルの同じ内容について、セッションで 1 回だけ集める (文書を開くたびに同じ診断を積まない)。警告はメッセージ行の要約 (§4.3) にも出す |
 | EC-7 | **ワークスペースとの関係**: `.editorconfig` はワークスペースのルートの外 (上) にあっても読む (`~/.editorconfig` を個人の既定に置く使い方。EditorConfig の仕様どおり、探索はルートで止めない)。`--no-workspace-config` と `--no-config` では読まない (プロジェクトの規約を外して確かめる手段) |
 | EC-8 | **費用**: 1 つの文書で、最大 64 段の `.editorconfig` の有無の確かめと、見つかったファイルの読込と所有者の検査 (§12.1 の OWN-6) を `io` で行う。ローカルの FS では 1 文書 1 ms 未満の見込み (S-25 のハンドルの判定 0.05〜0.4 ms)。ネットワークの共有では段数 × 往復になり、その間も入力は止まらない (届くまでは `.editorconfig` の無い値で表示・編集する、§3.6 の LAYER-3)。ジョブは祖先 1 段ごとに区切って譲り (`JobStep::Continue`、02 §9.3)、`io` のレーンを長く占めない (区切りの間に積んだ保存・読込が先に走る。遅い共有の 64 段の探索で保存を待たせない)。取り消すと続きを積まない。走査と違って `io` に置く (`bg` の横断検索・ワークスペースの走査の後ろで字下げが遅れないように) |
 
@@ -1405,13 +1407,13 @@ verb       := [a-z][a-z0-9_]*
 | `app` (続き) | | `app.save_and_quit` (§18.6), `app.quit_with_error` (§18.4) |
 | `file` | ファイル I/O | `file.open`, `file.new`, `file.save`, `file.save_as`, `file.save_all`, `file.reload`, `file.check_external_changes`, `file.reopen_with_encoding`, `file.set_encoding`, `file.set_line_ending`, `file.toggle_read_only` |
 | `buffer` | Document の一覧・切替・閉じる | `buffer.next`, `buffer.prev`, `buffer.close`, `buffer.list` |
-| `edit` | 文書変更 | `edit.undo`, `edit.redo`, `edit.insert_text`, `edit.newline`, `edit.delete_backward`, `edit.delete_forward`, `edit.delete_word_backward`, `edit.indent`, `edit.outdent`, `edit.duplicate_line`, `edit.delete_line`, `edit.move_line_up`, `edit.toggle_comment`, `edit.paste`, `edit.transform_upper`, `edit.convert_indentation` (v0.5、03 §15), `edit.filter_through` (外部フィルタ、v0.5、§15。予約) |
-| `cursor` | 移動 (選択を解除) | `cursor.move_left`, `cursor.move_right`, `cursor.move_up`, `cursor.move_down`, `cursor.move_word_left`, `cursor.move_word_right`, `cursor.home` (スマートホーム、03 §5.4), `cursor.end`, `cursor.doc_start`, `cursor.doc_end`, `cursor.page_up`, `cursor.page_down`, `cursor.goto_line`, `cursor.goto_bracket` (v0.5、03 §5.7)。**移動の動詞は `move_` 接頭を正とする** (目標へ飛ぶ移動は `goto_<目標>`) (`cursor.left` のような接頭なしの表記は採らない) |
-| `select` | 選択の拡張・操作 (v0.5 から、複数カーソルを足す操作も) | `select.extend_left` 等 (`cursor` の移動ごとの `extend_` 版。一覧は §11.6), `select.all`, `select.extend_to_doc_start`, `select.extend_to_doc_end`, `select.add_next_match` / `select.all_matches` / `select.add_cursor_above` / `select.add_cursor_below` (v0.5、03 §4.5.1), `select.line` (v0.5) |
+| `edit` | 文書変更 | `edit.undo`, `edit.redo`, `edit.insert_text`, `edit.newline`, `edit.delete_backward`, `edit.delete_forward`, `edit.delete_word_backward`, `edit.indent`, `edit.outdent`, `edit.duplicate_line`, `edit.delete_line`, `edit.move_line_up`, `edit.toggle_comment`, `edit.paste`, `edit.transform_upper` / `edit.transform_lower` / `edit.sort_lines_ascending` / `edit.sort_lines_descending` / `edit.trim_trailing_whitespace` (v0.5 の M34、03 §15.8), `edit.convert_indentation` (v0.5、03 §15), `edit.filter_through` (外部フィルタ、v0.5、§15。予約) |
+| `cursor` | 移動 (選択を解除) | `cursor.move_left`, `cursor.move_right`, `cursor.move_up`, `cursor.move_down`, `cursor.move_word_left`, `cursor.move_word_right`, `cursor.home` (スマートホーム、03 §5.4), `cursor.end`, `cursor.doc_start`, `cursor.doc_end`, `cursor.page_up`, `cursor.page_down`, `cursor.goto_line`, `cursor.goto_bracket` (v0.5、03 §5.7), `cursor.jump_back` / `cursor.jump_forward` (v0.5 の M34、03 §5.9)。**移動の動詞は `move_` 接頭を正とする** (目標へ飛ぶ移動は `goto_<目標>`) (`cursor.left` のような接頭なしの表記は採らない) |
+| `select` | 選択の拡張・操作 (v0.5 から、複数カーソルを足す操作も) | `select.extend_left` 等 (`cursor` の移動ごとの `extend_` 版。一覧は §11.6), `select.all`, `select.extend_to_doc_start`, `select.extend_to_doc_end`, `select.add_next_match` / `select.all_matches` / `select.add_cursor_above` / `select.add_cursor_below` (v0.5、03 §4.5.1), `select.line` / `select.expand` / `select.shrink` (v0.5 の M34、03 §5.7), `select.toggle_box` (v0.5 の M34、03 §4.8) |
 | `search` | 検索・置換 | `search.open`, `search.next`, `search.prev`, `search.toggle_case`, `search.toggle_regex`, `search.replace_open`, `search.replace`, `search.replace_all`, `search.workspace` (v0.5) |
 | `view` | View の表示属性 | `view.toggle_wrap`, `view.scroll_down`, `view.toggle_line_numbers` |
 | `pane` | 分割ペイン (1 つの端末画面の中を分割する。04 §11、03 §9.9) の作成・フォーカス移動・大きさ・閉じる (v0.5)。分割の向きは「水平」「垂直」と書かず、新しいペインを置く側で書く | `pane.split_right`, `pane.split_down`, `pane.focus_next`, `pane.close` (一覧は §11.6 の「ペイン」) |
-| `ui` | オーバーレイ・パネル・汎用 UI | `ui.palette_open`, `ui.cancel` (Esc の意味は 04 §7.5), `ui.confirm`, `ui.list_next`, `ui.dialog_choose`, `ui.message_history`, `ui.toggle_hint_bar`, `ui.toggle_mouse`, `ui.redraw`, `ui.probe_char_width` (Could) |
+| `ui` | オーバーレイ・パネル・汎用 UI | `ui.palette_open`, `ui.cancel` (Esc の意味は 04 §7.5), `ui.confirm`, `ui.list_next`, `ui.dialog_choose`, `ui.message_history`, `ui.toggle_hint_bar`, `ui.toggle_mouse`, `ui.redraw`, `ui.probe_char_width` (Could), `ui.history_prev` / `ui.history_next` (入力欄の履歴。v0.5 の M34、03 §12.8) |
 | `config` / `theme` / `keys` | 設定操作 | `config.reload`, `config.open_user`, `config.show`, `config.show_diagnostics`, `config.set`, `theme.select`, `keys.set_preset`, `keys.bind` |
 | `lang` | 言語・構文 | `lang.set`, `lang.redetect`, `lang.format`, `lang.select_node`, `lang.run_command` (外部コマンドの出力をパネルに表示、Could v0.5、§15。予約) |
 | `lsp` | 言語サーバ (v1.L) | `lsp.goto_definition`, `lsp.hover`, `lsp.rename`, `lsp.restart` |
@@ -1484,7 +1486,7 @@ verb       := [a-z][a-z0-9_]*
   - **括弧書きは注記**: どの列でも `(…)` の中は説明で、読む側は中のバッククォートも識別子として読まない (例外は `(alt)` だけ。上の属性)。`—` は「無い」。
   - **頻出操作リスト (FR-606)**: 本節末尾の、書き出しが `**FR-606 の到達性検査**` (太字。この文字列を変えない) の段落の **直後の箇条書き** を、11 §8.5 のパーサがこの固定の書き出しで探して読む (見出しではなく段落の書き出しで位置を決める)。表ではなく箇条書きで、各行は `- <分類>: ` に続けて CommandId をバッククォートで囲んで `, ` で区切る。箇条書きの後の段落 (対象に含めないもの・合格の条件) は読まない。
   - **ヒント列**: `<文脈>:<優先度>` (コロンの前後に空白なし、優先度は 1〜5 の整数) を `, ` で区切って並べる。`-` は出さない。複数 ID の行で一部の ID だけに付くときは、直後に `(<ID の最後の語> のみ)` を付ける (例 `normal:2 (undo のみ)`)。
-- **パレット非表示** (`hidden`): `internal.*` と、オーバーレイ内専用の `ui.confirm` / `ui.list_next` / `ui.list_prev` / `ui.list_page_down` / `ui.list_page_up` / `ui.dialog_choose`。これ以外はすべてパレットに出る (FR-601 AC-1、§11.2 の引数の尋ね方)。
+- **パレット非表示** (`hidden`): `internal.*` と、オーバーレイ内専用の `ui.confirm` / `ui.list_next` / `ui.list_prev` / `ui.list_page_down` / `ui.list_page_up` / `ui.dialog_choose` (v0.5 の M34 で入力欄の履歴の `ui.history_prev` / `ui.history_next` を足す。パレットから選ぶとフォーカスがパレットに移り、効く欄が無い)。これ以外はすべてパレットに出る (FR-601 AC-1、§11.2 の引数の尋ね方)。
 - v1.L 以降の `ai.*` / `lsp.*` は着手時に 06 §13.2 の案 / eve-lsp 文書から本表へ採録し、採録した時点で本表が正本になる (`ai.*` の名前空間と、ローカル LLM 向けの ID `ai.provider_check` / `ai.profile_select` / `ai.runtime_start` / `ai.runtime_stop` / `ai.runtime_restart` / `ai.runtime_log` / `ai.complete_toggle` / `ai.complete_accept` / `ai.complete_dismiss` / `ai.cancel` は v0.1 で **予約** し、他の名前空間で使わない)。
 
 **ファイル・アプリ** (v0.1 の ID 11 個)
@@ -1602,7 +1604,7 @@ verb       := [a-z][a-z0-9_]*
 | `cursor.goto_bracket` (v0.5) | `cmd.cursor.goto_bracket` | Motion | — | — | `read` | `editor` | `mod+]`, `ctrl+k %` (alt) | - |
 
 - **意味**: `select.add_next_match` は次の一致を選択に足す (カーソルだけなら、まず単語を選ぶ)。`select.all_matches` は一致をすべて選ぶ (上限 10,000 を超えるときは何も選ばない)。`select.add_cursor_above` / `select.add_cursor_below` は一番上 / 一番下のカーソルの上 / 下の行にカーソルを足す。足したカーソルが主のカーソルになり、`esc` (`ui.cancel`) で主の 1 つに戻る (03 §4.5.1)。`cursor.goto_bracket` は対応する括弧の直前へ移る (03 §5.7 の BRK-6)。どれも Motion で文書を変えず、読み取り専用の文書でも使える。
-- **キーの選び方** (04 §7.2 / §7.3a): `mod+d` は v0.1 から予約していた VS Code の慣習のキー (`Ctrl+D` は 0x04 で従来の端末でも届く)。すべて選ぶの `mod+shift+l` は VS Code の慣習で、`Ctrl+Shift+英字` なので `[E]` と代替 `ctrl+k e` (**e**very) を持つ (04 §7.3 の規則)。上下にカーソルを足す `ctrl+alt+up` / `ctrl+alt+down` は VS Code (Windows) と Sublime Text の慣習で、Windows Terminal と conhost は横取りしない (04 §7.3a。`alt+shift+up` / `down` (VS Code の Linux の慣習) は Windows Terminal がペインの大きさに使う)。デスクトップ (一部の Linux の作業領域の切り替え・グラフィックのドライバの画面の回転) が取る環境のために代替 `ctrl+k shift+up` / `ctrl+k shift+down` を持つ (`ctrl+k shift+left` / `right` が選択の拡張なのと揃えた。`shift` を早く離すと `ctrl+k up` / `down` (行の移動) になり本文が変わるが、目に見え、`mod+z` で戻せる)。`ctrl+k shift+up` / `ctrl+k shift+down` は、Windows Terminal で `ctrl` を離さずに 2 打目を押すと `ctrl+shift+up` / `down` (端末のスクロール) として横取りされ、チョードは保留のまま何も起きない (ヘルプで「2 打目の前に `Ctrl` を離す」と案内する)。`mod+shift+l` は従来の端末 (拡張キーボードプロトコルの無い Unix の端末・tmux) では `ctrl+l` (0x0C) として届き、M34 で `mod+l` (`select.line`、FR-309) を割り当てると、そこでは行の選択になる (Windows のコンソール API では区別できる。M34 の仕様の PR の点検項目に引き継ぐ)。対応括弧は `mod+]` を第一にする (IME が ON でも届く。従来の端末では 0x1D で届き、04 §6.2 で `ctrl+]` に正規化している。`Ctrl+5` も同じ 0x1D を送る端末があるが、誤って押しても移動だけで本文は変わらない。VS Code の `Ctrl+]` はインデントだが、対の `Ctrl+[` は `esc` と区別できないので evoeditor はこの対を採れない)。代替の `ctrl+k %` は Vim の `%` に倣う (2 打目の文字は IME を OFF にして打つ)。VS Code の `ctrl+shift+\` は、従来の端末で `ctrl+\` (0x1C、右への分割 `pane.split_right`) と区別できないので割り当てない。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない (`ctrl+k` の 2 打目で使っていたのは「ペイン」の表の下の一覧と `\` `|` `-` `[` `]` `=` `q` `tab` `shift+tab`・M31 の `f`)。`mod+]`・`ctrl+k e` / `ctrl+k %` / `ctrl+k shift+up` / `ctrl+k shift+down` / `ctrl+k v` は既定のどのコンテキストでも未使用。
+- **キーの選び方** (04 §7.2 / §7.3a): `mod+d` は v0.1 から予約していた VS Code の慣習のキー (`Ctrl+D` は 0x04 で従来の端末でも届く)。すべて選ぶの `mod+shift+l` は VS Code の慣習で、`Ctrl+Shift+英字` なので `[E]` と代替 `ctrl+k e` (**e**very) を持つ (04 §7.3 の規則)。上下にカーソルを足す `ctrl+alt+up` / `ctrl+alt+down` は VS Code (Windows) と Sublime Text の慣習で、Windows Terminal と conhost は横取りしない (04 §7.3a。`alt+shift+up` / `down` (VS Code の Linux の慣習) は Windows Terminal がペインの大きさに使う)。デスクトップ (一部の Linux の作業領域の切り替え・グラフィックのドライバの画面の回転) が取る環境のために代替 `ctrl+k shift+up` / `ctrl+k shift+down` を持つ (`ctrl+k shift+left` / `right` が選択の拡張なのと揃えた。`shift` を早く離すと `ctrl+k up` / `down` (行の移動) になり本文が変わるが、目に見え、`mod+z` で戻せる)。`ctrl+k shift+up` / `ctrl+k shift+down` は、Windows Terminal で `ctrl` を離さずに 2 打目を押すと `ctrl+shift+up` / `down` (端末のスクロール) として横取りされ、チョードは保留のまま何も起きない (ヘルプで「2 打目の前に `Ctrl` を離す」と案内する)。`mod+shift+l` は従来の端末 (拡張キーボードプロトコルの無い Unix の端末・tmux) では `ctrl+l` (0x0C) として届き、M34 で `mod+l` (`select.line`、FR-309) を割り当てると、そこでは行の選択になる (Windows のコンソール API では区別できる。M34 の仕様の PR で、そうした端末では受け入れ、代替 `ctrl+k e` を案内すると決めた。下の「編集の拡張」の「キーの選び方」)。対応括弧は `mod+]` を第一にする (IME が ON でも届く。従来の端末では 0x1D で届き、04 §6.2 で `ctrl+]` に正規化している。`Ctrl+5` も同じ 0x1D を送る端末があるが、誤って押しても移動だけで本文は変わらない。VS Code の `Ctrl+]` はインデントだが、対の `Ctrl+[` は `esc` と区別できないので evoeditor はこの対を採れない)。代替の `ctrl+k %` は Vim の `%` に倣う (2 打目の文字は IME を OFF にして打つ)。VS Code の `ctrl+shift+\` は、従来の端末で `ctrl+\` (0x1C、右への分割 `pane.split_right`) と区別できないので割り当てない。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない (`ctrl+k` の 2 打目で使っていたのは「ペイン」の表の下の一覧と `\` `|` `-` `[` `]` `=` `q` `tab` `shift+tab`・M31 の `f`)。`mod+]`・`ctrl+k e` / `ctrl+k %` / `ctrl+k shift+up` / `ctrl+k shift+down` / `ctrl+k v` は既定のどのコンテキストでも未使用。
 - **`edit.paste` の代替 `ctrl+k v` (alt)**: M32 の段 3 で、上の「編集」の表の `edit.paste` の行に足した (その表は実装と照らして検査する (09 §11.2) ので、行は実装の PR で直した)。`editor` のコンテキストだけに置く (入力欄の貼り付けは最初の行だけで分配しない、MCUR-11)。Windows Terminal は `mod+v` と `shift+insert` を端末の貼り付けにし、短い貼り付け (16 打鍵未満) は個別のキーとして届くので、複数カーソルへの分配 (03 §4.5.3 の MCUR-10) が効かない。`ctrl+k v` は端末に横取りされず、`edit.paste` (システムのクリップボードの読み取り) を確実に呼ぶ。
 - 足したカーソルを 1 つ戻す・一致を飛ばす (VS Code の `Ctrl+U`・`Ctrl+K Ctrl+D`) と、マウスで足す操作は v0.5 では入れない (03 §4.7.3)。
 
@@ -1617,6 +1619,23 @@ verb       := [a-z][a-z0-9_]*
 - **意味**: `config.show` は設定の値と由来の一覧を開く (§3.5)。`lang.set` はフォーカスの文書の言語を替える (`auto` で判定し直す)。`edit.toggle_comment` は対象の行の行コメントを付ける・外す (03 §15.6。言語に行コメントの記号が無ければ文書を変えずに知らせる)。
 - **キーの選び方** (04 §7.2 / §7.3a): `mod+/` は v0.1 から予約していた VS Code・Sublime Text の慣習のキー。Windows のコンソール API では仮想キーで届き、従来の VT 端末では 0x1F で届いて eve-tui が `ctrl+/` に正規化する (04 §6.2。`Ctrl+7` / `Ctrl+_` も同じバイトを送る端末があるが、誤って押しても本文の変化は目に見え、`mod+z` で戻せる)。日本語の配列でも `/` は Shift なしで打てる。`/` を送らない配列・端末のために代替 `ctrl+k /` を持つ (2 打目の文字は IME を OFF にして打つ。`ctrl+k` の 2 打目で `/` は既定のどのコンテキストでも未使用)。`config.show` と `lang.set` は頻繁に使わないので既定キーを付けない (パレットから使う)。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない。
 
+**編集の拡張** (v0.5 の M34、FR-309 / FR-212 / FR-310 / FR-407 / FR-214。規則の正本は 03 §5.7 の SEL-1〜SEL-7・§4.8・§5.9・§12.8・§15.8。M34 の仕様の PR (2026-11-24) で決めた。ID と既定キーは **PO の確認を待つ推奨案** (03 §15.9.3)。各行は実装の段 (03 §15.9.2) の PR から登録する)
+
+| ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
+|---|---|---|---|---|---|---|---|---|
+| `select.line` (v0.5) | `cmd.select.line` | Motion | — | — | `read` | `editor` | `mod+l` | - |
+| `select.expand` / `select.shrink` (v0.5) | `cmd.select.expand` / `cmd.select.shrink` | Motion | — | — | `read` | `editor` | `alt+u` / `alt+i`, `ctrl+k u` / `ctrl+k i` (alt) | - |
+| `select.toggle_box` (v0.5) | `cmd.select.toggle_box` | Ui | — | — | `ui` | `editor` | `ctrl+k b` (alt) | - |
+| `cursor.jump_back` / `cursor.jump_forward` (v0.5) | `cmd.cursor.jump_back` / `cmd.cursor.jump_forward` | Motion | — | — | `read` | `editor` | `alt+j` / `alt+k`, `ctrl+k j` / `ctrl+k k` (alt) | - |
+| `ui.history_prev` / `ui.history_next` (v0.5) | `cmd.ui.history_prev` / `cmd.ui.history_next` | Ui | — | `(overlay.active == "" && search.active) \|\| overlay.active == "workspace_search"` (検索バーの欄と横断検索の入力欄。03 §12.8 の SHI-6) | `-` | `prompt` | `alt+up` / `alt+down` [横], `ctrl+k up` / `ctrl+k down` (alt) | - |
+| `edit.transform_upper` / `edit.transform_lower` (v0.5) | `cmd.edit.transform_upper` / `cmd.edit.transform_lower` | Edit | — | `!doc.read_only` | `propose` | パレット | — | - |
+| `edit.sort_lines_ascending` / `edit.sort_lines_descending` (v0.5) | `cmd.edit.sort_lines_ascending` / `cmd.edit.sort_lines_descending` | Edit | — | `!doc.read_only` | `propose` | パレット | — | - |
+| `edit.trim_trailing_whitespace` (v0.5) | `cmd.edit.trim_trailing_whitespace` | Edit | — | `!doc.read_only` | `propose` | パレット | — | - |
+
+- **意味**: `select.line` は行の全体を選び、続けると次の行を足す (03 §5.7 の SEL-1)。`select.expand` は選択を単語・括弧の中・括弧を含む・行の中身・行の全体・文書の全体のうち、今の選択を含む次に大きい範囲へ広げ、`select.shrink` は広げる前に戻す (SEL-2 / SEL-3)。`select.toggle_box` は矩形選択のモードを入れる・切る (モードの間は `select.extend_*`・ドラッグ・`Shift` 付きのクリックが矩形を作る。`esc` の層の最後でも切れる。03 §4.8。種類は `view.toggle_wrap` などの切り替えと同じ `Ui`)。`cursor.jump_back` / `cursor.jump_forward` は、行へ移動・検索・ファインダ・文書の切り替えなどで離れた前の位置へ戻る / 進む (03 §5.9)。`ui.history_prev` / `ui.history_next` は検索バー・横断検索の入力欄に、1 つ古い / 新しい検索語 (置換欄では置換の文字列) を入れる (03 §12.8)。`edit.transform_*` は大文字・小文字 (選択が無ければカーソルの単語)、`edit.sort_lines_*` は行の Unicode のコードポイントの順の安定な並べ替え (選択が無ければ文書の全体)、`edit.trim_trailing_whitespace` は行末の空白とタブの除去 (選択が無ければ文書の全体) (03 §15.8)。テキスト変換は頻繁に使わないので既定キーを付けない (パレットから使う)。
+- **キーの選び方** (04 §7.2 / §7.3a。採ったキーと退けたキーの点検の表は 03 §15.9.3): `mod+l` は v0.1 から予約していた行の選択のキー (VS Code の `Ctrl+L`。従来の端末でも 0x0C で届く)。§11.6 の「複数カーソルと対応括弧」の引き継ぎの点 (`mod+shift+l` が従来の端末で `ctrl+l` として届く) は、そうした端末では `Ctrl+Shift+L` が行の選択になることを受け入れ、一致をすべて選ぶには代替 `ctrl+k e` を案内する (ヘルプの「端末の設定」の節、04 §8.6。同じ節で、画面の再描画は `ctrl+k r` (`ui.redraw`) と案内する。`Ctrl+L` を再描画に使う端末の慣習とは違うため。Windows のコンソール API と拡張キーボードプロトコルのある端末では区別できる)。**繰り返して押す操作** (選択の拡張と縮め・ジャンプの戻りと進み) は、1 打の `alt` + 文字と、全端末で届くチョードの代替の両方を持つ。チョードの 2 打目に `shift` を使わない (CapsLock で向きが入れ替わり、`Ctrl` を離し損ねた `Ctrl+Shift+U` は IBus・kitty の Unicode 入力に取られる)。選択の拡張は `alt+u` / `alt+i` と `ctrl+k u` / `ctrl+k i` (VS Code の `alt+shift+right` / `left` は単語の選択の代替 (`select.extend_word_*`) で使用済みで、Windows Terminal も横取りする。Helix の `alt+o` は従来の VT 端末で `ESC O` (SS3) と取り違える)。ジャンプ履歴は `alt+j` / `alt+k` と `ctrl+k j` / `ctrl+k k` (VS Code の Windows の `alt+left` / `alt+right` は単語の移動の代替で使っていて変えない。Vim の `ctrl+o` / `ctrl+i` はファインダと `tab`)。`alt` + 文字は macOS Terminal.app / iTerm2 の既定では届かない (04 §7.3a の注記) ので、そこではチョードを使う。矩形選択のモードは `ctrl+k b` (**b**ox。`search` / `finder` のコンテキストの `ctrl+k b` (単語単位の切替) とはフォーカスの場所が違い、編集面の `ctrl+k l` (行の削除) と検索バーの `ctrl+k l` (選択範囲内) と同じ使い分け)。検索履歴は v0.1 から予約していた `prompt` の `alt+up` / `alt+down` (Windows Terminal が横取りする) と、代替の `ctrl+k up` / `ctrl+k down` (`prompt` のコンテキスト。編集面の `ctrl+k up` / `ctrl+k down` (行の移動) とはフォーカスの場所が違う。検索バーの `up` / `down` は一致の移動に、横断検索の結果の `up` / `down` は候補の移動に使っているので、第一にできない)。チョードの 2 打目の文字は IME を OFF にして打つ (04 §7.4)。どれも既定のキーマップの既存の割当・チョードの先頭・予約と重ならない。
+- **キーの点検**: 既定キーマップのゴールデン (`crates/eve-core/tests/golden/default_keymap.tsv`) と 04 §7.3a の横取り表に照らした点検の表は 03 §15.9.3 の末尾 (本節の表は、どれもカタログの 9 列を持つ表に限るため、ここに置かない)。
+
 **オーバーレイ内** (v0.1 の ID 6 個。すべてパレット非表示)
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
@@ -1628,11 +1647,11 @@ verb       := [a-z][a-z0-9_]*
 
 - `list` では `ctrl+p` = 前、`ctrl+n` = 次。
 - `dialog` (確認ダイアログ) のフォーカスは既定ボタンから始まり、`ui.list_next` / `ui.list_prev` でボタン間を移る。`esc` (`ui.cancel`) は常にデータを変えない側。アクセラレータ (`[S]` / `[D]` 等) は大小を区別せず、全角英字 (`Ｄ`) は半角に畳んで照合し、一致しない文字は捨てる。IME が ON で文字が前編集に入るときは `tab` / 矢印 + `enter` で選ぶ (04 §8.3)。
-- 入力履歴 (FR-407、v0.5): `prompt` の `alt+up` / `alt+down`。
+- 入力履歴 (FR-407、v0.5): `prompt` の `alt+up` / `alt+down` (v0.5 の M34 で、上の「編集の拡張」の表の `ui.history_prev` / `ui.history_next` に割り当てる。代替は `ctrl+k up` / `ctrl+k down`)。
 
 **内部 (パレット非表示、配布ビルドに無い)**: `internal.debug_panic` (パニックの注入。cargo feature `test-hooks` を有効にしたビルドで、かつ `EVE_TEST_HOOK` に `panic_command` を含むときだけ登録する (09 §3.6 の test-hooks の一覧。どちらかが欠ければ登録しない)。01 NFR-302 AC-1、02 §4.1)。キー割当なし。
 
-**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`。M32 で上の「複数カーソルと対応括弧」の表に割り当てる)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`。M33 で上の「設定と言語」の表に割り当てる)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
+**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`。M32 で上の「複数カーソルと対応括弧」の表に割り当てる)、`mod+l` (v0.5 `select.line`。M34 で上の「編集の拡張」の表に割り当てる)、`mod+/` (v0.5 `edit.toggle_comment`。M33 で上の「設定と言語」の表に割り当てる)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
 
 **FR-606 の到達性検査** (09 §3.4、OQ-30) の対象「頻出操作」(v0.1 で確定。OQ-30 の分類「保存・終了・検索・パレット・Undo/Redo・コピー/カット/貼り付け・移動・選択」を ID で列挙したもの。v0.5 の M30 でペインの 3 個を足した。計 40 個):
 
@@ -1713,7 +1732,7 @@ verb       := [a-z][a-z0-9_]*
 | **ユーザー層でも承認を要する** | `ai.providers.*.runtime.command` / `args` / `model_path` (管理モード、§5.12.1): ユーザー層に書かれていても、初回起動時とコマンド行が変わるごとに完全なコマンド行 (解決済み絶対パス・引数・環境変数名) を示して `exec` 承認を得る (06 §3.3.3)。承認の記録は状態ディレクトリ (`trust.toml` と同じ扱い)。禁止引数 (§5.12.1) を含む定義は承認以前に検証エラー | 承認まで起動しない |
 | **禁止** (どの層でも) | `api_key` 平文 (06 §10.1)、シェル文字列としてのコマンド指定、`runtime.command` の相対パス・`PATH` 探索・`.bat` / `.cmd`、`runtime.args` の禁止引数、`runtime.transport` にループバック以外の待受 | エラー |
 
-- **v0.5 の正本は下の「公開キーごとの分類」の表**: 上の表の `editor.*`・`view.*`・`search.*` のようなワイルドカードは、後の版の信頼の仕組みの説明として残すもので、v0.5 では新しいキーを安全にしない (公開キーごとの表に無いキーは、次の箇条のとおり保留)。後の版で公開するキーは、公開する PR で公開キーごとの表に行を足す (例: FR-216 の `editor.trim_trailing_whitespace_on_save` / `insert_final_newline_on_save` は、保存の内容を利用者の操作 (保存) に伴って変えるので、ワークスペース層では準安全とする案。FR-216 の仕様の PR で決める)。
+- **v0.5 の正本は下の「公開キーごとの分類」の表**: 上の表の `editor.*`・`view.*`・`search.*` のようなワイルドカードは、後の版の信頼の仕組みの説明として残すもので、v0.5 では新しいキーを安全にしない (公開キーごとの表に無いキーは、次の箇条のとおり保留)。後の版で公開するキーは、公開する PR で公開キーごとの表に行を足す (例: FR-216 の `editor.trim_trailing_whitespace_on_save` / `insert_final_newline_on_save` は、M33 の時点では「保存の内容を利用者の操作 (保存) に伴って変えるので、ワークスペース層では準安全とする案」だったが、M34 の仕様の PR (2026-11-24) で **安全** にした (同じプロジェクトが `.editorconfig` (安全) で同じことを書けるので、`.eve/config.toml` だけ保留しても守れる範囲が変わらない。変換は利用者の保存に伴い、保存の完了のメッセージで知らせ、Undo で戻る (B3)。下の「公開キーごとの分類」の M34 の行。PO の確認を待つ、03 §15.9.3))。
 - **表に無いキーの既定は「保留 (危険扱い)」** とする: 上の表のどの行にも当たらないキー (後の版で足すキーを含む) は、ワークスペース層に書かれていれば危険の行と同じく信頼まで保留し、信頼ダイアログで列挙する。キーを足すときは、本表のどの行に入れるかを §5 の表と同時に決める (決めるまでは保留のまま)。公開前のキー (§5.13 と各表の P 列。`reserved.rs`) は、どの層でも「このバージョンでは未対応」の情報診断で使わない (ワークスペース層でも同じ。保留ではなく未対応と示す)。
 - 「方向のみ」の行 (安全の「小さくする方向のみ」、準安全の「大きくする方向」等) は、ワークスペース層の値をユーザー層 (無ければ既定値) と比べて判定する。比べられない値 (型の違い等) は保留とする。等しい値は安全とする (下の層と同じ値は何も変えない)。`file.*` の各キーと閾値のキーの安全・準安全への割り振りは上の表のとおり (OQ-202。確定 (推奨案、2026-11-20)、v0.5-plan §1.1。M33 の仕様の PR で `file.swap.max_bytes` の小さくする向きを準安全に移した。確定: PO の決定 2026-11-22 (PR #619)、§12.6.3)。
 - 同じキーでも値で行が分かれるもの (`clipboard.provider`、`file.fsync`、`file.save_strategy`、`file.hardlink_policy`、`file.atomic_save_fallback`、`file.swap.exclude_secret_files`、`search.workspace.follow_symlinks` 等) は、表に書いた値のときだけその行に当たり、他の値は既定値と同じ安全側の値なら安全、そうでなければ保留とする。
@@ -1723,6 +1742,8 @@ verb       := [a-z][a-z0-9_]*
 | キー | 分類 | 当たる基準・理由 |
 |---|---|---|
 | `editor.tab_width`・`editor.indent_unit`・`editor.indent_width`・`editor.backspace_unit` | 安全 | B1〜B6。字下げと削除の単位だけ |
+| `editor.auto_pairs` (M34 の段 4 で公開) | 安全 | B1〜B6。打鍵で入る文字が変わるだけで、本文の変化は見えて Undo で戻る。既存のキーの割当は変えない (B6) |
+| `editor.trim_trailing_whitespace_on_save`・`editor.insert_final_newline_on_save` (M34 の段 3 で公開) | 安全 (どちらの値も) | 利用者の保存に伴う変換で (B3)、消すのは行末の ASCII の空白とタブ、足すのは末尾の改行だけ。行末の空白は既定の表示 (`view.show_whitespace = "minimal"`) では見えないので、変換で本文が変わったら保存の完了のメッセージで知らせ、1 回の Undo で戻り、書けずに終わった連鎖では本文に残ったことを失敗・中止のメッセージで知らせる (03 §9.3.1 の SVT-5 / SVT-8)。未編集の保存・値が決まりきっていない保存には効かず、保存の手順の安全性 (原子的保存・照合・確認) を変えない。`.editorconfig` の同じプロパティ (下の行。安全) と揃える |
 | `editor.undo.total_max_bytes` | 準安全 (どちらの向きも) | B5 (小さく: 履歴を失う)・B6 (大きく: メモリ) |
 | `file.default_encoding`・`file.default_line_ending` | 安全 | 新しいファイルの形だけ。書くのは利用者の保存 |
 | `file.reload_on_external_change` | `ask` と、ユーザー層 (無ければ既定) と同じ値: 安全 / `never` と、下の層より緩い `auto_if_unmodified` (下の層が `ask`): 準安全 | B5 (`never` は監視とフォーカス復帰の確認を止める)・B3 (`auto_if_unmodified` は確認なしで本文を置き換える)。保存前の照合は値に依らず残る |
@@ -1732,6 +1753,7 @@ verb       := [a-z][a-z0-9_]*
 | `file.swap.exclude_secret_files` | `true`: 安全 / `false`: 危険 | B4 (秘密ファイルの本文を状態ディレクトリへ写す) |
 | `file.watch.enabled` (M33 で公開) | 準安全 (等しい値を除く) | B5 (外部の変更に気付くのが遅れる) |
 | `view.wrap`・`view.wrap_indent`・`view.wrap_kinsoku`・`view.show_whitespace` | 安全 | 表示だけ |
+| `view.line_numbers` (M34 の段 1 で公開) | 安全 | 表示だけ (`off` でも本文は見え、行へ移動とステータスの位置は使える) |
 | `view.ambiguous_width` | 効かない | 端末の初期化で 1 回だけ使う |
 | `theme.color_mode` | 効かない | 同上 |
 | `theme.name`・`theme.background` | 準安全 | B6 (見えなくする誤誘導。v0.5 は `.eve/themes/` を読まないが、行を変えない) |
@@ -1745,7 +1767,7 @@ verb       := [a-z][a-z0-9_]*
 | `workspace.exclude` (M33 で公開) | 安全 (ワークスペース層の値は、下の層の配列に **足す** ものとして読む。`workspace.exclude = [...]` と書いても置換せず、`workspace.exclude+` と同じに扱う。`!` の行はワークスペースの中で gitignore の除外を戻すだけで、ユーザー層・既定の除外の行より前に並べるので、それらを戻さない) | 範囲を狭める・ワークスペースの中で戻すだけ (配列の置換 (§3.3) で `node_modules` などの既定の除外を消させない、B6) |
 | `workspace.root_markers` (M33 で公開) | 効かない | ルートは読む前に決まっている |
 | `workspace.safe_directories` (M33 で足す) | 常に無視 + 警告 | 所有者の検査を外す |
-| `[[language]]` の v0.5 の項目 (§9.6 の LANG-3) | 安全 | データだけ (`first_line` の正規表現は大きさの上限と線形時間の照合、B6) |
+| `[[language]]` の v0.5 の項目 (§9.6 の LANG-3。M34 で足す auto_pairs・trim_trailing_whitespace_on_save・insert_final_newline_on_save を含む) | 安全 | データだけ (`first_line` の正規表現は大きさの上限と線形時間の照合、B6。M34 の項目は上の `editor.*` の同じキーの行と同じ理由) |
 | `.eve/keymap.toml` の `[keys.*]` | 安全 (追加だけ。§7.4 の WKEY-2 の割当は使わない) | B6 (既存のキーの意味を変えない) |
 | `.editorconfig` の §10.1 のプロパティ | 安全 | 字下げと新しいファイルの形だけ |
 | 条件付きセクション (§3.4) の中のキー | 中のキーの分類 | 条件は値を選ぶだけ |
