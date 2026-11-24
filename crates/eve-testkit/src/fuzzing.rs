@@ -884,6 +884,52 @@ fn select_expand_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("select_expand ranges {n} ×{k} line ×{lines}")
 }
 
+/// ダブル / トリプルクリック (docs/03 §5.8.2 の CLK-1〜CLK-7、§15.9.1 と docs/09 §3.3 の `fuzz_editor`。v0.5 の M34 の段 6)。
+/// 半分はフォーカスのペインの View に 1〜8 個の Range を置いてから、面の任意のセル (面の外を含む) を 2〜4 回続けて押し、
+/// 半分は最後の押下から単位のドラッグ (面の外へ出て自動スクロールの時間を進めることを含む) をして離す。文書を変えず、押下が
+/// 届いたとき (オーバーレイ・検索バーが無い) は Range が 1 つになることを確かめる。
+fn multi_click_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    use eve_view::{Modifiers, MouseButton, MouseKind};
+    let placed = if b.u8() & 1 == 0 {
+        place_ranges(h, b)
+    } else {
+        None
+    };
+    let before = h.doc_text();
+    let (r, c) = (i32::from(b.u8() % 40) - 4, i32::from(b.u8()));
+    let n = 2 + b.u8() % 3;
+    // 1 回目は時計を多重クリックの間隔より進めてから押す (`Harness::click`)
+    h.click(r, c);
+    for _ in 2..n {
+        h.mouse(MouseKind::Down(MouseButton::Left), Modifiers::NONE, r, c);
+        h.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, r, c);
+    }
+    h.mouse(MouseKind::Down(MouseButton::Left), Modifiers::NONE, r, c);
+    let reached = h.overlay().is_empty() && h.frame().search.is_none();
+    let mut what = format!("multi_click ranges {placed:?} {r},{c} ×{n}");
+    if b.u8() & 1 == 0 {
+        let (r1, c1) = (i32::from(b.u8() % 80) - 20, i32::from(b.u8()));
+        let ms = u64::from(b.u8() % 4) * 50;
+        h.mouse(MouseKind::Drag(MouseButton::Left), Modifiers::NONE, r1, c1);
+        h.advance_ms(ms);
+        h.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, r1, c1);
+        what.push_str(&format!(" drag {r1},{c1} +{ms}ms"));
+    } else {
+        h.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, r, c);
+    }
+    assert_eq!(
+        h.doc_text(),
+        before,
+        "ダブル / トリプルクリックは文書を変えない"
+    );
+    if reached {
+        let len = focused_selection(h).map_or(1, |s| s.len());
+        assert_eq!(len, 1, "どの回数の押下も Range を 1 つにする ({what})");
+    }
+    let _ = h.frame();
+    what
+}
+
 /// 行コメントの切替 (docs/03 §15.6、docs/09 §3.3 の `fuzz_editor`。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
 /// (`#`・`//`・`;`) か `plain` に替え、フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を
 /// 含む) を置いて `edit.toggle_comment` を 1〜2 回実行し、ときどき Undo する。
@@ -1206,7 +1252,7 @@ pub fn editor_sequence(data: &[u8]) {
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
         // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
-        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で、保存時の変換 (M34) は操作 31 で選ぶ
+        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で、保存時の変換 (M34) は操作 31 で、ダブル / トリプルクリック (M34) は操作 32 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1248,7 +1294,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 32 {
+        match b.u8() % 33 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1430,6 +1476,11 @@ pub fn editor_sequence(data: &[u8]) {
             31 => {
                 // 保存時の変換の設定を切り替えて保存 (v0.5 の M34 の段 3。docs/03 §9.3.1)
                 let what = save_transform_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            32 => {
+                // ダブル / トリプルクリック (v0.5 の M34 の段 6。docs/03 §5.8.2)
+                let what = multi_click_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

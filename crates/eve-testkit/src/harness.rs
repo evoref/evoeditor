@@ -428,8 +428,27 @@ impl Harness {
         self.editor.state_mut().set_selection(view, sel);
     }
 
-    /// 左クリック (押して離す)。
+    /// 左クリック (押して離す)。押す前に時計を多重クリックの間隔 (`DOUBLE_CLICK_MS`) より進めるので、続けて呼んでも
+    /// 1 回目の押下として数える (docs/03 §5.8.2 の CLK-1、§15.9.2 の段 6)。
     pub fn click(&mut self, row: i32, col: i32) {
+        self.advance_ms(eve_core::DOUBLE_CLICK_MS.0 + 1);
+        self.press(row, col);
+    }
+
+    /// ダブルクリック (同じ時刻に 2 回押して離す。docs/03 §5.8.2 の CLK-2)。1 回目の前に時計を進めるのは `click` と同じ。
+    pub fn double_click(&mut self, row: i32, col: i32) {
+        self.click(row, col);
+        self.press(row, col);
+    }
+
+    /// トリプルクリック (同じ時刻に 3 回押して離す。docs/03 §5.8.2 の CLK-3)。1 回目の前に時計を進めるのは `click` と同じ。
+    pub fn triple_click(&mut self, row: i32, col: i32) {
+        self.double_click(row, col);
+        self.press(row, col);
+    }
+
+    /// 左の押下と離す (時計は進めない)。
+    fn press(&mut self, row: i32, col: i32) {
         use eve_view::{Modifiers, MouseButton, MouseKind};
         self.mouse(
             MouseKind::Down(MouseButton::Left),

@@ -108,6 +108,7 @@ pub use search::{
     run_search, scan_bytes, scan_range, unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};
+pub use view::mouse::DOUBLE_CLICK_MS;
 pub use workspace::{
     BONUS_BOUNDARY, BONUS_CAMEL, BONUS_CONSECUTIVE, BONUS_FILENAME_PER_CHAR, FINDER_CANCEL_EVERY,
     FINDER_LIST_KEEP, FINDER_RESCORE_INTERVAL, FINDER_TOP, FIRST_CHAR_MULTIPLIER, FinderHit,

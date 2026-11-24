@@ -238,6 +238,13 @@ pub fn unit_at(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteR
     unit_near(text, at, max_window, |s, rel| unit_in(s, rel, at_line_end))
 }
 
+/// 位置 `pos` の直前の書記素を含む §13.3 の単位 (03 §5.8.2 の CLK-2: 位置が表示行の末尾 (`Before` に帰属する折り返し位置)
+/// のとき)。行頭 (直前の書記素が無い) では `None`。窓の読み方は `unit_at` と同じ (`max_window` まで)。
+pub fn unit_before(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteRange> {
+    let at = ByteOff(pos.0.min(text.len_bytes()));
+    unit_near(text, at, max_window, |s, rel| unit_in(s, rel, true))
+}
+
 /// `pos` の行の窓を読み、`pick(窓の文字列, 窓の中の pos)` が選んだ単位を返す (`word_at` / `unit_at` の本体)。単位が窓の端
 /// (行の端でないところ) に届いたら窓を倍にして読み直し、`max_window` で止める。
 fn unit_near(
@@ -599,7 +606,7 @@ mod boundary_tests {
 
 #[cfg(test)]
 mod word_at_tests {
-    use super::{unit_at, word_at};
+    use super::{unit_at, unit_before, word_at};
     use crate::text::Text;
     use crate::types::ByteOff;
 
@@ -738,6 +745,32 @@ mod word_at_tests {
             Some("e\u{301}tude"),
             "結合文字"
         );
+    }
+
+    /// `s` の `|` の位置の直前の書記素の単位 (`unit_before`。03 §5.8.2 の CLK-2 の表示行の末尾)。
+    fn unit_left(marked: &str) -> Option<String> {
+        let p = marked.find('|').expect("| がある");
+        let s = marked.replacen('|', "", 1);
+        let t = Text::from(s.as_str());
+        unit_before(&t, ByteOff(p), 1 << 16).map(|r| s[r.start.0..r.end.0].to_owned())
+    }
+
+    #[test]
+    fn 直前の単位は位置の前の書記素を含む() {
+        assert_eq!(unit_left("foo |bar").as_deref(), Some(" "), "空白の後");
+        assert_eq!(
+            unit_left("foo|bar").as_deref(),
+            Some("foobar"),
+            "単語の途中"
+        );
+        assert_eq!(unit_left("fo|o bar").as_deref(), Some("foo"), "単語の中");
+        assert_eq!(unit_left("foo.|bar").as_deref(), Some("."), "記号");
+        assert_eq!(unit_left("日本|語").as_deref(), Some("日本語"));
+        assert_eq!(unit_left("テキスト|abc").as_deref(), Some("テキスト"));
+        assert_eq!(unit_left("foo|\nbar").as_deref(), Some("foo"), "行末");
+        assert_eq!(unit_left("foo\n|bar"), None, "行頭");
+        assert_eq!(unit_left("|"), None, "空の文書");
+        assert_eq!(unit_left("e\u{301}|x").as_deref(), Some("e\u{301}x"));
     }
 
     #[test]

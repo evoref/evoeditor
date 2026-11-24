@@ -248,6 +248,8 @@ impl Editor {
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。
     pub fn execute(&mut self, inv: CommandInvocation) -> CommandResult {
+        // コマンド (ペインのフォーカスの移動・オーバーレイや検索バーの開閉を含む) は多重クリックを数え直す (03 §5.8.2 の CLK-1)
+        self.state.reset_click_count();
         let mut res = self.registry.execute(&mut self.state, &inv);
         // パレットで選ばれたコマンドは、パレットを閉じた後に実行する
         while let Some((id, args)) = self.state.take_deferred_command() {
@@ -385,6 +387,19 @@ impl Editor {
         // 待っている貼り付けの応答も同じ (貼り付けの内容を読込で捨てない)
         if let InputEvent::ClipboardContent { token, .. } = &ev {
             self.state.watch_cancel_reload_on_paste(*token);
+        }
+        // キー・文字・貼り付け・大きさの変化・端末のフォーカスの変化は多重クリックを数え直す (03 §5.8.2 の CLK-1。マウスは
+        // `on_mouse` / `on_chrome_mouse` で分ける。クリップボードの応答と能力の変化は利用者の操作ではないので数え直さない)
+        if matches!(&ev, InputEvent::Key(k) if k.kind != KeyKind::Release)
+            || matches!(
+                ev,
+                InputEvent::Text(_)
+                    | InputEvent::Paste(_)
+                    | InputEvent::Resize { .. }
+                    | InputEvent::Focus(_)
+            )
+        {
+            self.state.reset_click_count();
         }
         match ev {
             InputEvent::Key(k) => {
