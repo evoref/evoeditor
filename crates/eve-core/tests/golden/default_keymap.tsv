@@ -171,6 +171,11 @@ editor	Ctrl+]	cursor.goto_bracket	Args({})	ContextExpr(None)	false
 editor	Ctrl+K %	cursor.goto_bracket	Args({})	ContextExpr(None)	false
 editor	Ctrl+/	edit.toggle_comment	Args({})	ContextExpr(None)	false
 editor	Ctrl+K /	edit.toggle_comment	Args({})	ContextExpr(None)	false
+editor	Ctrl+L	select.line	Args({})	ContextExpr(None)	false
+editor	Alt+U	select.expand	Args({})	ContextExpr(None)	false
+editor	Alt+I	select.shrink	Args({})	ContextExpr(None)	false
+editor	Ctrl+K U	select.expand	Args({})	ContextExpr(None)	false
+editor	Ctrl+K I	select.shrink	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Left	cursor.home	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Right	cursor.end	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Shift+Left	select.extend_home	Args({})	ContextExpr(None)	false
