@@ -43,7 +43,12 @@ pub const EDIT_NEWLINE: &str = "edit.newline";
 pub const EDIT_OUTDENT: &str = "edit.outdent";
 pub const EDIT_PASTE: &str = "edit.paste";
 pub const EDIT_REDO: &str = "edit.redo";
+pub const EDIT_SORT_LINES_ASCENDING: &str = "edit.sort_lines_ascending";
+pub const EDIT_SORT_LINES_DESCENDING: &str = "edit.sort_lines_descending";
 pub const EDIT_TOGGLE_COMMENT: &str = "edit.toggle_comment";
+pub const EDIT_TRANSFORM_LOWER: &str = "edit.transform_lower";
+pub const EDIT_TRANSFORM_UPPER: &str = "edit.transform_upper";
+pub const EDIT_TRIM_TRAILING_WHITESPACE: &str = "edit.trim_trailing_whitespace";
 pub const EDIT_UNDO: &str = "edit.undo";
 pub const FILE_CHECK_EXTERNAL_CHANGES: &str = "file.check_external_changes";
 pub const FILE_NEW: &str = "file.new";
@@ -118,7 +123,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 113] = [
+pub const ALL: [&str; 118] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -160,7 +165,12 @@ pub const ALL: [&str; 113] = [
     EDIT_OUTDENT,
     EDIT_PASTE,
     EDIT_REDO,
+    EDIT_SORT_LINES_ASCENDING,
+    EDIT_SORT_LINES_DESCENDING,
     EDIT_TOGGLE_COMMENT,
+    EDIT_TRANSFORM_LOWER,
+    EDIT_TRANSFORM_UPPER,
+    EDIT_TRIM_TRAILING_WHITESPACE,
     EDIT_UNDO,
     FILE_CHECK_EXTERNAL_CHANGES,
     FILE_NEW,

@@ -11,6 +11,7 @@ pub(crate) mod edit;
 pub(crate) mod ids;
 pub(crate) mod insert_rule;
 pub(crate) mod line_ops;
+pub(crate) mod transform;
 
 use std::collections::BTreeMap;
 

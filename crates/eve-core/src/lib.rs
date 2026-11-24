@@ -29,6 +29,9 @@ pub use keymap::{KEYMAP_CONTEXTS, resolve_keymap};
 pub use ui_model::palette::hidden as command_hidden;
 mod search;
 pub use document::eol::build_eol_conversion;
+pub use document::transform::{
+    TRANSFORM_SYNC_BYTES, TransformBuilt, TransformError, TransformOp, build_text_transform,
+};
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, ExternalPending,
     HistoryStep, LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, PreservedError, PreservedMap,

@@ -2428,7 +2428,7 @@ title = "キー表記 (表示用)"
 id = "04 §8"
 file = "docs/04-tui-design.md"
 line = 1000
-end = 1325
+end = 1326
 title = "UI 部品"
 
 [[section]]
@@ -2540,189 +2540,189 @@ title = "設定・言語・行コメント・ワークスペース設定・監�
 id = "04 §8.16"
 file = "docs/04-tui-design.md"
 line = 1285
-end = 1325
+end = 1326
 title = "編集の拡張 (Could) の文言の案 (v0.5 の M34)"
 
 [[section]]
 id = "04 §9"
 file = "docs/04-tui-design.md"
-line = 1326
-end = 1349
+line = 1327
+end = 1350
 title = "カーソル・選択の表示"
 
 [[section]]
 id = "04 §10"
 file = "docs/04-tui-design.md"
-line = 1350
-end = 1365
+line = 1351
+end = 1366
 title = "折り返しと横スクロール"
 
 [[section]]
 id = "04 §11"
 file = "docs/04-tui-design.md"
-line = 1366
-end = 1382
+line = 1367
+end = 1383
 title = "タブ・ペイン・分割 (版分け)"
 
 [[section]]
 id = "04 §12"
 file = "docs/04-tui-design.md"
-line = 1383
-end = 1430
+line = 1384
+end = 1431
 title = "テーマ・配色"
 
 [[section]]
 id = "04 §12.1"
 file = "docs/04-tui-design.md"
-line = 1385
-end = 1395
+line = 1386
+end = 1396
 title = "方針"
 
 [[section]]
 id = "04 §12.2"
 file = "docs/04-tui-design.md"
-line = 1396
-end = 1399
+line = 1397
+end = 1400
 title = "色深度の判定"
 
 [[section]]
 id = "04 §12.3"
 file = "docs/04-tui-design.md"
-line = 1400
-end = 1414
+line = 1401
+end = 1415
 title = "縮退アルゴリズム"
 
 [[section]]
 id = "04 §12.4"
 file = "docs/04-tui-design.md"
-line = 1415
-end = 1422
+line = 1416
+end = 1423
 title = "NO_COLOR と無色モード"
 
 [[section]]
 id = "04 §12.5"
 file = "docs/04-tui-design.md"
-line = 1423
-end = 1430
+line = 1424
+end = 1431
 title = "高コントラスト"
 
 [[section]]
 id = "04 §13"
 file = "docs/04-tui-design.md"
-line = 1431
-end = 1446
+line = 1432
+end = 1447
 title = "アクセシビリティ"
 
 [[section]]
 id = "04 §14"
 file = "docs/04-tui-design.md"
-line = 1447
-end = 1534
+line = 1448
+end = 1535
 title = "端末状態の管理 (初期化・復元・リサイズ・シグナル・パニック)"
 
 [[section]]
 id = "04 §14.1"
 file = "docs/04-tui-design.md"
-line = 1449
-end = 1471
+line = 1450
+end = 1472
 title = "初期化手順 (02 §9.5 の 4. を具体化)"
 
 [[section]]
 id = "04 §14.2"
 file = "docs/04-tui-design.md"
-line = 1472
-end = 1484
+line = 1473
+end = 1485
 title = "復元が走る経路"
 
 [[section]]
 id = "04 §14.3"
 file = "docs/04-tui-design.md"
-line = 1485
-end = 1504
+line = 1486
+end = 1505
 title = "復元手順 (順序が重要)"
 
 [[section]]
 id = "04 §14.4"
 file = "docs/04-tui-design.md"
-line = 1505
-end = 1518
+line = 1506
+end = 1519
 title = "パニック時の画面出力"
 
 [[section]]
 id = "04 §14.5"
 file = "docs/04-tui-design.md"
-line = 1519
-end = 1534
+line = 1520
+end = 1535
 title = "リサイズ・サスペンド・その他のシグナル"
 
 [[section]]
 id = "04 §15"
 file = "docs/04-tui-design.md"
-line = 1535
-end = 2331
+line = 1536
+end = 2338
 title = "日本語環境での考慮事項 (まとめ)"
 
 [[section]]
 id = "04 §15.1"
 file = "docs/04-tui-design.md"
-line = 1552
-end = 1621
+line = 1553
+end = 1623
 title = "v0.1 の画面文言 (ja)"
 
 [[section]]
 id = "04 §15.2"
 file = "docs/04-tui-design.md"
-line = 1622
-end = 2331
+line = 1624
+end = 2338
 title = "保存・読込・退避・パニックの文言目録"
 
 [[section]]
 id = "04 §16"
 file = "docs/04-tui-design.md"
-line = 2332
-end = 2370
+line = 2339
+end = 2377
 title = "共通化する部分 / しない部分"
 
 [[section]]
 id = "04 §17"
 file = "docs/04-tui-design.md"
-line = 2371
-end = 2414
+line = 2378
+end = 2421
 title = "版ごとの範囲"
 
 [[section]]
 id = "04 §17.1"
 file = "docs/04-tui-design.md"
-line = 2375
-end = 2400
+line = 2382
+end = 2407
 title = "v0.1 で実装する (最小核)"
 
 [[section]]
 id = "04 §17.2"
 file = "docs/04-tui-design.md"
-line = 2401
-end = 2404
+line = 2408
+end = 2411
 title = "v0.2 (日常の不足を埋める)"
 
 [[section]]
 id = "04 §17.3"
 file = "docs/04-tui-design.md"
-line = 2405
-end = 2408
+line = 2412
+end = 2415
 title = "v0.4"
 
 [[section]]
 id = "04 §17.4"
 file = "docs/04-tui-design.md"
-line = 2409
-end = 2414
+line = 2416
+end = 2421
 title = "v0.5 以降"
 
 [[section]]
 id = "04 §18"
 file = "docs/04-tui-design.md"
-line = 2415
-end = 2431
+line = 2422
+end = 2438
 title = "未決事項"
 
 [[section]]
@@ -8971,91 +8971,91 @@ section = "04 §7.1"
 [[id]]
 id = "C1"
 file = "docs/04-tui-design.md"
-line = 1389
+line = 1390
 section = "04 §12.1"
 
 [[id]]
 id = "C2"
 file = "docs/04-tui-design.md"
-line = 1390
+line = 1391
 section = "04 §12.1"
 
 [[id]]
 id = "C3"
 file = "docs/04-tui-design.md"
-line = 1391
+line = 1392
 section = "04 §12.1"
 
 [[id]]
 id = "C4"
 file = "docs/04-tui-design.md"
-line = 1392
+line = 1393
 section = "04 §12.1"
 
 [[id]]
 id = "OQ-33"
 file = "docs/04-tui-design.md"
-line = 2421
+line = 2428
 section = "04 §18"
 
 [[id]]
 id = "OQ-61"
 file = "docs/04-tui-design.md"
-line = 2422
+line = 2429
 section = "04 §18"
 
 [[id]]
 id = "OQ-64"
 file = "docs/04-tui-design.md"
-line = 2423
+line = 2430
 section = "04 §18"
 
 [[id]]
 id = "OQ-66"
 file = "docs/04-tui-design.md"
-line = 2424
+line = 2431
 section = "04 §18"
 
 [[id]]
 id = "OQ-68"
 file = "docs/04-tui-design.md"
-line = 2425
+line = 2432
 section = "04 §18"
 
 [[id]]
 id = "OQ-180"
 file = "docs/04-tui-design.md"
-line = 2426
+line = 2433
 section = "04 §18"
 
 [[id]]
 id = "OQ-181"
 file = "docs/04-tui-design.md"
-line = 2427
+line = 2434
 section = "04 §18"
 
 [[id]]
 id = "OQ-182"
 file = "docs/04-tui-design.md"
-line = 2428
+line = 2435
 section = "04 §18"
 
 [[id]]
 id = "OQ-183"
 file = "docs/04-tui-design.md"
-line = 2429
+line = 2436
 section = "04 §18"
 
 [[id]]
 id = "OQ-184"
 file = "docs/04-tui-design.md"
-line = 2430
+line = 2437
 section = "04 §18"
 
 [[id]]
 id = "OQ-124"
 file = "docs/04-tui-design.md"
-line = 2431
+line = 2438
 section = "04 §18"
 
 [[id]]

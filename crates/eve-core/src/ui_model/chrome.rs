@@ -49,7 +49,7 @@ fn render(state: &EditorState, key: &str, args: &[(&str, &str)]) -> String {
 }
 
 /// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は列の索引の書記素の数 (03 §14.4)。
-fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
+pub(crate) fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     let t = doc.text();
     let line = t.byte_to_line(head);
     let ls = t.line_to_byte(line);
@@ -202,11 +202,18 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
-    if state.is_saving(view.doc) {
-        let (long, short) = (
-            render(state, keys::STATUS_SAVING_LONG, &[]),
-            render(state, keys::STATUS_SAVING_SHORT, &[]),
-        );
+    // 保存中と同じ位置・同じ種類で、テキスト変換のジョブを待つ間は「変換中」(03 §15.8 の TXT-6。保存中なら保存中を出す)
+    let saving = state.is_saving(view.doc);
+    if saving || state.is_transforming(view.doc) {
+        let (long_key, short_key) = if saving {
+            (keys::STATUS_SAVING_LONG, keys::STATUS_SAVING_SHORT)
+        } else {
+            (
+                keys::STATUS_TRANSFORMING_LONG,
+                keys::STATUS_TRANSFORMING_SHORT,
+            )
+        };
+        let (long, short) = (render(state, long_key, &[]), render(state, short_key, &[]));
         items.push(item(
             StatusKind::Saving,
             &long,

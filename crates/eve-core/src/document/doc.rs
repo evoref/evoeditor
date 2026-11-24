@@ -476,6 +476,11 @@ impl Document {
         &self.history
     }
 
+    /// 今の Undo のノードが `node` なら、その適用の後の選択を `sel` にする (Redo で戻す選択。03 §15.8 の TXT-5)。
+    pub(crate) fn replace_selection_after(&mut self, node: NodeId, sel: Selection) {
+        self.history.replace_selection_after(node, sel);
+    }
+
     /// 保存点から変わっている (未保存の変更がある)。
     pub fn is_dirty(&self) -> bool {
         self.history.is_dirty()

@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 113 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 118 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -50,7 +50,12 @@
 | `edit.outdent` | インデント解除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Shift+Tab` | 出す |
 | `edit.paste` | 貼り付け | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+V`, `Shift+Insert`, `Ctrl+K V`<br>`prompt`: `Ctrl+V`, `Shift+Insert` | 出す |
 | `edit.redo` | やり直し | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Y`, `Ctrl+Shift+Z` [E] | 出す |
+| `edit.sort_lines_ascending` | 行を昇順に並べ替え | Edit | — | `!doc.read_only` | `propose` | — | 出す |
+| `edit.sort_lines_descending` | 行を降順に並べ替え | Edit | — | `!doc.read_only` | `propose` | — | 出す |
 | `edit.toggle_comment` | 行コメントの切替 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+/`, `Ctrl+K /` | 出す |
+| `edit.transform_lower` | 小文字にする | Edit | — | `!doc.read_only` | `propose` | — | 出す |
+| `edit.transform_upper` | 大文字にする | Edit | — | `!doc.read_only` | `propose` | — | 出す |
+| `edit.trim_trailing_whitespace` | 行末の空白を削除 | Edit | — | `!doc.read_only` | `propose` | — | 出す |
 | `edit.undo` | 元に戻す | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Z` | 出す |
 | `file.check_external_changes` | 外部変更の確認 | File | — | `doc.has_path` | `-` | — | 出す |
 | `file.new` | 新規作成 | File | — | — | `-` | `editor`: `Ctrl+N`<br>`search`: `Ctrl+N` | 出す |

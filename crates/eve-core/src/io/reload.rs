@@ -148,6 +148,11 @@ impl EditorState {
             }
         }
         let confirmed_large = pending.contains(crate::document::ReadOnlyReason::LargeFileViewer);
+        // 待っているテキスト変換は取り消す (読み直した本文を変換しない、03 §15.8 の TXT-6)
+        self.cancel_text_transform_for_reload(doc_id);
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         let forced = Some(enc.unwrap_or(doc.format.encoding));
         doc.load_state = crate::document::LoadState::Loading;
         let opts = OpenOptions {

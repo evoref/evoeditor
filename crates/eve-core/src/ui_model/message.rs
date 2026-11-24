@@ -113,8 +113,13 @@ impl EditorState {
     /// 理由があればそれ (衝突の文書 (b)・ISO-2022-JP・バイナリは専用のメッセージ。ほかは `msg.edit.read_only` に
     /// その理由)、無ければ `InvalidBytes` (切替で、確認の後に編集できる)、どちらでもなければ `msg.edit.read_only`。
     pub(crate) fn notify_read_only(&mut self) {
+        self.notify_read_only_of(self.active_document());
+    }
+
+    /// `notify_read_only` の文書を指定する形 (前に出ていない文書に当てる非同期の編集の結果。03 §15.8 の TXT-6)。
+    pub(crate) fn notify_read_only_of(&mut self, doc: Option<eve_view::DocumentId>) {
         use crate::document::ReadOnlyReason as R;
-        let doc = self.active_document().and_then(|d| self.document(d));
+        let doc = doc.and_then(|d| self.document(d));
         // 読込中 (`Loading` / 先行表示の `Partial`) は理由ではなく状態: 読込を待つか取り消すかを案内する専用の
         // メッセージ (03 §9.2.1 の「できない操作」、04 §15.2 の `msg.edit.read_only_loading`)
         if doc.is_some_and(|d| d.load_state != crate::document::LoadState::Ready) {

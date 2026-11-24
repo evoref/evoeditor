@@ -309,6 +309,13 @@ pub enum JobResult {
         /// 変換の `ChangeSet` (投入時の Revision に対するもの)。
         changes: eve_text::ChangeSet,
     },
+    /// テキスト変換の `ChangeSet` ができた (03 §15.8 の TXT-6。v0.5 の M34)。
+    TextTransformDone {
+        /// 変換の `ChangeSet` (投入時の Revision に対するもの。変わる箇所が無ければ空)。
+        changes: eve_text::ChangeSet,
+        /// 並べ替えで、CR と LF がつながるので並べ替えなかったブロックがある (03 §15.8 の TXT-3)。
+        sort_skipped_cr_lf: bool,
+    },
     /// すべて置換の `ChangeSet` ができた (`count` は置換する件数)。
     ReplaceAllDone {
         /// 置換の `ChangeSet` (投入時の Revision に対するもの)。

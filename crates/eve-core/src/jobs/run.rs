@@ -225,6 +225,26 @@ pub fn run_job(
                 },
             }
         }
+        JobKind::TextTransform {
+            snapshot,
+            op,
+            ranges,
+        } => {
+            match crate::document::transform::build_text_transform(snapshot, *op, ranges, cancel) {
+                Ok(built) => JobResult::TextTransformDone {
+                    changes: built.changes,
+                    sort_skipped_cr_lf: built.sort_skipped_cr_lf,
+                },
+                Err(crate::document::transform::TransformError::Cancelled) => JobResult::Failed {
+                    err: JobError::Cancelled,
+                },
+                Err(crate::document::transform::TransformError::OutOfMemory { requested }) => {
+                    JobResult::Failed {
+                        err: JobError::OutOfMemory { requested },
+                    }
+                }
+            }
+        }
         JobKind::ReplaceAll {
             snapshot,
             query,
