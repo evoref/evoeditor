@@ -98,7 +98,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "view.control_char_style",
     "view.cursor_line_highlight",
     "view.emoji_width",
-    "view.line_numbers",
     "view.rulers",
     "view.scroll_margin",
     "view.scroll_margin_horizontal",

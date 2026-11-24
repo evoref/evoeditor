@@ -1,0 +1,17 @@
+  5 row 1
+  4 row 2
+  3 row 3
+  2 row 4
+  1 row 5
+6   row 6
+  1 row 7
+  2 row 8
+  3 row 9
+  4 row 10
+  5 row 11
+  6 row 12
+  7 row 13
+  8 row 14
+status: a.txt | 行 6, 桁 6 UTF-8 LF
+hints: Ctrl+Q 終了 | Ctrl+P コマンド | Ctrl+S 保存 | Ctrl+F 検索 | Ctrl+O 開く | Ctrl+Z 元に戻す | Ctrl+G 行へ移動
+cursor: (9,5)

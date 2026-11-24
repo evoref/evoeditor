@@ -72,6 +72,9 @@ wrap_indent = "same"
 wrap_kinsoku = true
 # 空白の見せ方: "minimal" (全角スペースとタブ文字を記号で示す) または "off" (示さない)。
 show_whitespace = "minimal"
+# 行番号: "absolute" (各行の番号) / "relative" (カーソルのある行は番号を左に寄せて出し、ほかの行はその行からの行数を
+# 右に寄せて出す) / "off" (出さない。折り返した行の続きの印 ↪ も出なくなります)。
+line_numbers = "absolute"
 
 [theme]
 # 色の段階: "auto" (端末から判定) / "truecolor" / "256" / "16" / "none" (装飾のみ)。

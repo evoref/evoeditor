@@ -721,6 +721,7 @@ mod tests {
                 "view.wrap_indent",
                 "view.wrap_kinsoku",
                 "view.show_whitespace",
+                "view.line_numbers",
                 "theme.color_mode",
                 "theme.name",
                 "theme.background",

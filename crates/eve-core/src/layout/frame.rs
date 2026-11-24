@@ -112,7 +112,13 @@ fn wrapped_rows(
                 break;
             }
             let gutter = if r == 0 {
-                gutter_spans(line, gw, line_number_style(marks.styles, line, cursor_line))
+                gutter_spans(
+                    line,
+                    cursor_line,
+                    doc.display.line_numbers,
+                    gw,
+                    line_number_style(marks.styles, line, cursor_line),
+                )
             } else if gw > 0 {
                 vec![Span {
                     text: " ".repeat(gw as usize),
@@ -354,7 +360,13 @@ fn pane_frame(
                 &sel,
                 &here,
                 &marks,
-                gutter_spans(line, gw, line_number_style(&styles, line, cursor_line)),
+                gutter_spans(
+                    line,
+                    cursor_line,
+                    doc.display.line_numbers,
+                    gw,
+                    line_number_style(&styles, line, cursor_line),
+                ),
                 None,
             );
             for (&h, &c) in here.iter().zip(&ro.cursor_cols) {

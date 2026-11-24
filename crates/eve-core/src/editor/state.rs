@@ -484,11 +484,18 @@ impl EditorState {
         let old_wrap = self.config_wrap();
         let theme_changed = self.settings.config.theme_name != config.theme_name
             || self.settings.config.theme_background != config.theme_background;
+        let line_numbers_changed = self.settings.config.line_numbers != config.line_numbers;
+        let old_gutters = line_numbers_changed.then(|| self.gutter_widths());
         self.term.mouse_on = config.mouse;
         self.term.hint_bar_on = config.hint_bar;
         self.settings.config = config;
         // 文書ごとの値 (タブの幅・字下げ) は文書の言語と設定から決め直す (07 §3.6 の LAYER-3)
         self.refresh_all_doc_settings();
+        // `view.line_numbers` は即時に効く (03 §14.7 の LNO-1)。ガターの幅が変わって本文の桁数が変わった View は、折り返しの
+        // 表示行を先頭の論理行の最初に戻し (§14.3.1 の「リサイズ・設定変更」)、カーソルが見えるようにする
+        if let Some(old) = old_gutters {
+            self.refit_gutter_changes(&old);
+        }
         // 折り返しの設定は View ごとの状態で、設定の差し替えで既存の View にも写す。
         // 変わっていなければ写さない (再読込で、`view.toggle_wrap` で切り替えた状態を戻さない)
         let wrap = self.config_wrap();
@@ -506,6 +513,39 @@ impl EditorState {
         // `file.watch.enabled`・`file.reload_on_external_change` は即時に効く (監視を張る・外す、03 §9.5.1 の WATCH-1)
         self.watch_reconfigure();
         self.out.needs_render = true;
+    }
+
+    /// 各 View のガターの幅 (表示するペインの桁数で決まる、03 §14.7 の LNO-4)。
+    fn gutter_widths(&self) -> BTreeMap<ViewId, u16> {
+        self.all_view_sizes()
+            .into_iter()
+            .filter_map(|(id, (cols, _))| {
+                let doc = self.docs.documents.get(&self.docs.views.get(&id)?.doc)?;
+                Some((id, crate::layout::gutter_width(doc, usize::from(cols))))
+            })
+            .collect()
+    }
+
+    /// ガターの幅が `old` から変わった View の `wrap_idx` を 0 に戻し、カーソルが見えるようにする (03 §14.3.1 の
+    /// 「リサイズ・設定変更」)。
+    fn refit_gutter_changes(&mut self, old: &BTreeMap<ViewId, u16>) {
+        let changed: Vec<ViewId> = self
+            .gutter_widths()
+            .into_iter()
+            .filter(|(id, w)| old.get(id) != Some(w))
+            .map(|(id, _)| id)
+            .collect();
+        if changed.is_empty() {
+            return;
+        }
+        self.with_view_sizes(|st| {
+            for v in changed {
+                if let Some(view) = st.docs.views.get_mut(&v) {
+                    view.scroll.wrap_idx = 0;
+                }
+                st.ensure_cursor_visible(v);
+            }
+        });
     }
 
     /// 設定 (`view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku`) から作った折り返しの設定。
@@ -548,6 +588,7 @@ impl EditorState {
             ambiguous_wide: self.settings.config.ambiguous_width == 2,
             show_whitespace: self.settings.config.show_whitespace
                 == eve_config::ShowWhitespace::Minimal,
+            line_numbers: self.settings.config.line_numbers,
         }
     }
 
