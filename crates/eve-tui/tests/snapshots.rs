@@ -1064,3 +1064,101 @@ fn 外部で削除された文書のステータスバー() {
     );
     check("status-external-deleted", &mut h);
 }
+
+// ---- 相対行番号 (v0.5 の M34 の段 1、FR-502。03 §14.7 の LNO-2、§15.9.1 の L4) ----
+
+/// `view.line_numbers` を `mode` にして 12 行の文書を開き、カーソルを 4 行目に置く。
+fn line_numbers_scene(depth: ColorDepth, mode: eve_config::LineNumberMode) -> Harness {
+    let h = Harness::builder()
+        .size(40, 10)
+        .config(eve_config::Config {
+            line_numbers: mode,
+            ..eve_config::Config::default()
+        })
+        .file(
+            "/ln.txt",
+            (1..=12)
+                .map(|i| format!("row {i}\n"))
+                .collect::<String>()
+                .as_bytes(),
+        )
+        .build();
+    let mut h = h.with_caps(Capabilities {
+        color_depth: depth,
+        ..Capabilities::default()
+    });
+    h.open("/ln.txt");
+    h.run_jobs();
+    for _ in 0..3 {
+        h.keys("down");
+    }
+    h
+}
+
+/// スタイルの層の `row` 行目。
+fn style_row(styles: &str, row: u16) -> String {
+    let head = format!("{row}:");
+    styles
+        .lines()
+        .find(|l| l.starts_with(&head))
+        .unwrap_or_else(|| panic!("{row} 行目のスタイル: {styles}"))
+        .to_owned()
+}
+
+// verifies: AC-FR-502-2
+// spec: 03 §14.7 (LNO-2)
+#[test]
+fn 相対行番号は現在の行を左寄せの太字で_ほかの行の差を右寄せで描く() {
+    for (depth, name) in [
+        (ColorDepth::TrueColor, "line-numbers-relative"),
+        (ColorDepth::Mono, "line-numbers-relative-mono"),
+    ] {
+        let mut h = line_numbers_scene(depth, eve_config::LineNumberMode::Relative);
+        let look = Look {
+            depth,
+            ..DEFAULT_LOOK
+        };
+        check_look(name, &mut h, look);
+        let (text, styles) = screen(&mut h, look);
+        let rows: Vec<&str> = text.lines().collect();
+        // 13 行 (最後の空の行を含む) なので 2 桁 + 区切り (ガターの最後のセルに eve-tui が区切りの記号を描く)
+        assert!(rows[3].starts_with("4 │row 4"), "{name}: {:?}", rows[3]);
+        assert!(rows[2].starts_with(" 1│row 3"), "{name}: {:?}", rows[2]);
+        assert!(rows[9].starts_with(" 6│row 10"), "{name}: {:?}", rows[9]);
+        // 現在の行の番号のセル (列 0) だけが太字
+        assert!(
+            style_row(&styles, 3).contains("0-") && style_row(&styles, 3).contains("BOLD"),
+            "{name}: {styles}"
+        );
+        assert!(
+            !styles
+                .lines()
+                .find(|l| l.starts_with("2:"))
+                .is_some_and(|l| l.contains("BOLD")),
+            "{name}: {styles}"
+        );
+    }
+}
+
+// verifies: AC-FR-502-2
+// spec: 03 §14.7 (LNO-1)
+#[test]
+fn 行番号_off_ではガターも折り返しの継続行の印も描かない() {
+    let mut h = Harness::builder()
+        .size(30, 8)
+        .config(eve_config::Config {
+            line_numbers: eve_config::LineNumberMode::Off,
+            wrap: eve_config::WrapMode::Soft,
+            ..eve_config::Config::default()
+        })
+        .file("/off.txt", format!("a\n{}\n", "y".repeat(70)).as_bytes())
+        .build();
+    h.open("/off.txt");
+    h.run_jobs();
+    let (text, _) = screen(&mut h, DEFAULT_LOOK);
+    let rows: Vec<&str> = text.lines().collect();
+    assert_eq!(rows[0], "a");
+    assert!(rows[1].starts_with(&"y".repeat(29)), "{:?}", rows[1]);
+    assert!(rows[2].starts_with('y'), "継続行も左端から: {:?}", rows[2]);
+    assert!(!text.contains('↪'), "{text}");
+}

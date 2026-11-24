@@ -72,7 +72,8 @@ pub enum ApplyError {
     Text(ChangeSetError),
 }
 
-/// 表示の設定 (`editor.tab_width`・`view.ambiguous_width`、07 §5.0)。Editor が文書を持つときに設定から写す。
+/// 表示の設定 (`editor.tab_width`・`view.ambiguous_width`・`view.show_whitespace`・`view.line_numbers`、07 §5.0)。
+/// Editor が文書を持つときに設定から写す。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DisplaySettings {
     /// タブの幅 (表示列。`editor.tab_width`)。
@@ -81,6 +82,8 @@ pub struct DisplaySettings {
     pub ambiguous_wide: bool,
     /// 全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`、03 §13.2)。
     pub show_whitespace: bool,
+    /// ガターの行番号 (`view.line_numbers`、03 §14.7)。`Off` ならガターの幅は 0。
+    pub line_numbers: eve_config::LineNumberMode,
 }
 
 impl Default for DisplaySettings {
@@ -89,6 +92,7 @@ impl Default for DisplaySettings {
             tab_width: 4,
             ambiguous_wide: false,
             show_whitespace: true,
+            line_numbers: eve_config::LineNumberMode::Absolute,
         }
     }
 }

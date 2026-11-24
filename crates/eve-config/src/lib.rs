@@ -38,10 +38,10 @@ pub use chars::{CharClass, forbidden_char};
 pub use condition::{Condition, Conditions, EnvConditions, Frontend, Os};
 pub use config::{
     BackspaceUnit, ColorMode, ConditionProblem, Config, DefaultEncoding, DefaultLineEnding,
-    DiagKind, Diagnostic, ExternalChangePolicy, IndentUnit, KeymapProblem, ListItemProblem, Loaded,
-    Osc52Policy, SearchCase, Severity, ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent,
-    WrapMode, Written, changed_keys, default_display, is_theme_name, load_language_str, load_str,
-    load_str_for, load_str_onto, workspace_policy,
+    DiagKind, Diagnostic, ExternalChangePolicy, IndentUnit, KeymapProblem, LineNumberMode,
+    ListItemProblem, Loaded, Osc52Policy, SearchCase, Severity, ShowWhitespace, TabLineMode,
+    ThemeBackground, WrapIndent, WrapMode, Written, changed_keys, default_display, is_theme_name,
+    load_language_str, load_str, load_str_for, load_str_onto, workspace_policy,
 };
 pub use editorconfig::{
     EDITORCONFIG_FILE, EDITORCONFIG_FILE_MAX_BYTES, EDITORCONFIG_MAX_DEPTH,

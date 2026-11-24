@@ -221,7 +221,7 @@ fn 日本語を含む行でも桁は文字数で数える() {
 #[test]
 fn 公開前のキーとセクションは情報診断で_警告にしない() {
     let l = load_str(
-        "[editor]\nauto_indent = false\n[editor.undo]\nmax_steps = 5\n[search]\nregex_size_limit = 1\n[view]\nline_numbers = \"off\"\n",
+        "[editor]\nauto_indent = false\n[editor.undo]\nmax_steps = 5\n[search]\nregex_size_limit = 1\n[view]\nrulers = [80]\n",
     );
     assert_eq!(l.config, Config::default());
     assert_eq!(l.diagnostics.len(), 4, "{:?}", l.diagnostics);
@@ -239,7 +239,7 @@ fn 公開前のキーとセクションは情報診断で_警告にしない() {
             "editor.undo.max_steps",
             // `search` は公開キー (newline_sugar) を持つセクションなので、中の個々のキーで報告する
             "search.regex_size_limit",
-            "view.line_numbers"
+            "view.rulers"
         ]
     );
 }
@@ -496,6 +496,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "view.wrap_indent",
         "view.wrap_kinsoku",
         "view.show_whitespace",
+        "view.line_numbers",
         "theme.name",
         "theme.background",
         "ui.mouse",
@@ -552,6 +553,7 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("view.wrap_indent", "same"),
         ("view.wrap_kinsoku", "true"),
         ("view.show_whitespace", "minimal"),
+        ("view.line_numbers", "absolute"),
         ("theme.name", "default"),
         ("theme.background", "auto"),
         ("ui.mouse", "true"),
@@ -597,7 +599,7 @@ fn 既定値の表記は全公開キーで決まった値() {
 /// 列挙値の許容値 (診断の「使える値: …」) の並びを固定する。
 #[test]
 fn 列挙値の許容値は決まった並び() {
-    let cases: [(&[&str], &[&str]); 13] = [
+    let cases: [(&[&str], &[&str]); 14] = [
         (IndentUnit::NAMES, &["tab", "space"]),
         (BackspaceUnit::NAMES, &["grapheme", "codepoint"]),
         (SearchCase::NAMES, &["smart", "sensitive", "insensitive"]),
@@ -605,6 +607,7 @@ fn 列挙値の許容値は決まった並び() {
         (ShowWhitespace::NAMES, &["off", "minimal"]),
         (Osc52Policy::NAMES, &["auto", "always", "never"]),
         (TabLineMode::NAMES, &["auto", "always", "never"]),
+        (LineNumberMode::NAMES, &["absolute", "relative", "off"]),
         (
             ExternalChangePolicy::NAMES,
             &["ask", "auto_if_unmodified", "never"],
@@ -1126,6 +1129,32 @@ fn ui_tab_line_は_3_値を読み_不正な値は警告して_auto() {
         only_diag(&l, "ui.tab_line").kind,
         DiagKind::InvalidValue {
             allowed: owned(TabLineMode::NAMES)
+        }
+    );
+}
+
+// verifies: AC-FR-502-2
+#[test]
+fn view_line_numbers_は_3_値を読み_不正な値は警告して_absolute() {
+    assert_eq!(Config::default().line_numbers, LineNumberMode::Absolute);
+    for name in LineNumberMode::NAMES {
+        let l = load_str(&format!("[view]\nline_numbers = \"{name}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{name}: {:?}", l.diagnostics);
+        assert_eq!(l.config.line_numbers.name(), *name);
+    }
+    let l = load_str("view.line_numbers = \"relative\"\n");
+    assert_eq!(l.config.line_numbers, LineNumberMode::Relative);
+    for bad in ["\"Relative\"", "\"number\"", "true", "1"] {
+        let l = load_str(&format!("view.line_numbers = {bad}\n"));
+        assert_eq!(l.config.line_numbers, LineNumberMode::Absolute, "{bad}");
+        let d = only_diag(&l, "view.line_numbers");
+        assert_eq!(d.severity, Severity::Warning, "{bad}");
+    }
+    let l = load_str("view.line_numbers = \"number\"\n");
+    assert_eq!(
+        only_diag(&l, "view.line_numbers").kind,
+        DiagKind::InvalidValue {
+            allowed: owned(LineNumberMode::NAMES)
         }
     );
 }

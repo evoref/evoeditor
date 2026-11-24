@@ -3,6 +3,7 @@
 use eve_text::{LineIdx, TextRead, grapheme_display, grapheme_indices};
 use eve_view::{CellText, CutPolicy, RenderRow, RowSource, Span, Style, StyleMods, ViewId};
 
+use eve_config::LineNumberMode;
 use eve_encoding::unescape_char;
 
 use crate::document::Document;
@@ -140,9 +141,13 @@ impl LineRows {
     }
 }
 
-/// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
+/// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときと、`view.line_numbers = "off"` のときは、
+/// ガターを出さない (0。03 §14.7 の LNO-1)。`relative` でも文書の行数の桁数で決める (LNO-4)。
 /// 先行表示の間は、ファイルの大きさから推定した行数で決める (完了で確定する。03 §9.2.1 の「ステータスバー」)。
 pub(crate) fn gutter_width(doc: &Document, cols: usize) -> u16 {
+    if doc.display.line_numbers == LineNumberMode::Off {
+        return 0;
+    }
     let lines = crate::io::partial_view::estimated_lines(doc);
     let w = lines.to_string().len().max(2) + 1;
     if cols >= w + 2 {
@@ -426,12 +431,25 @@ pub(super) fn build_row(
     }
 }
 
-/// 行番号のガター (`ui.line_number`。主カーソルのある行は `ui.line_number.active` を重ねる)。
-pub(super) fn gutter_spans(line: usize, width: u16, style: Style) -> Vec<Span> {
+/// 行番号のガター (`ui.line_number`。主カーソルのある行は `ui.line_number.active` を重ねる)。`cursor_line` は View の主の
+/// Range の `head` の行 (03 §14.7 の LNO-3)。`relative` では、その行に絶対の行番号を左寄せで、ほかの行にその行からの論理行の
+/// 差を右寄せで出す (LNO-2)。幅は `gutter_width` が決め、寄せ方で変わらない (LNO-4)。
+pub(super) fn gutter_spans(
+    line: usize,
+    cursor_line: usize,
+    mode: LineNumberMode,
+    width: u16,
+    style: Style,
+) -> Vec<Span> {
     if width == 0 {
         return Vec::new();
     }
-    let text = format!("{:>w$} ", line + 1, w = width as usize - 1);
+    let w = width as usize - 1;
+    let text = match mode {
+        LineNumberMode::Relative if line == cursor_line => format!("{:<w$} ", line + 1),
+        LineNumberMode::Relative => format!("{:>w$} ", line.abs_diff(cursor_line)),
+        LineNumberMode::Absolute | LineNumberMode::Off => format!("{:>w$} ", line + 1),
+    };
     vec![Span { text, width, style }]
 }
 

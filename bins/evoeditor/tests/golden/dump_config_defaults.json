@@ -20,6 +20,7 @@
   "view.wrap_indent": "same",
   "view.wrap_kinsoku": true,
   "view.show_whitespace": "minimal",
+  "view.line_numbers": "absolute",
   "theme.color_mode": "auto",
   "theme.name": "default",
   "theme.background": "auto",

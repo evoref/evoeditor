@@ -100,6 +100,7 @@ impl EditorState {
                 tab_width: v.tab_width.value,
                 ambiguous_wide: c.ambiguous_width == 2,
                 show_whitespace: c.show_whitespace == eve_config::ShowWhitespace::Minimal,
+                line_numbers: c.line_numbers,
             },
             IndentSettings {
                 unit: v.indent_unit.value,

@@ -398,6 +398,16 @@ config_enum! {
         Minimal = "minimal",
     }
 
+    /// ガターの行番号 (`view.line_numbers`、03 §14.7 の LNO-1、FR-502)。
+    LineNumberMode {
+        /// 各行の絶対の行番号 (既定)。
+        Absolute = "absolute",
+        /// 主のカーソルの行は絶対の行番号 (左寄せ)、ほかの行は主のカーソルの行からの論理行の差 (右寄せ)。
+        Relative = "relative",
+        /// 行番号を出さない (ガターの幅 0。折り返しの継続行の印も出ない)。
+        Off = "off",
+    }
+
     /// 折り返しの方式 (`view.wrap`、03 §14.3、07 §5.3)。
     WrapMode {
         /// 折り返さない (水平スクロール、既定)。
@@ -690,6 +700,9 @@ config_keys! {
     /// `view.show_whitespace`: 空白の可視化。
     show_whitespace: ShowWhitespace = ShowWhitespace::Minimal,
         "view.show_whitespace", custom(read_show_whitespace),
+        P::Safe;
+    /// `view.line_numbers`: ガターの行番号 (FR-502、03 §14.7)。`config.reload` で即時に効く。
+    line_numbers: LineNumberMode = LineNumberMode::Absolute, "view.line_numbers", choice,
         P::Safe;
     /// `theme.name`: テーマ。
     theme_name: String = "default".to_owned(), "theme.name", custom(read_theme_name),
