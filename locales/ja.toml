@@ -150,9 +150,29 @@ title = "貼り付け"
 description = "元に戻した編集をやり直します。"
 title = "やり直し"
 
+[cmd.edit.sort_lines_ascending]
+description = "選んだ行 (無ければ文書の全体) を Unicode のコードポイントの順に並べ替えます"
+title = "行を昇順に並べ替え"
+
+[cmd.edit.sort_lines_descending]
+description = "選んだ行 (無ければ文書の全体) を Unicode のコードポイントの逆の順に並べ替えます"
+title = "行を降順に並べ替え"
+
 [cmd.edit.toggle_comment]
 description = "対象の行に行コメントを付ける・外す"
 title = "行コメントの切替"
+
+[cmd.edit.transform_lower]
+description = "選択 (無ければカーソルの単語) を小文字にします"
+title = "小文字にする"
+
+[cmd.edit.transform_upper]
+description = "選択 (無ければカーソルの単語) を大文字にします"
+title = "大文字にする"
+
+[cmd.edit.trim_trailing_whitespace]
+description = "選んだ行 (無ければ文書の全体) の行末の空白とタブを消します"
+title = "行末の空白を削除"
 
 [cmd.edit.undo]
 description = "直前の編集を取り消します。"
@@ -637,6 +657,10 @@ discarded = "スワップを破棄しました"
 encoding_mismatch = "{path} の未保存の内容は {encoding} で書かれています。文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で {encoding} を選ぶと、復旧を提案します"
 recovered = "復旧内容を適用しました。保存するまで {path} は変わりません"
 
+[info.transform]
+sort_skipped_cr_lf = "並べ替えると改行 (CR と LF) がつながる範囲は並べ替えませんでした"
+unchanged = "変更する箇所はありませんでした"
+
 [info.undo]
 history_trimmed = "メモリの上限のため、古い元に戻す履歴を破棄しました"
 
@@ -1099,6 +1123,18 @@ text = "復旧の提案の後で文書が変わったので、適用しません
 [msg.swap.remove_failed]
 hint = "手で削除してください"
 text = "スワップを削除できませんでした: {dir}"
+
+[msg.transform.failed]
+hint = "対象を小さく選んで実行してください"
+text = "変換できませんでした (メモリが足りない可能性があります)"
+
+[msg.transform.stale]
+hint = "入力を止めてから、もう一度実行してください"
+text = "編集が続いたため、変換しませんでした"
+
+[msg.transform.target_gone]
+hint = "範囲を選び直して、もう一度実行してください"
+text = "変換する範囲が編集で無くなったため、変換しませんでした"
 
 [msg.workspace.not_reread]
 hint = "ほかのプログラムが開いていて、変えた安全な場所で読み直せませんでした。閉じてから設定を読み直してください"
@@ -1618,6 +1654,10 @@ short = "RO"
 [status.saving]
 long = "[保存中]"
 short = "保存中"
+
+[status.transforming]
+long = "[変換中]"
+short = "変換中"
 
 [status.external_change]
 long = "[外部で変更]"

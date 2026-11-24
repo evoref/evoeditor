@@ -279,6 +279,16 @@ pub enum JobKind {
         /// 変換後の改行コード。
         eol: eve_text::LineEnding,
     },
+    /// テキスト変換の `ChangeSet` を作る (03 §15.8 の TXT-6。v0.5 の M34)。対象の合計が `TRANSFORM_SYNC_BYTES` (1 MiB) を
+    /// 超えるときだけ使う。`snapshot` は投入時の Revision のもの。
+    TextTransform {
+        /// 変換の対象の本文。
+        snapshot: Snapshot,
+        /// 変換の種類。
+        op: crate::TransformOp,
+        /// 対象の範囲 (大文字・小文字は Range と単語、行の変換は行のブロックの範囲。文書の全体なら `[0, len)` の 1 つ)。
+        ranges: Vec<eve_text::ByteRange>,
+    },
     /// すべて置換の `ChangeSet` を作る (03 §12.5)。`snapshot` は投入時の Revision のもの。
     ReplaceAll {
         /// 置換の対象の本文。

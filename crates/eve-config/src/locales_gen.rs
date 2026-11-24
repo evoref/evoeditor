@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1076 件)。
+/// `locales/en.toml` の文言 (1096 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -93,8 +93,18 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.edit.paste.title"), B("Paste")),
     (B("cmd.edit.redo.description"), B("Redo the edit that was undone.")),
     (B("cmd.edit.redo.title"), B("Redo")),
+    (B("cmd.edit.sort_lines_ascending.description"), B("Sort the selected lines (or the whole document) by Unicode code point")),
+    (B("cmd.edit.sort_lines_ascending.title"), B("Sort Lines Ascending")),
+    (B("cmd.edit.sort_lines_descending.description"), B("Sort the selected lines (or the whole document) in reverse Unicode code point order")),
+    (B("cmd.edit.sort_lines_descending.title"), B("Sort Lines Descending")),
     (B("cmd.edit.toggle_comment.description"), B("Add or remove line comments on the target lines")),
     (B("cmd.edit.toggle_comment.title"), B("Toggle Line Comment")),
+    (B("cmd.edit.transform_lower.description"), B("Make the selection (or the word at the cursor) lowercase")),
+    (B("cmd.edit.transform_lower.title"), B("Transform to Lowercase")),
+    (B("cmd.edit.transform_upper.description"), B("Make the selection (or the word at the cursor) uppercase")),
+    (B("cmd.edit.transform_upper.title"), B("Transform to Uppercase")),
+    (B("cmd.edit.trim_trailing_whitespace.description"), B("Remove spaces and tabs at the end of the selected lines (or the whole document)")),
+    (B("cmd.edit.trim_trailing_whitespace.title"), B("Trim Trailing Whitespace")),
     (B("cmd.edit.undo.description"), B("Undo the last edit.")),
     (B("cmd.edit.undo.title"), B("Undo")),
     (B("cmd.file.check_external_changes.description"), B("Check whether another program changed the file.")),
@@ -347,6 +357,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.swap.discarded"), B("Discarded the swap")),
     (B("info.swap.encoding_mismatch"), B("The unsaved content of {path} was written as {encoding}. Reopen with {encoding} ({key:file.reopen_with_encoding}) to be offered the recovery")),
     (B("info.swap.recovered"), B("Applied the recovered content. {path} does not change until you save")),
+    (B("info.transform.sort_skipped_cr_lf"), B("Lines where sorting would join a CR and an LF into one line break were not sorted")),
+    (B("info.transform.unchanged"), B("Nothing to change")),
     (B("info.undo.history_trimmed"), B("Dropped old undo history to stay within the memory limit")),
     (B("info.watch.unavailable"), B("Cannot watch the folder of {path} ({reason}). External changes are checked when you return to the editor and when you save")),
     (B("msg.cli.directory.hint"), B("Start with the path of a file")),
@@ -657,6 +669,12 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.swap.too_large.text"), B("{path} is larger than {mib} MiB, so it is not covered by autosave of unsaved content (swap)")),
     (B("msg.swap.unreadable.hint"), B("Open it with a newer version of evoeditor. This folder was not moved or deleted")),
     (B("msg.swap.unreadable.text"), B("There are {count} swaps that cannot be read: {dir}")),
+    (B("msg.transform.failed.hint"), B("Select a smaller range and try again")),
+    (B("msg.transform.failed.text"), B("Could not transform the text (possibly out of memory)")),
+    (B("msg.transform.stale.hint"), B("Stop typing and run it again")),
+    (B("msg.transform.stale.text"), B("The document kept changing, so nothing was transformed")),
+    (B("msg.transform.target_gone.hint"), B("Select the range again and run it again")),
+    (B("msg.transform.target_gone.text"), B("The range to transform was removed by editing, so nothing was transformed")),
     (B("msg.workspace.item_ignored.hint"), B("Workspace settings cannot change this item")),
     (B("msg.workspace.item_ignored.text"), B("{item} cannot be set in workspace settings (always ignored)")),
     (B("msg.workspace.item_no_effect.hint"), B("Write it in your user settings")),
@@ -714,6 +732,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("status.saving.long"), B("[Saving]")),
     (B("status.saving.short"), B("Saving")),
     (B("status.selection"), B("({count} chars selected)")),
+    (B("status.transforming.long"), B("[Transforming]")),
+    (B("status.transforming.short"), B("Transforming")),
     (B("status.untitled"), B("Untitled-{n}")),
     (B("ui.buffer_list.external_changed"), B("changed on disk")),
     (B("ui.buffer_list.external_deleted"), B("deleted on disk")),
@@ -1089,7 +1109,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1076 件)。
+/// `locales/ja.toml` の文言 (1096 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1174,8 +1194,18 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.edit.paste.title"), B("貼り付け")),
     (B("cmd.edit.redo.description"), B("元に戻した編集をやり直します。")),
     (B("cmd.edit.redo.title"), B("やり直し")),
+    (B("cmd.edit.sort_lines_ascending.description"), B("選んだ行 (無ければ文書の全体) を Unicode のコードポイントの順に並べ替えます")),
+    (B("cmd.edit.sort_lines_ascending.title"), B("行を昇順に並べ替え")),
+    (B("cmd.edit.sort_lines_descending.description"), B("選んだ行 (無ければ文書の全体) を Unicode のコードポイントの逆の順に並べ替えます")),
+    (B("cmd.edit.sort_lines_descending.title"), B("行を降順に並べ替え")),
     (B("cmd.edit.toggle_comment.description"), B("対象の行に行コメントを付ける・外す")),
     (B("cmd.edit.toggle_comment.title"), B("行コメントの切替")),
+    (B("cmd.edit.transform_lower.description"), B("選択 (無ければカーソルの単語) を小文字にします")),
+    (B("cmd.edit.transform_lower.title"), B("小文字にする")),
+    (B("cmd.edit.transform_upper.description"), B("選択 (無ければカーソルの単語) を大文字にします")),
+    (B("cmd.edit.transform_upper.title"), B("大文字にする")),
+    (B("cmd.edit.trim_trailing_whitespace.description"), B("選んだ行 (無ければ文書の全体) の行末の空白とタブを消します")),
+    (B("cmd.edit.trim_trailing_whitespace.title"), B("行末の空白を削除")),
     (B("cmd.edit.undo.description"), B("直前の編集を取り消します。")),
     (B("cmd.edit.undo.title"), B("元に戻す")),
     (B("cmd.file.check_external_changes.description"), B("ファイルが他のプログラムで変更されていないかを確かめます。")),
@@ -1428,6 +1458,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.swap.discarded"), B("スワップを破棄しました")),
     (B("info.swap.encoding_mismatch"), B("{path} の未保存の内容は {encoding} で書かれています。文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で {encoding} を選ぶと、復旧を提案します")),
     (B("info.swap.recovered"), B("復旧内容を適用しました。保存するまで {path} は変わりません")),
+    (B("info.transform.sort_skipped_cr_lf"), B("並べ替えると改行 (CR と LF) がつながる範囲は並べ替えませんでした")),
+    (B("info.transform.unchanged"), B("変更する箇所はありませんでした")),
     (B("info.undo.history_trimmed"), B("メモリの上限のため、古い元に戻す履歴を破棄しました")),
     (B("info.watch.unavailable"), B("{path} のフォルダは監視できません ({reason})。外部の変更は、ほかのアプリから戻ったときと保存のときに確かめます")),
     (B("msg.cli.directory.hint"), B("ファイルのパスを指定して起動してください")),
@@ -1738,6 +1770,12 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.swap.too_large.text"), B("{path} は {mib} MiB を超えるので、未保存の内容の自動保存 (スワップ) の対象外です")),
     (B("msg.swap.unreadable.hint"), B("新しい版の evoeditor で開いてください。このフォルダは移動も削除もしていません")),
     (B("msg.swap.unreadable.text"), B("読めないスワップが {count} 件あります: {dir}")),
+    (B("msg.transform.failed.hint"), B("対象を小さく選んで実行してください")),
+    (B("msg.transform.failed.text"), B("変換できませんでした (メモリが足りない可能性があります)")),
+    (B("msg.transform.stale.hint"), B("入力を止めてから、もう一度実行してください")),
+    (B("msg.transform.stale.text"), B("編集が続いたため、変換しませんでした")),
+    (B("msg.transform.target_gone.hint"), B("範囲を選び直して、もう一度実行してください")),
+    (B("msg.transform.target_gone.text"), B("変換する範囲が編集で無くなったため、変換しませんでした")),
     (B("msg.workspace.item_ignored.hint"), B("ワークスペース設定は、この項目を変えられません")),
     (B("msg.workspace.item_ignored.text"), B("{item} はワークスペース設定に書けません (常に無視します)")),
     (B("msg.workspace.item_no_effect.hint"), B("ユーザーの設定に書いてください")),
@@ -1795,6 +1833,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("status.saving.long"), B("[保存中]")),
     (B("status.saving.short"), B("保存中")),
     (B("status.selection"), B("({count} 文字選択)")),
+    (B("status.transforming.long"), B("[変換中]")),
+    (B("status.transforming.short"), B("変換中")),
     (B("status.untitled"), B("無題-{n}")),
     (B("ui.buffer_list.external_changed"), B("外部で変更")),
     (B("ui.buffer_list.external_deleted"), B("外部で削除")),

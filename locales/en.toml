@@ -152,9 +152,29 @@ title = "Paste"
 description = "Redo the edit that was undone."
 title = "Redo"
 
+[cmd.edit.sort_lines_ascending]
+description = "Sort the selected lines (or the whole document) by Unicode code point"
+title = "Sort Lines Ascending"
+
+[cmd.edit.sort_lines_descending]
+description = "Sort the selected lines (or the whole document) in reverse Unicode code point order"
+title = "Sort Lines Descending"
+
 [cmd.edit.toggle_comment]
 description = "Add or remove line comments on the target lines"
 title = "Toggle Line Comment"
+
+[cmd.edit.transform_lower]
+description = "Make the selection (or the word at the cursor) lowercase"
+title = "Transform to Lowercase"
+
+[cmd.edit.transform_upper]
+description = "Make the selection (or the word at the cursor) uppercase"
+title = "Transform to Uppercase"
+
+[cmd.edit.trim_trailing_whitespace]
+description = "Remove spaces and tabs at the end of the selected lines (or the whole document)"
+title = "Trim Trailing Whitespace"
 
 [cmd.edit.undo]
 description = "Undo the last edit."
@@ -639,6 +659,10 @@ discarded = "Discarded the swap"
 encoding_mismatch = "The unsaved content of {path} was written as {encoding}. Reopen with {encoding} ({key:file.reopen_with_encoding}) to be offered the recovery"
 recovered = "Applied the recovered content. {path} does not change until you save"
 
+[info.transform]
+sort_skipped_cr_lf = "Lines where sorting would join a CR and an LF into one line break were not sorted"
+unchanged = "Nothing to change"
+
 [info.undo]
 history_trimmed = "Dropped old undo history to stay within the memory limit"
 
@@ -1101,6 +1125,18 @@ text = "The document changed after the recovery offer, so it was not applied"
 [msg.swap.remove_failed]
 hint = "Delete it by hand"
 text = "Could not delete the swap: {dir}"
+
+[msg.transform.failed]
+hint = "Select a smaller range and try again"
+text = "Could not transform the text (possibly out of memory)"
+
+[msg.transform.stale]
+hint = "Stop typing and run it again"
+text = "The document kept changing, so nothing was transformed"
+
+[msg.transform.target_gone]
+hint = "Select the range again and run it again"
+text = "The range to transform was removed by editing, so nothing was transformed"
 
 [msg.workspace.not_reread]
 hint = "Another program has it open, so it could not be reread with the changed safe directories. Close it and reload the settings"
@@ -1620,6 +1656,10 @@ short = "RO"
 [status.saving]
 long = "[Saving]"
 short = "Saving"
+
+[status.transforming]
+long = "[Transforming]"
+short = "Transforming"
 
 [status.external_change]
 long = "[Changed on disk]"

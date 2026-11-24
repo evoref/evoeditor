@@ -27,7 +27,7 @@ use crate::ui_model::keys;
 use crate::view::motion;
 
 /// カーソルの位置の単語を探す窓の上限 (バイト。長大行で行の全体を読まない。単語移動の窓と同じ、03 §11.5.1)。
-const WORD_WINDOW: usize = 64 * 1024;
+pub(crate) const WORD_WINDOW: usize = 64 * 1024;
 
 /// `select.all_matches` をメインスレッドで探す文書の大きさの上限 (バイト、03 §4.5.1 の MCUR-3)。超えれば `bg` の全件の
 /// 検索のジョブで探す。

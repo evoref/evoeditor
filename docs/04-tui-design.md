@@ -1087,7 +1087,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 | 左 3 | 5 | 読み取り専用 | `[RO]` | `RO` | `status.read_only.long` / `.short` |
 | 左 4 | 5 | 機能縮退 (**v0.5**: ペインの縮退表示 (03 §9.9 の PANE-4 (b)。端末が狭くフォーカスのペインだけを出している間) も同じ種類の項目で出し、長い行の項目があればその後ろに並べる。文言は `status.degraded.panes.long` / `.short` (`{index}` / `{total}`)「[ペイン 2/3 だけ表示]」/「2/3」。長い行を含む文書は折り返さない。NFR-106、03 §14.4。v0.1 は読み取り専用で先頭 64 KiB だけを表示し、v0.2〜v0.3 は閾値を超える行を char 近似モード (書記素 = char) で表示して「近似表示」と出した。**v0.4 の M25** で書記素の単位にしたので、「折り返さない」意味に改めた。長大行の折り返しを v0.4 に入れたら、この項目を出さない。03 §14.4) | `[長い行: 折り返しなし]` | `折返なし` | `status.degraded.long_line.long` / `.short` |
 | 左 5 | 5 | 読込中 (**v0.4 の M25**: 先行表示 (`Partial`、03 §9.2.1) の間は同じ項目 (`StatusKind::Loading`) を `status.partial.long` / `.short` (`{percent}`) 「[先頭のみ {percent}%]」/「{percent}%」で出す (表示中の文書が先行表示のときだけ。表示していない文書の読込の進捗は `status.loading.*`)。標準入力 (03 §9.2.2) は大きさが分からないので、`status.loading_bytes.long` / `.short` (`{size}`) 「[読込中 {size}]」/「{size}」で読んだ量を出す (どちらを出すかは文書の種類で決める。`Progress.total = 0` は空のファイルでも出るので使わない)。標準入力の読込は、その文書を表示しているときだけ出す (ほかの文書の表示中に出る読込中の項目は、ファイルの `file.open` の読込だけ)。標準入力のキーは M25 の (9) で足した) | `[読込中 45%]` | `45%` | `status.loading.long` / `.short`、`status.partial.long` / `.short` |
-| 左 6 | 5 | 保存中 (保存ジョブの完了を待つ間だけ出る。03 §9.7 の `Saving`。v0.5 の M34 から、同じ位置・同じ種類 (`StatusKind::Saving`) で、テキスト変換のジョブ (03 §15.8 の TXT-6) を待つ間は `status.transforming.long` / `.short` の「[変換中]」/「変換中」を出す) | `[保存中]` | `保存中` | `status.saving.long` / `.short` |
+| 左 6 | 5 | 保存中 (保存ジョブの完了を待つ間だけ出る。03 §9.7 の `Saving`。v0.5 の M34 から、同じ位置・同じ種類 (`StatusKind::Saving`) で、テキスト変換のジョブ (03 §15.8 の TXT-6) を待つ間は `status.transforming.long` / `.short` の「[変換中]」/「変換中」を出す。保存中と変換中が重なれば保存中を出す) | `[保存中]` | `保存中` | `status.saving.long` / `.short` |
 | 左 7 | 5 | 外部変更 (外部での変更の確認で「無視」を選んでから、保存・再読込・開き直しまで。03 §9.5 の「状態」。v0.3 の M18。**v0.5 の M33**: 監視で外部の変更・削除が分かった文書 (`external_pending`、03 §9.5.1 の WATCH-9) にも出す。削除は `status.external_deleted.long` / `.short` の「[外部で削除]」/「外部削除」) | `[外部で変更]` | `外部変更` | `status.external_change.long` / `.short` |
 | 左 8 | 5 | チョード保留 (保留中だけ出る) | `Ctrl+K …` (`Capabilities.ascii_only` が真のときは `Ctrl+K ...` にする案、§3.7、提案、OQ-214) | — | — (キー表記) |
 | 右 1 | 2 | 選択情報 | `(12 文字選択)` | — (省略) | `status.selection` |
@@ -1304,6 +1304,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `cmd.edit.sort_lines_descending.title` / `.description` | 同上 (段 2) | 行を降順に並べ替え / 選んだ行 (無ければ文書の全体) を Unicode のコードポイントの逆の順に並べ替えます | Sort Lines Descending / Sort the selected lines (or the whole document) in reverse Unicode code point order |
 | `cmd.edit.trim_trailing_whitespace.title` / `.description` | 同上 (段 2) | 行末の空白を削除 / 選んだ行 (無ければ文書の全体) の行末の空白とタブを消します | Trim Trailing Whitespace / Remove spaces and tabs at the end of the selected lines (or the whole document) |
 | `info.transform.unchanged` | テキスト変換で本文が変わらなかった (03 §15.8 の TXT-5) | 変更する箇所はありませんでした | Nothing to change |
+| `info.transform.sort_skipped_cr_lf` | 並べ替えで、CR と LF がつながるので並べ替えなかったブロックがあった (03 §15.8 の TXT-3。ほかのブロックを並べ替えたときも出し、どのブロックも変わらなければ `info.transform.unchanged` の代わりに出す) | 並べ替えると改行 (CR と LF) がつながる範囲は並べ替えませんでした | Lines where sorting would join a CR and an LF into one line break were not sorted |
 | `msg.transform.stale` | 大きい対象の変換の間に編集が続き、作り直しも古かった (TXT-6) | 編集が続いたため、変換しませんでした / 入力を止めてから、もう一度実行してください | The document kept changing, so nothing was transformed / Stop typing and run it again |
 | `msg.transform.failed` | 変換のジョブが失敗した (メモリの確保の失敗など。TXT-6) | 変換できませんでした (メモリが足りない可能性があります) / 対象を小さく選んで実行してください | Could not transform the text (possibly out of memory) / Select a smaller range and try again |
 | `msg.transform.target_gone` | 大きい対象の変換の間の編集で、対象の範囲が消えた (TXT-6) | 変換する範囲が編集で無くなったため、変換しませんでした / 範囲を選び直して、もう一度実行してください | The range to transform was removed by editing, so nothing was transformed / Select the range again and run it again |
@@ -1565,6 +1566,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー (v0.4。標準入力の読込中、§8.7) | `status.loading_bytes.long` / `.short` | [読込中 {size}] / {size} | 16、8 (`12.3 MiB`) |
 | ステータスバー | `status.read_only.long` / `.short` | [RO] / RO | 4、2 |
 | ステータスバー | `status.saving.long` / `.short` | [保存中] / 保存中 | 8、6 |
+| ステータスバー (v0.5。テキスト変換のジョブを待つ間、§8.7 の左 6、03 §15.8 の TXT-6) | `status.transforming.long` / `.short` | [変換中] / 変換中 | 8、6 |
 | ステータスバー | `status.degraded.long_line.long` / `.short` | [長い行: 折り返しなし] / 折返なし | 22、8 |
 | ステータスバー (v0.5。ペインの縮退表示の間、§8.7、03 §9.9 の PANE-4 (b)) | `status.degraded.panes.long` / `.short` | [ペイン {index}/{total} だけ表示] / {index}/{total} | 22、3 (1 桁) |
 | ステータスバー (v0.3) | `status.external_change.long` / `.short` | [外部で変更] / 外部変更 | 12、8 |
@@ -2010,6 +2012,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.bracket.too_far` (v0.5) | `cursor.goto_bracket` で、主のカーソルの括弧の対応が探す範囲 (`{limit}` = `1 MiB`) の中に無い (BRK-4) | 対応する括弧は {limit} の範囲に見つかりませんでした |
 | `info.comment.unsupported` (v0.5) | `edit.toggle_comment` で、文書の言語に行コメントの記号 (`comment.line`) が無い (`plain` を含む。03 §15.6 の CMT-6。`{language}` は言語の `display_name`、言語が決まっていなければ `plain`。文書は変えない) | {language} には行コメントの記号がありません |
 | `info.comment.no_lines` (v0.5) | `edit.toggle_comment` で、対象の行が空行と空白だけの行だけ (CMT-1。文書は変えない) | コメントにする行がありません |
+| `info.transform.unchanged` (v0.5) | テキスト変換 (`edit.transform_*`・`edit.sort_lines_*`・`edit.trim_trailing_whitespace`) で本文が変わらなかった (03 §15.8 の TXT-5。Transaction を作らない) | 変更する箇所はありませんでした |
+| `info.transform.sort_skipped_cr_lf` (v0.5) | 並べ替えで、並べ替えると空になる行で単独の CR と単独の LF が隣り合うので、並べ替えなかったブロックがあった (03 §15.8 の TXT-3) | 並べ替えると改行 (CR と LF) がつながる範囲は並べ替えませんでした |
+| `msg.transform.stale` (v0.5) | 1 MiB を超える対象の変換のジョブを待つ間に編集が続き、作り直しも古かった (03 §15.8 の TXT-6。文書は変わらない) | 編集が続いたため、変換しませんでした / 入力を止めてから、もう一度実行してください |
+| `msg.transform.target_gone` (v0.5) | 変換のジョブを待つ間の編集で、対象の範囲が 1 つでも消えた (Range の長さが 0 になった・ブロックの行が残らない・区切りだけが残った)、または待つ間にその文書の再読込を始めた (TXT-6。文書は変わらない) | 変換する範囲が編集で無くなったため、変換しませんでした / 範囲を選び直して、もう一度実行してください |
+| `msg.transform.failed` (v0.5) | 変換のジョブが失敗した (一時の領域の確保の失敗・パニック。TXT-6。文書は変わらない) | 変換できませんでした (メモリが足りない可能性があります) / 対象を小さく選んで実行してください |
 | `info.external.changed` (v0.5) | ファイル監視で、文書のファイルが外部で変更されたと分かった (03 §9.5.1 の WATCH-6。`{name}` はファイル名。照合の回の結果がまとまって 2 つ以上の文書に印が付いたら下の `changed_many`。まとめ方は WATCH-6: 回が終わったとき、ほかの文書の待ち合わせの期限が 100 ms の内なら保留して次の回と合わせる) | {name} が外部で変更されました |
 | `info.external.deleted` (v0.5) | ファイル監視で、文書のファイルが外部で削除されたと分かった (WATCH-6) | {name} が外部で削除されました |
 | `info.external.changed_many` (v0.5) | 照合の回 (保留して合わせた回を含む。WATCH-6) で 2 つ以上の文書に外部の変更・削除の印が付いた (出すときの今の印で数える。`{count}` は印の付いた文書の数) | {count} 個のファイルが外部で変更・削除されました (バッファ一覧に印があります) |

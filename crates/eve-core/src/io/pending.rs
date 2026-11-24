@@ -96,6 +96,8 @@ pub(crate) enum Pending {
     SelectAllMatches(Box<crate::view::multi_cursor::AllMatchesAsk>),
     /// 改行コードの変換の `ChangeSet` を作るジョブ (03 §8.4)。
     ConvertEol(crate::document::eol_cmd::EolConvert),
+    /// テキスト変換の `ChangeSet` を作るジョブ (03 §15.8 の TXT-6)。対象の範囲は文書の変更のたびに写像する。
+    TextTransform(Box<crate::document::transform_cmd::TransformAsk>),
     /// すべて置換の `ChangeSet` を作るジョブ (03 §12.5)。
     ReplaceAll {
         doc: DocumentId,
@@ -185,6 +187,7 @@ impl Pending {
             | Pending::ReplaceAll { doc, .. }
             | Pending::ReplaceOne { doc, .. } => Some(*doc),
             Pending::ConvertEol(c) => Some(c.doc),
+            Pending::TextTransform(ask) => Some(ask.doc),
             Pending::SelectAllMatches(ask) => Some(ask.doc()),
             Pending::ReplaceUnmappable { ask, .. } => Some(ask.doc),
             _ => None,
@@ -242,6 +245,7 @@ impl EditorState {
                     *d == doc
                 }
                 Pending::ConvertEol(c) => c.doc == doc,
+                Pending::TextTransform(ask) => ask.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. }
                 | Pending::ConfigReload { .. }
@@ -394,6 +398,7 @@ impl EditorState {
             // 途中経過の束と終わりは上で振り分けた
             Pending::SelectAllMatches(_) => {}
             Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
+            Pending::TextTransform(ask) => self.finish_text_transform(*ask, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
             Pending::ReplaceOne {
                 doc,

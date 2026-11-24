@@ -372,6 +372,14 @@ pub(crate) const UI_WATCH_REASON_NETWORK: &str = "ui.watch.reason.network";
 pub(crate) const UI_WATCH_REASON_NOT_FOUND: &str = "ui.watch.reason.not_found";
 pub(crate) const UI_WATCH_REASON_FAILED: &str = "ui.watch.reason.failed";
 pub(crate) const UI_WATCH_REASON_UNSUPPORTED_FS: &str = "ui.watch.reason.unsupported_fs";
+// テキスト変換 (v0.5 の M34、03 §15.8・04 §8.16)
+pub(crate) const INFO_TRANSFORM_SORT_SKIPPED_CR_LF: &str = "info.transform.sort_skipped_cr_lf";
+pub(crate) const INFO_TRANSFORM_UNCHANGED: &str = "info.transform.unchanged";
+pub(crate) const MSG_TRANSFORM_FAILED: &str = "msg.transform.failed";
+pub(crate) const MSG_TRANSFORM_STALE: &str = "msg.transform.stale";
+pub(crate) const MSG_TRANSFORM_TARGET_GONE: &str = "msg.transform.target_gone";
+pub(crate) const STATUS_TRANSFORMING_LONG: &str = "status.transforming.long";
+pub(crate) const STATUS_TRANSFORMING_SHORT: &str = "status.transforming.short";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
@@ -724,6 +732,13 @@ const ALL: &[&str] = &[
     UI_WATCH_REASON_NOT_FOUND,
     UI_WATCH_REASON_FAILED,
     UI_WATCH_REASON_UNSUPPORTED_FS,
+    INFO_TRANSFORM_SORT_SKIPPED_CR_LF,
+    INFO_TRANSFORM_UNCHANGED,
+    MSG_TRANSFORM_FAILED,
+    MSG_TRANSFORM_STALE,
+    MSG_TRANSFORM_TARGET_GONE,
+    STATUS_TRANSFORMING_LONG,
+    STATUS_TRANSFORMING_SHORT,
 ];
 
 #[cfg(test)]

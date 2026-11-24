@@ -864,6 +864,58 @@ fn toggle_comment_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("toggle_comment lang {lang:?} ranges {n} ×{times} undo {undo}")
 }
 
+/// テキスト変換のコマンド (docs/03 §15.8、docs/09 §3.3 の `fuzz_editor`。v0.5 の M34 の段 2)。フォーカスのペインの View に
+/// 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を含む) を置いて 5 つのうちの 1 つを実行し、半分は続けて文字を
+/// 入れ、ジョブを 1 周だけ走らせ、ときどき Undo する。fuzz の文書は 1 MiB に届かず、この crate は eve-core の `test-hooks`
+/// (上限を小さくする口) を使わない (workspace の build で配布物と同じ eve-core に feature が混ざるため) ので、ジョブの経路は
+/// 通らない (ジョブの経路は eve-core の `tests/text_transform.rs` で確かめる)。
+fn text_transform_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const IDS: [&str; 5] = [
+        "edit.transform_upper",
+        "edit.transform_lower",
+        "edit.sort_lines_ascending",
+        "edit.sort_lines_descending",
+        "edit.trim_trailing_whitespace",
+    ];
+    let st = h.editor.state();
+    let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
+        return "text_transform (View なし)".to_owned();
+    };
+    let len = st
+        .view(view)
+        .and_then(|v| st.document(v.doc))
+        .map_or(0, eve_core::Document::len_bytes);
+    let n = 1 + usize::from(b.u8() % 8);
+    // 文書の長さ + 2 までを選ぶ (外の位置は正規化で末尾に収まる)
+    let at = |b: &mut Bytes<'_>| {
+        eve_text::ByteOff(usize::from(u16::from_le_bytes([b.u8(), b.u8()])) % (len + 3))
+    };
+    let ranges: Vec<eve_text::Range> = (0..n)
+        .map(|_| {
+            let anchor = at(b);
+            let head = if b.u8() & 1 == 0 { anchor } else { at(b) };
+            eve_text::Range::new(anchor, head)
+        })
+        .collect();
+    let primary = usize::from(b.u8()) % n;
+    if let Some(sel) = eve_text::Selection::new(ranges, primary) {
+        h.set_selection(sel);
+    }
+    let id = IDS[usize::from(b.u8()) % IDS.len()];
+    h.cmd(id);
+    let typed = b.u8() & 1 == 0;
+    if typed {
+        h.text("x ");
+    }
+    h.run_jobs_once();
+    let undo = b.u8().is_multiple_of(4);
+    if undo {
+        h.cmd("edit.undo");
+    }
+    let _ = h.frame();
+    format!("text_transform {id} ranges {n} typed {typed} undo {undo}")
+}
+
 /// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
 /// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
 /// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは `cmd` の一覧の外の操作 26 で選ぶ)。
@@ -1083,7 +1135,7 @@ pub fn editor_sequence(data: &[u8]) {
         .map(|s| s.id.as_str().to_owned())
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
         // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
-        // 行コメントの切替 (M33) は操作 28 で選ぶ
+        // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1095,6 +1147,11 @@ pub fn editor_sequence(data: &[u8]) {
                         | "select.add_cursor_below"
                         | "cursor.goto_bracket"
                         | "edit.toggle_comment"
+                        | "edit.transform_upper"
+                        | "edit.transform_lower"
+                        | "edit.sort_lines_ascending"
+                        | "edit.sort_lines_descending"
+                        | "edit.trim_trailing_whitespace"
                 )
         })
         .collect();
@@ -1117,7 +1174,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 29 {
+        match b.u8() % 30 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1284,6 +1341,11 @@ pub fn editor_sequence(data: &[u8]) {
             28 => {
                 // 行コメントの切替 (v0.5 の M33 の段 3。docs/03 §15.6)
                 let what = toggle_comment_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            29 => {
+                // テキスト変換 (v0.5 の M34 の段 2。docs/03 §15.8)
+                let what = text_transform_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

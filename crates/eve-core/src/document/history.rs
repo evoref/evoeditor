@@ -540,6 +540,24 @@ impl UndoHistory {
         }
     }
 
+    /// 今のノードが `node` なら、その `selection_after` を `sel` にする (適用の後の本文で選択を決める変換。03 §15.8 の
+    /// TXT-5)。会計値も数え直す。今のノードが違えば何もしない。
+    pub(crate) fn replace_selection_after(&mut self, node: NodeId, sel: Selection) {
+        let Some(n) = self.undo.back_mut().filter(|n| n.id == node) else {
+            return;
+        };
+        n.selection_after = Some(sel);
+        let old = n.bytes;
+        n.bytes = cost_of(
+            &n.redo,
+            &n.undo,
+            [&n.selection_before, &n.selection_after],
+            preserved_cost(n.format.as_ref(), &n.preserved),
+        );
+        let new = n.bytes;
+        self.total = self.total - old + new;
+    }
+
     fn push_node(
         &mut self,
         tx: &Transaction,

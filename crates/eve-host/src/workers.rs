@@ -203,7 +203,8 @@ impl ThreadJobSpawner {
 
     /// `bg` ワーカーに回すジョブか。検索 (全件・単発)・すべて置換・1 件置換の確かめ (02 §9.3。v0.4 の M24 で単発の検索とすべて置換を `io` から
     /// 移した: 行をまたぐ検索語では単発の検索が文書の先頭から走ることがあり、`io` に置くと保存・読込を待たせる、03 §12.3.1)、
-    /// ワークスペースの走査・ファインダの照合・横断検索・候補の一覧の解放 (v0.5 の M31。保存・読込は `io` に残し、走査の影響を受けない、03 §12.7.7)。
+    /// ワークスペースの走査・ファインダの照合・横断検索・候補の一覧の解放 (v0.5 の M31。保存・読込は `io` に残し、走査の影響を受けない、03 §12.7.7)、
+    /// テキスト変換の `ChangeSet` の構築 (v0.5 の M34。03 §15.8 の TXT-6)。
     fn is_bg(kind: &JobKind) -> bool {
         matches!(
             kind,
@@ -211,6 +212,7 @@ impl ThreadJobSpawner {
                 | JobKind::FindNext { .. }
                 | JobKind::ReplaceAll { .. }
                 | JobKind::ReplaceOne { .. }
+                | JobKind::TextTransform { .. }
                 | JobKind::WorkspaceScan { .. }
                 | JobKind::FinderMatch { .. }
                 | JobKind::WorkspaceSearch { .. }

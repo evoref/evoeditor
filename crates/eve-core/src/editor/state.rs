@@ -231,6 +231,9 @@ pub(crate) struct IoState {
     pub(crate) log_path: Option<String>,
     /// OS のロケール由来の文字コードのヒント。
     pub(crate) system_encoding: Option<crate::Encoding>,
+    /// テキスト変換をメインスレッドで作る対象の大きさの上限 (既定は `TRANSFORM_SYNC_BYTES`。試験だけが feature
+    /// `test-hooks` の口で小さくする、03 §15.9.1 の (e))。
+    pub(crate) transform_sync_bytes: usize,
 }
 
 /// 検索: 文書内検索の状態・検索バー・再検索の予約・全件の検索のジョブ (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -426,6 +429,7 @@ impl EditorState {
                 held_save_as: std::collections::VecDeque::new(),
                 cancelled_loads: BTreeSet::new(),
                 system_encoding: None,
+                transform_sync_bytes: crate::document::transform::TRANSFORM_SYNC_BYTES,
                 log_path: None,
                 config_sources: None,
                 theme_name_at: None,
@@ -1118,6 +1122,8 @@ impl EditorState {
         self.enforce_total_undo_budget();
         // 選択範囲内の検索の範囲も、同じ変更で写像する (03 §12.5)
         self.map_search_scope(doc, &a.changes);
+        // 待っているテキスト変換の対象の範囲も写像する (作り直しに使う、03 §15.8 の TXT-6)
+        self.map_text_transform(doc, &a.changes);
         // 行をまたぐ検索の再開の位置も、編集した行より前のものだけを残す (03 §12.3.1)
         self.map_search_marks(doc, &a.changes, a.old_revision);
         let Some(document) = self.docs.documents.get(&doc) else {

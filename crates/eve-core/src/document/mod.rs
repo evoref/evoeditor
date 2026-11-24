@@ -1,7 +1,7 @@
 //! 文書 (docs/03 §6〜§7)。`Document`・`Transaction`・Undo 履歴。文書テキストを変える唯一の経路 (`Document::apply`) も
 //! ここに閉じる (docs/02 §5.2。`eve_text::Text::apply` は clippy の `disallowed_methods` で、このモジュール以外から呼べない)。
 //!
-//! spec: 02 §5.1, 02 §5.2, 03 §6, 03 §7, 03 §8.4 (改行コードの変換), 03 §8.7.1 (保持方式の記録の表)
+//! spec: 02 §5.1, 02 §5.2, 03 §6, 03 §7, 03 §8.4 (改行コードの変換), 03 §8.7.1 (保持方式の記録の表), 03 §15.8 (テキスト変換)
 
 // 文書テキストを変える経路はこのモジュールに閉じる (clippy.toml の `eve_text::Text::apply`)
 #![allow(clippy::disallowed_methods)]
@@ -14,6 +14,9 @@ mod history;
 // 保持方式の記録の表 (03 §8.7.1、M22 の 4・5)
 pub(crate) mod preserved;
 mod transaction;
+// テキスト変換 (03 §15.8、v0.5 の M34)
+pub(crate) mod transform;
+pub(crate) mod transform_cmd;
 
 pub use doc::{
     Applied, AppliedTx, ApplyError, DisplaySettings, DocLanguage, Document, ExternalPending,
