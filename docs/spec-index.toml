@@ -286,7 +286,7 @@ title = "保守性・品質・開発基盤 (NFR-7xx)"
 id = "01 §4"
 file = "docs/01-requirements.md"
 line = 392
-end = 583
+end = 593
 title = "MVP (v0.1) の範囲と段階リリース"
 
 [[section]]
@@ -328,49 +328,49 @@ title = "データ損失防止機構の段階化"
 id = "01 §4.6"
 file = "docs/01-requirements.md"
 line = 498
-end = 583
+end = 593
 title = "既知の制約 (リリースノートとヘルプに明記する)"
 
 [[section]]
 id = "01 §5"
 file = "docs/01-requirements.md"
-line = 584
-end = 760
+line = 594
+end = 770
 title = "受入基準 (Must 要件)"
 
 [[section]]
 id = "01 §5.1"
 file = "docs/01-requirements.md"
-line = 588
-end = 609
+line = 598
+end = 619
 title = "v0.1: ファイル・文書管理"
 
 [[section]]
 id = "01 §5.2"
 file = "docs/01-requirements.md"
-line = 610
-end = 629
+line = 620
+end = 639
 title = "v0.1: 編集・移動・検索"
 
 [[section]]
 id = "01 §5.3"
 file = "docs/01-requirements.md"
-line = 630
-end = 654
+line = 640
+end = 664
 title = "v0.1: 表示・入力・設定"
 
 [[section]]
 id = "01 §5.4"
 file = "docs/01-requirements.md"
-line = 655
-end = 697
+line = 665
+end = 707
 title = "v0.1: 非機能"
 
 [[section]]
 id = "01 §5.5"
 file = "docs/01-requirements.md"
-line = 698
-end = 760
+line = 708
+end = 770
 title = "v0.2 以降 (概要。各版の着手前に詳細化)"
 
 [[section]]
@@ -5018,21 +5018,21 @@ title = "依存関係とクリティカルパス"
 id = "08 §7"
 file = "docs/08-roadmap.md"
 line = 417
-end = 441
+end = 442
 title = "繰り越し記録"
 
 [[section]]
 id = "08 §8"
 file = "docs/08-roadmap.md"
-line = 442
-end = 467
+line = 443
+end = 468
 title = "1.0 の判定"
 
 [[section]]
 id = "08 §8.1"
 file = "docs/08-roadmap.md"
-line = 447
-end = 467
+line = 448
+end = 468
 title = "TUI 完成の定義 (OQ-151)"
 
 [[section]]
@@ -10403,37 +10403,37 @@ section = "08 §3"
 [[id]]
 id = "TC-1"
 file = "docs/08-roadmap.md"
-line = 453
+line = 454
 section = "08 §8.1"
 
 [[id]]
 id = "TC-2"
 file = "docs/08-roadmap.md"
-line = 454
+line = 455
 section = "08 §8.1"
 
 [[id]]
 id = "SB-1"
 file = "docs/08-roadmap.md"
-line = 460
+line = 461
 section = "08 §8.1"
 
 [[id]]
 id = "SB-2"
 file = "docs/08-roadmap.md"
-line = 461
+line = 462
 section = "08 §8.1"
 
 [[id]]
 id = "SB-3"
 file = "docs/08-roadmap.md"
-line = 462
+line = 463
 section = "08 §8.1"
 
 [[id]]
 id = "SB-4"
 file = "docs/08-roadmap.md"
-line = 463
+line = 464
 section = "08 §8.1"
 
 [[id]]
