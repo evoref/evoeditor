@@ -12,7 +12,9 @@
 //!   要約に書く (GitHub Actions では警告の注記も出す)。残りの段に時間を回し、夜間の段がジョブの上限 240 分に収まるように
 //!   (09 §6.3、v0.5 の M29)。`--proptest-minutes N` で予算を変えられる (手元で打ち切りの経路を試すとき)。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
-//! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
+//! - `coverage`: `cargo llvm-cov nextest --lcov` で `lcov.info` を書き、crate・モジュールごとの行カバレッジを下限と比べる (v0.5 の M35、
+//!   09 §6.3 / 01 NFR-702)。NFR-702 の下限 (`eve-core` 80%・`eve-text` 90%・`eve-encoding` 90%・Undo の履歴 90%) を下回れば失敗、
+//!   09 §8.1 の目安 (`eve-config` 80%・`eve-platform` 60%・`eve-tui` 60%) は警告だけ。
 //! - `gitignore` (v0.5 の M31): 10 万ファイルのワークスペースの木で、gitignore の照合と git の差分試験 (09 §3.4。
 //!   `crates/eve-platform/tests/gitignore_git.rs` の `#[ignore]` の試験を `--ignored` で回す。毎 PR は小さい木だけ)。
 //! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。`LazyFS` は環境変数 `LAZYFS_BIN`、下の FS は
@@ -153,7 +155,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             }
             "proptest" => proptest(proptest_limit),
             "audit" => audit().map(|()| StepEnd::Done),
-            "coverage" => coverage(&out_dir).map(|()| StepEnd::Done),
+            "coverage" => coverage(&out_dir, &mut summary).map(|()| StepEnd::Done),
             "gitignore" => gitignore_large().map(|()| StepEnd::Done),
             "beta" => beta(&mut summary).map(|()| StepEnd::Done),
             _ => crate::crash_consistency::run_cmd(&[]).map(|()| StepEnd::Done),
@@ -539,7 +541,10 @@ fn gitignore_large() -> Result<(), String> {
     )
 }
 
-fn coverage(out_dir: &Path) -> Result<(), String> {
+// spec: 09 §6.3 (coverage のゲート)、01 NFR-702
+/// `cargo llvm-cov` で `lcov.info` を書き、crate・モジュールごとの行カバレッジを下限と比べる。
+/// 下限 (NFR-702) を下回る対象か、`LF` の合計が 0 の対象 (測定の範囲の誤り) があれば失敗。目安 (09 §8.1) の下回りは警告だけ。
+fn coverage(out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
     let lcov = out_dir.join("lcov.info");
     let mut cmd = Command::new("cargo");
     cmd.args([
@@ -554,8 +559,255 @@ fn coverage(out_dir: &Path) -> Result<(), String> {
     for c in linux_crates()? {
         cmd.args(["-p", &c]);
     }
-    // 報告のみ (OQ-101)。閾値のゲートは v0.5 から (NFR-702)
-    run("coverage (報告のみ)", &mut cmd)
+    run("coverage", &mut cmd)?;
+    let text = read_text(&lcov)?;
+    let rows = judge_coverage(&parse_lcov(&text), &COVERAGE_TARGETS);
+    let mut failures = Vec::new();
+    for row in &rows {
+        summary.push(row.summary_line());
+        match row.verdict {
+            CoverageVerdict::Pass => {}
+            CoverageVerdict::Warn => {
+                if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                    println!(
+                        "::warning title=カバレッジが目安を下回った::{}",
+                        row.summary_line()
+                    );
+                }
+            }
+            CoverageVerdict::Fail | CoverageVerdict::NoLines => failures.push(row.failure_text()),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
+}
+
+/// `lcov.info` の 1 ファイル (`SF:`) の行の数 (`LF`) と通った行の数 (`LH`)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileCoverage {
+    path: String,
+    lf: u64,
+    lh: u64,
+}
+
+/// `lcov.info` を `end_of_record` ごとのファイルに分ける。読めない行は無視する。
+fn parse_lcov(text: &str) -> Vec<FileCoverage> {
+    let mut out = Vec::new();
+    let mut cur: Option<FileCoverage> = None;
+    for line in text.lines() {
+        let line = line.trim_end();
+        if let Some(p) = line.strip_prefix("SF:") {
+            cur = Some(FileCoverage {
+                path: p.to_owned(),
+                lf: 0,
+                lh: 0,
+            });
+        } else if let Some(n) = line.strip_prefix("LF:") {
+            if let (Some(f), Ok(n)) = (cur.as_mut(), n.parse()) {
+                f.lf = n;
+            }
+        } else if let Some(n) = line.strip_prefix("LH:") {
+            if let (Some(f), Ok(n)) = (cur.as_mut(), n.parse()) {
+                f.lh = n;
+            }
+        } else if line == "end_of_record" {
+            out.extend(cur.take());
+        }
+    }
+    out
+}
+
+/// `crates/<crate>/src/<rest>` の形のパス (絶対でも `\` 区切りでもよい) を `(<crate>, <rest>)` に分ける。
+/// `tests/`・`benches/` などの src の外と、ほかの形のパスは `None`。crate 名は要素の完全一致で見る (接頭辞の衝突を避ける)。
+fn split_crate_src(path: &str) -> Option<(String, String)> {
+    let norm = path.replace('\\', "/");
+    let parts: Vec<&str> = norm.split('/').collect();
+    let i = parts.iter().position(|p| *p == "crates")?;
+    let (krate, src, rest) = (parts.get(i + 1)?, parts.get(i + 2)?, &parts[i + 3..]);
+    if *src != "src" || rest.is_empty() {
+        return None;
+    }
+    Some(((*krate).to_owned(), rest.join("/")))
+}
+
+/// 下限か目安か。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FloorKind {
+    /// 01 NFR-702 の下限 (下回れば失敗)。
+    Floor,
+    /// 09 §8.1 の目安 (下回っても警告だけ)。
+    Guide,
+}
+
+/// 判定の対象 1 つ。`files` が空なら crate 全体、あればその crate の src からの相対パスの合計。
+#[derive(Debug)]
+struct CoverageTarget {
+    name: &'static str,
+    krate: &'static str,
+    files: &'static [&'static str],
+    percent: u64,
+    kind: FloorKind,
+}
+
+const COVERAGE_TARGETS: [CoverageTarget; 7] = [
+    CoverageTarget {
+        name: "eve-core",
+        krate: "eve-core",
+        files: &[],
+        percent: 80,
+        kind: FloorKind::Floor,
+    },
+    CoverageTarget {
+        name: "eve-text",
+        krate: "eve-text",
+        files: &[],
+        percent: 90,
+        kind: FloorKind::Floor,
+    },
+    CoverageTarget {
+        name: "eve-encoding",
+        krate: "eve-encoding",
+        files: &[],
+        percent: 90,
+        kind: FloorKind::Floor,
+    },
+    CoverageTarget {
+        name: "eve-core の Undo の履歴 (document/history.rs + transaction.rs)",
+        krate: "eve-core",
+        files: &["document/history.rs", "document/transaction.rs"],
+        percent: 90,
+        kind: FloorKind::Floor,
+    },
+    CoverageTarget {
+        name: "eve-config",
+        krate: "eve-config",
+        files: &[],
+        percent: 80,
+        kind: FloorKind::Guide,
+    },
+    CoverageTarget {
+        name: "eve-platform",
+        krate: "eve-platform",
+        files: &[],
+        percent: 60,
+        kind: FloorKind::Guide,
+    },
+    CoverageTarget {
+        name: "eve-tui",
+        krate: "eve-tui",
+        files: &[],
+        percent: 60,
+        kind: FloorKind::Guide,
+    },
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CoverageVerdict {
+    Pass,
+    /// 目安を下回った (警告だけ)。
+    Warn,
+    /// 下限を下回った (失敗)。
+    Fail,
+    /// `LF` の合計が 0 (測定の範囲の誤り。失敗)。
+    NoLines,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct CoverageRow {
+    name: &'static str,
+    kind: FloorKind,
+    percent: u64,
+    lf: u64,
+    lh: u64,
+    verdict: CoverageVerdict,
+}
+
+impl CoverageRow {
+    /// 率 (%)。`LF` が 0 なら 0。表示用だけで、判定には使わない (判定は整数の比較)。
+    fn rate(&self) -> f64 {
+        if self.lf == 0 {
+            0.0
+        } else {
+            self.lh as f64 * 100.0 / self.lf as f64
+        }
+    }
+
+    fn summary_line(&self) -> String {
+        let label = match self.kind {
+            FloorKind::Floor => "下限",
+            FloorKind::Guide => "目安",
+        };
+        let mark = match self.verdict {
+            CoverageVerdict::Pass => "",
+            CoverageVerdict::Warn => " [目安を下回った]",
+            CoverageVerdict::Fail => " [下限を下回った]",
+            CoverageVerdict::NoLines => " [行が 0 (測定の範囲の誤り)]",
+        };
+        format!(
+            "coverage: {}: {:.1}% ({}/{} 行) {label} {}%{mark}",
+            self.name,
+            self.rate(),
+            self.lh,
+            self.lf,
+            self.percent
+        )
+    }
+
+    fn failure_text(&self) -> String {
+        match self.verdict {
+            CoverageVerdict::NoLines => format!(
+                "coverage: {} の行 (LF) が lcov.info に 1 つも無い (測定の範囲の誤り)",
+                self.name
+            ),
+            _ => format!(
+                "coverage: {} が {:.1}% ({}/{} 行)。下限は {}%",
+                self.name,
+                self.rate(),
+                self.lh,
+                self.lf,
+                self.percent
+            ),
+        }
+    }
+}
+
+/// ファイルごとの値を対象ごとに合計して判定する。比較は丸める前の整数 (`LH * 100 >= 下限 * LF`)。ちょうど下限なら合格。
+fn judge_coverage(files: &[FileCoverage], targets: &[CoverageTarget]) -> Vec<CoverageRow> {
+    targets
+        .iter()
+        .map(|t| {
+            let (mut lf, mut lh) = (0, 0);
+            for f in files {
+                let Some((krate, rest)) = split_crate_src(&f.path) else {
+                    continue;
+                };
+                if krate == t.krate && (t.files.is_empty() || t.files.contains(&rest.as_str())) {
+                    lf += f.lf;
+                    lh += f.lh;
+                }
+            }
+            let verdict = if lf == 0 {
+                CoverageVerdict::NoLines
+            } else if lh * 100 >= t.percent * lf {
+                CoverageVerdict::Pass
+            } else if t.kind == FloorKind::Floor {
+                CoverageVerdict::Fail
+            } else {
+                CoverageVerdict::Warn
+            };
+            CoverageRow {
+                name: t.name,
+                kind: t.kind,
+                percent: t.percent,
+                lf,
+                lh,
+                verdict,
+            }
+        })
+        .collect()
 }
 
 /// BM-306 の soak を回し、要約に傾向を 1 行で書く。傾向が平坦でなくても失敗にしない (観察のみ、09 §6.3)。
@@ -829,5 +1081,151 @@ mod tests {
             .collect();
         assert_eq!(got, ["crash-aaa", "oom-bbb", "timeout-ccc"]);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn rec(path: &str, lf: u64, lh: u64) -> String {
+        format!("TN:\nSF:{path}\nDA:1,1\nLF:{lf}\nLH:{lh}\nend_of_record\n")
+    }
+
+    fn row<'a>(rows: &'a [CoverageRow], name: &str) -> &'a CoverageRow {
+        rows.iter().find(|r| r.name == name).expect("対象がある")
+    }
+
+    fn undo_row(rows: &[CoverageRow]) -> &CoverageRow {
+        rows.iter()
+            .find(|r| r.name.contains("Undo"))
+            .expect("モジュールの行がある")
+    }
+
+    fn all_pass_lcov() -> String {
+        [
+            rec("/w/crates/eve-core/src/a.rs", 100, 90),
+            rec("/w/crates/eve-core/src/document/history.rs", 100, 95),
+            rec("/w/crates/eve-core/src/document/transaction.rs", 100, 95),
+            rec("/w/crates/eve-text/src/a.rs", 100, 95),
+            rec("/w/crates/eve-encoding/src/a.rs", 100, 95),
+            rec("/w/crates/eve-config/src/a.rs", 100, 95),
+            rec("/w/crates/eve-platform/src/a.rs", 100, 95),
+            rec("/w/crates/eve-tui/src/a.rs", 100, 95),
+        ]
+        .concat()
+    }
+
+    #[test]
+    fn lcov_を_end_of_record_ごとに分けて_lf_lh_を読む() {
+        let t = format!(
+            "{}{}",
+            rec("/w/crates/eve-core/src/a.rs", 10, 7),
+            rec("/w/crates/eve-core/src/b.rs", 5, 5)
+        );
+        let files = parse_lcov(&t);
+        assert_eq!(files.len(), 2);
+        assert_eq!((files[0].lf, files[0].lh), (10, 7));
+        assert_eq!((files[1].lf, files[1].lh), (5, 5));
+        // end_of_record の無い末尾は数えない
+        let unterminated = parse_lcov("SF:/w/crates/eve-core/src/a.rs\nLF:3\nLH:3\n");
+        assert_eq!(unterminated.len(), 0, "{unterminated:?}");
+    }
+
+    #[test]
+    fn crate_の合計とモジュールの合計() {
+        let t = [
+            rec("/w/crates/eve-core/src/a.rs", 100, 80),
+            rec("/w/crates/eve-core/src/document/history.rs", 50, 45),
+            rec("/w/crates/eve-core/src/document/transaction.rs", 50, 45),
+        ]
+        .concat();
+        let rows = judge_coverage(&parse_lcov(&t), &COVERAGE_TARGETS);
+        let core = row(&rows, "eve-core");
+        assert_eq!((core.lf, core.lh), (200, 170));
+        let undo = undo_row(&rows);
+        assert_eq!((undo.lf, undo.lh), (100, 90));
+        assert_eq!(undo.verdict, CoverageVerdict::Pass);
+    }
+
+    #[test]
+    fn windows_形式のパスを読む() {
+        let t = rec(r"E:\w\crates\eve-text\src\buf\piece.rs", 10, 9);
+        let rows = judge_coverage(&parse_lcov(&t), &COVERAGE_TARGETS);
+        assert_eq!(row(&rows, "eve-text").lf, 10);
+        assert_eq!(
+            split_crate_src("crates/eve-core/src/x.rs"),
+            Some(("eve-core".to_owned(), "x.rs".to_owned()))
+        );
+        let t = rec(r"E:\w\crates\eve-core\src\document\history.rs", 10, 9);
+        let rows = judge_coverage(&parse_lcov(&t), &COVERAGE_TARGETS);
+        assert_eq!(undo_row(&rows).lf, 10);
+    }
+
+    #[test]
+    fn 下限ちょうどは合格で下回りは失敗() {
+        let ok = rec("/w/crates/eve-text/src/a.rs", 100, 90);
+        let rows = judge_coverage(&parse_lcov(&ok), &COVERAGE_TARGETS);
+        assert_eq!(row(&rows, "eve-text").verdict, CoverageVerdict::Pass);
+        let ng = rec("/w/crates/eve-text/src/a.rs", 1000, 899);
+        let rows = judge_coverage(&parse_lcov(&ng), &COVERAGE_TARGETS);
+        assert_eq!(row(&rows, "eve-text").verdict, CoverageVerdict::Fail);
+        // 89.99% は表示が 90.0% でも、丸める前の値で失敗にする
+        let ng = rec("/w/crates/eve-text/src/a.rs", 10000, 8999);
+        let rows = judge_coverage(&parse_lcov(&ng), &COVERAGE_TARGETS);
+        let r = row(&rows, "eve-text");
+        assert_eq!(r.verdict, CoverageVerdict::Fail);
+        assert!(r.summary_line().contains("90.0%"));
+        assert!(r.failure_text().contains("eve-text"));
+        assert!(r.failure_text().contains("下限は 90%"));
+    }
+
+    #[test]
+    fn lf_が_0_の対象は失敗() {
+        let t = rec("/w/crates/eve-core/src/a.rs", 0, 0);
+        let rows = judge_coverage(&parse_lcov(&t), &COVERAGE_TARGETS);
+        assert_eq!(row(&rows, "eve-core").verdict, CoverageVerdict::NoLines);
+        // ファイルが 1 つも無い対象 (eve-text) も
+        assert_eq!(row(&rows, "eve-text").verdict, CoverageVerdict::NoLines);
+    }
+
+    #[test]
+    fn 目安の下回りは警告だけで失敗にしない() {
+        let t = all_pass_lcov().replace(
+            "SF:/w/crates/eve-tui/src/a.rs\nDA:1,1\nLF:100\nLH:95",
+            "SF:/w/crates/eve-tui/src/a.rs\nDA:1,1\nLF:100\nLH:10",
+        );
+        let rows = judge_coverage(&parse_lcov(&t), &COVERAGE_TARGETS);
+        assert_eq!(row(&rows, "eve-tui").verdict, CoverageVerdict::Warn);
+        assert!(
+            row(&rows, "eve-tui")
+                .summary_line()
+                .contains("目安を下回った")
+        );
+        assert!(
+            rows.iter()
+                .all(|r| !matches!(r.verdict, CoverageVerdict::Fail | CoverageVerdict::NoLines))
+        );
+    }
+
+    #[test]
+    fn 関係ないファイルと接頭辞の衝突を数えない() {
+        let t = [
+            rec("/w/crates/eve-core/src/a.rs", 10, 10),
+            rec("/w/crates/eve-core-xxx/src/a.rs", 1000, 0),
+            rec("/w/crates/eve-core/tests/t.rs", 1000, 0),
+            rec("/w/crates/eve-core/benches/b.rs", 1000, 0),
+            rec("/w/crates/eve-testkit/src/a.rs", 1000, 0),
+            rec("/w/crates/eve-core/src/document/history.rs.bak", 1000, 0),
+            rec("/rustc/abc/library/core/src/a.rs", 1000, 0),
+        ]
+        .concat();
+        let rows = judge_coverage(&parse_lcov(&t), &COVERAGE_TARGETS);
+        let core = row(&rows, "eve-core");
+        // eve-core の src の下の a.rs と history.rs.bak だけ (後者は crate には入るが、モジュールの 2 ファイルには入らない)
+        assert_eq!((core.lf, core.lh), (1010, 10));
+        assert_eq!(undo_row(&rows).lf, 0);
+    }
+
+    #[test]
+    fn 要約の行に名前_率_行数_下限が入る() {
+        let rows = judge_coverage(&parse_lcov(&all_pass_lcov()), &COVERAGE_TARGETS);
+        let line = row(&rows, "eve-core").summary_line();
+        assert_eq!(line, "coverage: eve-core: 93.3% (280/300 行) 下限 80%");
     }
 }
