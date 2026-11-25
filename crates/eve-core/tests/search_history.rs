@@ -390,7 +390,7 @@ fn shi2_読み取り専用の文書で断る置換は経路に依らず記録し
     // 置換欄の Enter (search.replace) と alt+a (search.replace_all) は `when` で断る
     h.keys("enter");
     h.keys("alt+a");
-    // ボタンの Enter は search.next から search_replace_all を直に呼び、読み取り専用で断る
+    // ボタンの Enter も search.replace_all として実行し、`when` で断る (04 §8.4、Issue #655)
     h.keys("tab");
     assert_eq!(bar_focus(&mut h), BarFocus::Button);
     h.keys("enter");
@@ -398,6 +398,32 @@ fn shi2_読み取り専用の文書で断る置換は経路に依らず記録し
     assert_eq!(h.doc_text(), "foo foo\n");
     assert_eq!(terms(&h), Vec::<String>::new());
     assert_eq!(replacements(&h), Vec::<String>::new());
+    // 断ったボタンの Enter は search.next に落ちない (次 / 前として検索語を記録しない)
+    h.clear_log();
+    h.keys("enter");
+    assert_eq!(terms(&h), Vec::<String>::new());
+    assert_eq!(h.messages(), ["msg.edit.read_only"]);
+}
+
+// spec: 03 §12.8 (SHI-2)、04 §8.4 (ボタンにフォーカスがあっても `search.next` は次へ移るだけ)
+#[test]
+fn shi2_ボタンにフォーカスがあるときの_search_next_は検索語だけを記録する() {
+    let mut h = scene("foo foo\n");
+    h.keys("ctrl+r");
+    h.text("foo");
+    h.keys("tab");
+    h.text("bar");
+    h.keys("tab");
+    assert_eq!(bar_focus(&mut h), BarFocus::Button);
+    assert_eq!(h.cmd("search.next"), CommandResult::Done);
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "foo foo\n");
+    assert_eq!(terms(&h), ["foo"]);
+    assert_eq!(
+        replacements(&h),
+        Vec::<String>::new(),
+        "置換しないので置換の文字列は記録しない"
+    );
 }
 
 // spec: 03 §12.8 (SHI-2)

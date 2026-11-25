@@ -1,6 +1,6 @@
 # 既定キーマップ
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 200 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 201 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
 
 - コンテキストは 07 §7.1 の順。同じコンテキストの中は優先の順 (層の順・登録の順)。キーを探すときの参照の順 (`search` → `prompt` → `global` など) は 07 §7.1。
 - **キー** は画面の表記 (04 §7.8)、**設定の表記** は `keymap.toml` に書く形 (07 §7.2)。**拡張キー** の「要」は拡張キーが無い端末では届かない割当 (07 §11.6 の `[E]`)。
@@ -147,6 +147,7 @@
 | キー | 設定の表記 | コマンド | タイトル | when | 拡張キー |
 |---|---|---|---|---|---|
 | `Enter` | `enter` | `search.replace` | 置換 | `search.replace_focused` | — |
+| `Enter` | `enter` | `search.replace_all` | すべて置換 | `search.replace_all_focused` | — |
 | `Enter` | `enter` | `search.next` | 次を検索 | — | — |
 | `↓` | `down` | `search.next` | 次を検索 | — | — |
 | `F3` | `f3` | `search.next` | 次を検索 | — | — |

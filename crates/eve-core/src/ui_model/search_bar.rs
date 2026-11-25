@@ -615,13 +615,12 @@ impl EditorState {
     }
 
     /// `Enter` / `↓` / `F3` (`search.next`) と `↑` (`search.prev`)。入力で強調した一致があれば、まずそれを選択する。
+    /// 欄のフォーカスに依らず一致の間を移るだけで、置換しない (ボタンの `Enter` はキーマップで `search.replace_all`
+    /// に結ぶ、04 §8.4、Issue #655)。
+    ///
+    /// spec: 04 §8.4
     pub fn search_move(&mut self, forward: bool) -> SearchStep {
-        let Some(bar) = &self.find.search_bar else {
-            return SearchStep::NoQuery;
-        };
-        // ボタンにフォーカスがあるときの Enter はすべて置換 (Alt が使えない端末向け、04 §8.4)
-        if bar.focus == BarFocus::Button {
-            self.search_replace_all();
+        if self.find.search_bar.is_none() {
             return SearchStep::NoQuery;
         }
         // 次 / 前を実行した検索語を履歴に記録する (一致の有無・探さない理由に依らない、03 §12.8 の SHI-2)
@@ -1125,10 +1124,13 @@ impl EditorState {
     }
 
     /// `search.replace_all` (03 §12.5): 検索欄の検索語・大小の区別で、置換欄の文字列にすべて置き換える。1 つの Undo 単位。
-    /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで `ChangeSet` を作る。
+    /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで `ChangeSet` を作る。`Alt+A` とボタンの `Enter` は、どちらも
+    /// キーマップからコマンドとして呼ぶ (`when` と権限の判定を通る、04 §8.4)。
+    ///
+    /// spec: 03 §12.5, 03 §12.8
     pub fn search_replace_all(&mut self) -> CommandResult {
-        // 置換を実行した検索語と置換の文字列を履歴に記録する (置換欄があるときだけ。読み取り専用の文書で断るときは記録しない。
-        // `when` の `!doc.read_only` で断る経路と、ボタンの `Enter` から直に呼ぶ経路をそろえる、03 §12.8.1)
+        // 置換を実行した検索語と置換の文字列を履歴に記録する (置換欄があるときだけ。読み取り専用の文書で断るときは記録しない、
+        // 03 §12.8.1。コマンドの経路は `when` の `!doc.read_only` で先に断るので、ここは関数を直に呼ぶときの守り)
         if self.active_document_editable() {
             self.record_replace();
         }

@@ -1557,6 +1557,12 @@ impl EditorState {
                 .search_bar
                 .as_ref()
                 .is_some_and(|s| s.replace.is_some() && s.focus == eve_view::BarFocus::Replace)),
+            // `[A] すべて置換` のボタンにフォーカスがある (`Enter` がすべて置換になる、04 §8.4、07 §7.3)
+            "search.replace_all_focused" => b(self
+                .find
+                .search_bar
+                .as_ref()
+                .is_some_and(|s| s.replace.is_some() && s.focus == eve_view::BarFocus::Button)),
             "caps.can_suspend" => b(self.term.caps.can_suspend),
             "caps.mouse" => b(self.term.caps.mouse),
             // 折り返し中 (設定キー `view.wrap` とは別名、07 §7.1)

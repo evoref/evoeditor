@@ -73,6 +73,112 @@ fn ボタンで_enter_でも置換する() {
     assert_eq!(h.doc_text(), "bb");
 }
 
+// spec: 04 §8.4、03 §12.5 の 2 (ボタンの `Enter` は `search.replace_all` として実行する、Issue #655)
+#[test]
+fn ボタンの_enter_は_alt_a_と同じすべて置換で_一度の_undo_で戻る() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo bar foo\nfoo");
+    setup(&mut h, "foo", "X");
+    h.keys("tab");
+    assert_eq!(h.frame().search.unwrap().focus, BarFocus::Button);
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "X bar X\nX");
+    assert_eq!(message(&mut h), "3 件を置換しました (元に戻すで戻せます)");
+    assert_eq!(
+        h.frame().search.unwrap().focus,
+        BarFocus::Button,
+        "置換の後もボタンにフォーカスが残る"
+    );
+    h.keys("esc");
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "foo bar foo\nfoo", "1 回の Undo で全部戻る");
+}
+
+/// 読み取り専用にした文書で、置換欄つきの検索バーのボタンにフォーカスを置く (選択は先頭)。
+fn read_only_at_button(h: &mut Harness) {
+    h.text("foo foo");
+    h.set_selection(eve_text::Selection::point(eve_text::ByteOff(0)));
+    setup(h, "foo", "X");
+    assert_eq!(
+        h.cmd("file.toggle_read_only"),
+        eve_core::CommandResult::Done
+    );
+    h.keys("tab");
+    assert_eq!(h.frame().search.unwrap().focus, BarFocus::Button);
+    h.clear_log();
+}
+
+// spec: 04 §8.4、03 §12.5 の 1 (読み取り専用では `search.replace_all` の `when` が偽)
+#[test]
+fn 読み取り専用ではボタンの_enter_も_alt_a_と同じく断り_次の一致へ移らない() {
+    let mut via_enter = Harness::new().with_size(60, 10);
+    read_only_at_button(&mut via_enter);
+    let before = via_enter.selection_range();
+    via_enter.keys("enter");
+    via_enter.run_jobs();
+    let mut via_alt_a = Harness::new().with_size(60, 10);
+    read_only_at_button(&mut via_alt_a);
+    via_alt_a.keys("alt+a");
+    via_alt_a.run_jobs();
+    for h in [&mut via_enter, &mut via_alt_a] {
+        assert_eq!(h.doc_text(), "foo foo", "文書を変えない");
+        assert_eq!(
+            h.messages(),
+            ["msg.edit.read_only"],
+            "読み取り専用だと知らせる"
+        );
+    }
+    assert_eq!(
+        via_enter.selection_range(),
+        before,
+        "search.next に落ちて一致へ移らない"
+    );
+    assert_eq!(via_enter.selection_range(), via_alt_a.selection_range());
+}
+
+// spec: 04 §8.4 (`search.next` はフォーカスに依らず次の一致へ移るだけ)
+#[test]
+fn ボタンにフォーカスがあっても_search_next_は次の一致へ移るだけで置換しない() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo foo");
+    h.set_selection(eve_text::Selection::point(eve_text::ByteOff(0)));
+    setup(&mut h, "foo", "X");
+    h.keys("tab");
+    assert_eq!(h.frame().search.unwrap().focus, BarFocus::Button);
+    assert_eq!(h.cmd("search.next"), eve_core::CommandResult::Done);
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "foo foo", "置換しない");
+    assert_eq!(h.selection_range(), (0, 3), "最初の一致を選ぶ");
+    assert_eq!(h.cmd("search.next"), eve_core::CommandResult::Done);
+    h.run_jobs();
+    assert_eq!(h.selection_range(), (4, 7), "次の一致へ移る");
+}
+
+// verifies: AC-FR-601-2
+// spec: 04 §8.4 (ボタンの `Enter` の置換は `search.replace_all` の権限 `propose` の判定を通る、Issue #655)
+#[test]
+fn 外部の主体からの_search_next_はボタンにフォーカスがあっても置換しない() {
+    use eve_core::{CommandInvocation, InvocationSource};
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo foo");
+    h.set_selection(eve_text::Selection::point(eve_text::ByteOff(0)));
+    setup(&mut h, "foo", "X");
+    h.keys("tab");
+    assert_eq!(h.frame().search.unwrap().focus, BarFocus::Button);
+    let r = h.editor.execute(CommandInvocation::new(
+        "search.next",
+        InvocationSource::External,
+    ));
+    assert_eq!(r, eve_core::CommandResult::Done);
+    h.run_jobs();
+    assert_eq!(
+        h.doc_text(),
+        "foo foo",
+        "`read` の search.next は本文を書き換えない"
+    );
+    assert_eq!(h.selection_range(), (0, 3), "一致へ移るだけ");
+}
+
 #[test]
 fn 置換文字列は展開せず_空なら削除し_日本語も扱う() {
     let mut h = Harness::new().with_size(60, 10);
