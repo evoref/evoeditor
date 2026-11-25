@@ -1286,7 +1286,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.16 編集の拡張 (Could) の文言の案 (v0.5 の M34)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。段 8 の PR で、ジャンプ履歴の文言 (`cmd.cursor.jump_back` / `cmd.cursor.jump_forward`・`info.jump.no_back` / `info.jump.no_forward`) を同じく移した。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。段 8 の PR で、ジャンプ履歴の文言 (`cmd.cursor.jump_back` / `cmd.cursor.jump_forward`・`info.jump.no_back` / `info.jump.no_forward`) を同じく移した。段 7 の PR で、矩形選択の文言 (`cmd.select.toggle_box`・`status.box.*`・`status.box_mode.*`) を言語ファイルと §15.1 の目録へ移した。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
 
 **完了のメッセージと付記** (保存時の変換。03 §9.3.1 の SVT-5 / SVT-6 / SVT-8): 変換の知らせは独立のメッセージにせず、**その保存で最後に出す完了のメッセージの後ろに 1 つだけ付記する**。完了のメッセージの選び方は今のまま (`info.save.done`。つながりを承認した保存の成功は `info.save.escape_merged`、途中まで読んだ標準入力の文書は `info.save.partial_saved` が代わりに出る。直接上書きでは `info.save.in_place` が先に出て、続く完了のメッセージが最後)。付記は、変換で本文が変わったら `info.save.suffix.transformed`、設定は真だが 1 MiB を超えて変換しなかったら `info.save.suffix.transform_skipped_large` (2 つは同時に起きない)。`info.save.escape_merged` は要点が先頭にあるので、付記は後ろに足して先頭の要点を崩さない (80 桁を超えたら、メッセージ行の今の省略の規則で後ろから切る。全文はメッセージ履歴で読める)。書けずに終わったときは、失敗・中止のメッセージに `info.save.suffix.transform_kept` を付ける (完了の付記とは同時に起きない)。全保存の要約には `info.save_all.suffix.transformed` を付ける。
 
@@ -1581,6 +1581,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー | `status.selection` | ({count} 文字選択) | 13 (2 桁) |
 | ステータスバー | `status.position.long` / `.short` | 行 {line}, 桁 {col} / {line}:{col} | — |
 | ステータスバー (v0.5。カーソルが 2 つ以上のとき、選択情報の代わり。§8.7、03 §4.5.5) | `status.cursors.long` / `.short` | カーソル {count} 個 / {count}カーソル | 13、9 (1 桁) |
+| ステータスバー (v0.5。矩形選択のモードで矩形があるとき、カーソルの数・選択情報の代わり。§8.7、03 §4.8 の BOX-7) | `status.box.long` / `.short` | (矩形 {rows}行 {cols}列) / 矩形{rows}x{cols} | 15、8 (行 1 桁・列 2 桁) |
+| ステータスバー (v0.5。矩形選択のモードで矩形が無いとき。§8.7、03 §4.8 の BOX-7) | `status.box_mode.long` / `.short` | (矩形選択) / 矩形 | 10、4 |
 | 検索バー | `ui.search.label` | 検索: | 5 |
 | 検索バー (置換欄。`SearchBarModel.replace`) | `ui.search.replace_label` / `ui.search.replace_all_button` | 置換: / [A] すべて置換 | 5、14 |
 | 検索バー (件数の後ろの印。CP932 互換文字の同一視が効いているとき、v0.4 の M24 の (5)。03 §12.4.1) | `ui.search.count.compat_suffix` | 互換 | 4 |
@@ -2009,7 +2011,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.pane.collapsed` (v0.5) | 編集面が木の最小より小さくなり、フォーカスのペインだけを出す縮退表示に入った (入ったときに 1 回。03 §9.9 の PANE-4 (b)。縮退表示の間はステータスバーに `status.degraded.panes.*`) | 端末が狭いので、フォーカスのペインだけを表示しています |
 | `info.pane.single_pane` (v0.5) | ペインが 1 つだけなので、`when` が `pane.split` のペインのコマンド (`pane.close`・移動・大きさ・揃える) をキーで実行して断った (03 §9.9 の PANE-5 (d)。「割り当てられていません」とは出さない。パレットでは淡色にして `ui.palette.reason.single_pane`) | ペインが 1 つだけです |
 | `info.lang.changed` (v0.5) | `lang.set` で文書の言語を替えた (07 §9.6 の LANG-8。`{language}` は `display_name (ID)`、表示の名前が ID と同じなら ID) | 言語を {language} にしました |
-| `info.cursor.limit` (v0.5) | カーソルを足す操作 (`select.add_next_match`・`select.add_cursor_above` / `_below`。後の版の矩形選択) で、足した後の数が上限 (`{limit}` = 10,000、千の区切りを付けない) を超えるので、選択を変えなかった (03 §4.5.1 の MCUR-6) | カーソルは {limit} 個までです。選択を変えませんでした |
+| `info.cursor.limit` (v0.5) | カーソルを足す操作 (`select.add_next_match`・`select.add_cursor_above` / `_below`)・矩形選択 (M34、03 §4.8 の BOX-3) で、足した後の数が上限 (`{limit}` = 10,000、千の区切りを付けない) を超えるので、選択を変えなかった (03 §4.5.1 の MCUR-6) | カーソルは {limit} 個までです。選択を変えませんでした |
 | `info.select.too_many_matches` (v0.5) | `select.all_matches` で、一致の数が上限 (`{limit}`) を超えるので、何も選ばなかった (一部だけを選ばない。03 §4.5.1 の MCUR-3) | 一致が {limit} 件を超えるため、選択を変えませんでした |
 | `info.select.no_word` (v0.5) | `select.add_next_match` / `select.all_matches` で、主のカーソルの位置に単語が無い (空白・改行の上。03 §4.5.1 の MCUR-2 / MCUR-3) | カーソルの位置に単語がありません |
 | `info.select.query_too_long` (v0.5) | `select.add_next_match` / `select.all_matches` で、主の選択 (検索語) が 64 KiB を超えるので探さなかった (03 §4.5.1 の MCUR-2 (k)) | 選択が長すぎるため (64 KiB まで)、一致を探しませんでした |

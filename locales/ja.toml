@@ -434,6 +434,10 @@ title = "行を選択"
 description = "選択を広げる前に戻します"
 title = "選択を縮める"
 
+[cmd.select.toggle_box]
+description = "矩形選択のモードを入れます。入れている間は、選択を伸ばす操作とドラッグが矩形を選びます。もう一度実行すると切ります"
+title = "矩形選択のモードを切り替え"
+
 [cmd.ui.cancel]
 description = "開いている入力欄やダイアログを閉じます。"
 title = "取り消し"
@@ -1669,6 +1673,14 @@ user_requested = "読み取り専用で開く指定 (`--readonly`)"
 untitled = "無題-{n}"
 eol_mixed = "混在"
 selection = "({count} 文字選択)"
+
+[status.box]
+long = "(矩形 {rows}行 {cols}列)"
+short = "矩形{rows}x{cols}"
+
+[status.box_mode]
+long = "(矩形選択)"
+short = "矩形"
 
 [status.cursors]
 long = "カーソル {count} 個"

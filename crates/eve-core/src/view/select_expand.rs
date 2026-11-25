@@ -5,9 +5,10 @@
 //!   変える前の Selection を View の拡張の履歴に積む (SEL-4)。
 //! - `select.shrink`: 拡張の履歴の最後の Selection に戻す (SEL-3)。
 //!
-//! 3 つとも Motion で文書を変えない (SEL-7)。候補を求める関数は `view::text_object`。
+//! 3 つとも Motion で文書を変えない (SEL-7)。矩形選択のモード (03 §4.8) の間は矩形を消してから行う。候補を求める関数は
+//! `view::text_object`。
 //!
-//! spec: 03 §5.7, 03 §4.5.2, 01 FR-309
+//! spec: 03 §5.7, 03 §4.5.2, 03 §4.8, 01 FR-309
 
 use std::collections::VecDeque;
 
@@ -152,7 +153,11 @@ fn run(
     f: impl FnOnce(&mut EditorState, ViewId) -> CommandResult,
 ) -> CommandResult {
     match motion::active(ctx) {
-        Some((view, _)) => f(ctx.state, view),
+        Some((view, _)) => {
+            // 矩形選択のモードの間は、矩形を消してから広げる (SEL-7、03 §4.8)。Range は複数カーソルとして広げる
+            ctx.state.clear_box_rect(view);
+            f(ctx.state, view)
+        }
         None => CommandResult::Rejected(RejectReason::NoTarget),
     }
 }

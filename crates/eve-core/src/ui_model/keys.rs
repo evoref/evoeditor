@@ -186,6 +186,10 @@ pub(crate) const MSG_WORKSPACE_NOT_REREAD: &str = "msg.workspace.not_reread";
 pub(crate) const MSG_WORKSPACE_ROOT_INVALID: &str = "msg.workspace.root_invalid";
 pub(crate) const MSG_WORKSPACE_SCAN_FAILED: &str = "msg.workspace.scan_failed";
 pub(crate) const MSG_WORKSPACE_SEARCH_FAILED: &str = "msg.workspace.search_failed";
+pub(crate) const STATUS_BOX_LONG: &str = "status.box.long";
+pub(crate) const STATUS_BOX_SHORT: &str = "status.box.short";
+pub(crate) const STATUS_BOX_MODE_LONG: &str = "status.box_mode.long";
+pub(crate) const STATUS_BOX_MODE_SHORT: &str = "status.box_mode.short";
 pub(crate) const STATUS_CURSORS_LONG: &str = "status.cursors.long";
 pub(crate) const STATUS_CURSORS_SHORT: &str = "status.cursors.short";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_LONG: &str = "status.degraded.long_line.long";
@@ -578,6 +582,10 @@ const ALL: &[&str] = &[
     MSG_WORKSPACE_ROOT_INVALID,
     MSG_WORKSPACE_SCAN_FAILED,
     MSG_WORKSPACE_SEARCH_FAILED,
+    STATUS_BOX_LONG,
+    STATUS_BOX_SHORT,
+    STATUS_BOX_MODE_LONG,
+    STATUS_BOX_MODE_SHORT,
     STATUS_CURSORS_LONG,
     STATUS_CURSORS_SHORT,
     STATUS_DEGRADED_LONG_LINE_LONG,

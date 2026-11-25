@@ -110,6 +110,7 @@ pub const SELECT_EXTEND_WORD_LEFT: &str = "select.extend_word_left";
 pub const SELECT_EXTEND_WORD_RIGHT: &str = "select.extend_word_right";
 pub const SELECT_LINE: &str = "select.line";
 pub const SELECT_SHRINK: &str = "select.shrink";
+pub const SELECT_TOGGLE_BOX: &str = "select.toggle_box";
 pub const UI_CANCEL: &str = "ui.cancel";
 pub const UI_CONFIRM: &str = "ui.confirm";
 pub const UI_DIALOG_CHOOSE: &str = "ui.dialog_choose";
@@ -128,7 +129,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 123] = [
+pub const ALL: [&str; 124] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -237,6 +238,7 @@ pub const ALL: [&str; 123] = [
     SELECT_EXTEND_WORD_RIGHT,
     SELECT_LINE,
     SELECT_SHRINK,
+    SELECT_TOGGLE_BOX,
     UI_CANCEL,
     UI_CONFIRM,
     UI_DIALOG_CHOOSE,

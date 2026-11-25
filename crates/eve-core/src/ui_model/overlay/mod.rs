@@ -222,8 +222,9 @@ impl EditorState {
         CommandResult::Done
     }
 
-    /// `Esc` の最後の 2 段 (04 §7.5): 複数カーソルなら主の Range だけを残し (主の選択は残す。03 §4.5.1 の MCUR-5)、Range が
-    /// 1 つで選択があれば選択を解いて head の空のカーソルにする。「単語の一致」の印は残す (MCUR-2 (e))。
+    /// `Esc` の最後の 3 段 (04 §7.5): 複数カーソルなら主の Range だけを残し (主の選択は残す。03 §4.5.1 の MCUR-5)、Range が
+    /// 1 つで選択があれば選択を解いて head の空のカーソルにする。「単語の一致」の印は残す (MCUR-2 (e))。Range が 1 つで選択も
+    /// 無く、矩形選択のモードならモードを切る (03 §4.8 の BOX-1)。1 回の `Esc` は 1 つだけ行う。
     fn cancel_selection(&mut self) {
         let Some(view) = self.focused_view() else {
             return;
@@ -237,6 +238,9 @@ impl EditorState {
         } else if !primary.is_empty() {
             Selection::single(primary.collapse_to_head())
         } else {
+            if self.box_mode(view) {
+                self.set_box_mode(view, false);
+            }
             return;
         };
         let word = self.word_mark_valid(view);

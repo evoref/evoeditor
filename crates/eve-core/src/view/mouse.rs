@@ -1,9 +1,10 @@
 //! マウス (docs/03 §5.8.1、01 FR-307): 左クリックで移動、Shift+クリックで拡張、ドラッグで選択、ホイールでスクロール。
 //! ダブル / トリプルクリック (03 §5.8.2 の CLK-1〜CLK-7、01 FR-311): 押下の回数を Editor の「今」と位置で数え、単語・行を選ぶ。
+//! 矩形選択のモード (03 §4.8 の BOX-6、01 FR-212) の間のドラッグと `Shift` 付きのクリックは、(論理行, 表示列) の矩形を選ぶ。
 //!
 //! 位置は面の左上を原点とするセルで届く。折り返し・タブ・全角を考慮した文書位置の確定は、ここでスクロール位置とレイアウトから直接引く。
 //!
-//! spec: 03 §5.8.1, 03 §5.8.2
+//! spec: 03 §5.8.1, 03 §5.8.2, 03 §4.8
 
 use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead, unit_at, unit_before};
 use eve_view::{
@@ -13,10 +14,12 @@ use eve_view::{
 
 use crate::command::ids;
 use crate::command::{CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission};
-use crate::editor::state::EditorState;
-use crate::layout::{Affinity, line_rows, wrap_ctx};
+use crate::document::Document;
+use crate::editor::state::{EditorState, View};
+use crate::layout::{Affinity, byte_at_col, cursor_col, line_rows, wrap_ctx};
 use crate::time::{Millis, Tick};
 use crate::ui_model::keys;
+use crate::view::box_select::{BoxPoint, BoxRect};
 use crate::view::text_object::{WORD_WINDOW, line_whole};
 
 /// Shift+ホイールの横スクロール量 (列)。
@@ -56,6 +59,14 @@ enum DragUnit {
     },
     /// 3 回以上の押下: 行の全体 (CLK-3)。起点の行の全体。
     Line(ByteRange),
+    /// 矩形選択のモードの 1 回の押下 (03 §4.8 の BOX-6)。`anchor` は矩形の動かさない角 (押した位置。`Shift` 付きの押下では
+    /// 矩形の `anchor`)、`last` は最後に置こうとした矩形、`refused` はそれを行の数の上限で断った (上限以下から上限超えへ
+    /// 変わったときだけ知らせる。03 §4.8 の BOX-3)。
+    Box {
+        anchor: BoxPoint,
+        last: Option<BoxRect>,
+        refused: bool,
+    },
 }
 
 /// ドラッグの位置と起点の単位の関係 (03 §5.8.2 の CLK-4)。
@@ -207,8 +218,34 @@ impl EditorState {
         } else {
             self.count_click(m.at, pos)
         };
-        let unit = match count {
-            1 => {
+        // 矩形選択のモードの 1 回の押下 (03 §4.8 の BOX-6)。2 回・3 回の押下はモードの間も単語・行を選ぶ (CLK-5)
+        let cell = if count == 1 && self.box_mode(view) {
+            self.box_cell(m.at)
+        } else {
+            None
+        };
+        let unit = match (count, cell) {
+            (1, Some(cell)) if shift => {
+                // 矩形の `head` をその位置へ (矩形が無ければ主の Range の `head` から作る)
+                let anchor = self.box_rect_or_primary(view).map_or(cell, |r| r.anchor);
+                let rect = BoxRect { anchor, head: cell };
+                let applied = self.apply_box(view, rect);
+                DragUnit::Box {
+                    anchor,
+                    last: Some(rect),
+                    refused: !applied,
+                }
+            }
+            (1, Some(cell)) => {
+                // ドラッグしない押下は矩形を消して 1 つのカーソルにする。ドラッグは押した位置を `anchor` にした矩形
+                self.mouse_select(view, pos, pos, aff);
+                DragUnit::Box {
+                    anchor: cell,
+                    last: None,
+                    refused: false,
+                }
+            }
+            (1, None) => {
                 let anchor = match self.docs.views.get(&view) {
                     Some(v) if shift => v.selection.primary().anchor,
                     _ => pos,
@@ -217,7 +254,7 @@ impl EditorState {
                 DragUnit::Char(anchor)
             }
             // 単位を前向きに選ぶ (CLK-2 / CLK-3。空の行の単位は空なので、1 回目のカーソルのまま)
-            2 => {
+            (2, _) => {
                 let u = self.click_unit(view, pos, aff);
                 self.mouse_select(view, u.start, u.end, word_head_affinity(u.start, u.end));
                 DragUnit::Word {
@@ -225,7 +262,7 @@ impl EditorState {
                     last: None,
                 }
             }
-            _ => {
+            (_, _) => {
                 let u = self.click_line(view, pos);
                 self.mouse_select(view, u.start, u.end, Affinity::After);
                 DragUnit::Line(u)
@@ -286,10 +323,18 @@ impl EditorState {
     /// 位置の単位の端まで選ぶ (03 §5.8.2 の CLK-4。`head` は位置の側。自動スクロールもここを通る)。位置が起点の単位の中
     /// なら位置の単位を求めず、直前に求めた単位の中なら読み直さない (CLK-7)。
     fn drag_select(&mut self, drag: &mut Drag) {
+        let view = drag.view;
+        if let DragUnit::Box {
+            anchor,
+            last,
+            refused,
+        } = &mut drag.unit
+        {
+            return self.box_drag(view, drag.at, anchor, last, refused);
+        }
         let Some((pos, aff)) = self.mouse_position(drag.at) else {
             return;
         };
-        let view = drag.view;
         match &mut drag.unit {
             DragUnit::Char(anchor) => self.mouse_select(view, *anchor, pos, aff),
             DragUnit::Word { origin, last } => {
@@ -318,6 +363,43 @@ impl EditorState {
                 let (anchor, head) = unit_drag_range(origin, target, side);
                 self.mouse_select(view, anchor, head, Affinity::After);
             }
+            DragUnit::Box { .. } => {}
+        }
+    }
+
+    /// 矩形選択のモードのドラッグ (03 §4.8 の BOX-6): `anchor` からドラッグの位置までの矩形にする。ドラッグの間に文書が縮んで
+    /// いれば `anchor` の行を最後の行に丸める。矩形が前回と同じなら何もしない。行の数の上限を超えて断ったときは、上限以下
+    /// から上限超えへ変わったときだけ `info.cursor.limit` を出す (自動スクロールで超え続けても知らせを積み上げない)。
+    fn box_drag(
+        &mut self,
+        view: ViewId,
+        at: MouseAt,
+        anchor: &mut BoxPoint,
+        last: &mut Option<BoxRect>,
+        refused: &mut bool,
+    ) {
+        let Some(head) = self.box_cell(at) else {
+            return;
+        };
+        let last_line = self
+            .view_text(view)
+            .map_or(0, |t| t.len_lines().saturating_sub(1));
+        anchor.line = anchor.line.min(last_line);
+        let rect = BoxRect {
+            anchor: *anchor,
+            head,
+        };
+        if *last == Some(rect) && (*refused || self.box_rect(view) == Some(rect)) {
+            return;
+        }
+        *last = Some(rect);
+        if self.try_apply_box(view, rect) {
+            *refused = false;
+        } else {
+            if !*refused {
+                self.notify_cursor_limit();
+            }
+            *refused = true;
         }
     }
 
@@ -388,8 +470,9 @@ impl EditorState {
         }
     }
 
-    /// 面のセルに対応する文書の位置 (と折り返し位置の帰属)。03 §5.8.1 の規則。面の外の行は端の行に丸める。
-    fn mouse_position(&self, at: MouseAt) -> Option<(ByteOff, Affinity)> {
+    /// 面のセル `at` の (View, 文書, 面の行, ガターの後ろの列)。面の外の行は端の行に丸め、ガターの列は列 0 にする (03 §5.8.1 の
+    /// 「位置の確定」)。
+    fn surface_cell(&self, at: MouseAt) -> Option<(&View, &Document, usize, usize)> {
         let v = self.docs.views.get(&at.view)?;
         let d = self.docs.documents.get(&v.doc)?;
         let (cols, rows) = self.view_size(at.view);
@@ -397,6 +480,44 @@ impl EditorState {
         // どちらも 0 以上に丸めてから変換する
         let row = usize::try_from(at.row.clamp(0, (i32::from(rows) - 1).max(0))).unwrap_or(0);
         let text_col = usize::try_from(at.col.saturating_sub(gw).max(0)).unwrap_or(0);
+        Some((v, d, row, text_col))
+    }
+
+    /// 面のセルに対応する矩形の角 (論理行, 行頭からの表示列) (03 §4.8 の BOX-6)。行は §5.8.1 の「位置の確定」と同じに決め
+    /// (面の外の行は端の行、文書の末尾より下は最後の行)、表示行の中のセルはその書記素の始まりの列、表示行の末尾より右の
+    /// セルは表示行の末尾の表示列にはみ出したセルの数を足した列 (仮想の列)。折り返し ON でも論理行の行頭から数える。
+    pub(crate) fn box_cell(&self, at: MouseAt) -> Option<BoxPoint> {
+        let (v, d, row, text_col) = self.surface_cell(at)?;
+        let t = d.text();
+        let last = t.len_lines().saturating_sub(1);
+        if let Some((s, width)) = wrap_ctx(self, at.view) {
+            let (line, r) = self
+                .wrapped_row_at(at.view, row)
+                .unwrap_or_else(|| (last, line_rows(d, last, s, width).len().saturating_sub(1)));
+            let lr = line_rows(d, line, s, width);
+            return Some(BoxPoint {
+                line,
+                col: lr.display_col_at(r, text_col),
+            });
+        }
+        let line = (t.byte_to_line(v.scroll.top).0 + row).min(last);
+        let col = v.scroll.left_col as usize + text_col;
+        let (ls, le) = (
+            t.line_to_byte(LineIdx(line)).0,
+            t.line_end_byte(LineIdx(line)).0,
+        );
+        let p = byte_at_col(d, line, col);
+        let col = if ls + p < le {
+            cursor_col(d, line, p)
+        } else {
+            col
+        };
+        Some(BoxPoint { line, col })
+    }
+
+    /// 面のセルに対応する文書の位置 (と折り返し位置の帰属)。03 §5.8.1 の規則。面の外の行は端の行に丸める。
+    fn mouse_position(&self, at: MouseAt) -> Option<(ByteOff, Affinity)> {
+        let (v, d, row, text_col) = self.surface_cell(at)?;
         let t = d.text();
         let n_lines = t.len_lines();
         if let Some((s, width)) = wrap_ctx(self, at.view) {

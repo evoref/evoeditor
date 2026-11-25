@@ -978,6 +978,165 @@ fn multi_click_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     what
 }
 
+/// 矩形選択のモードで選択を伸ばすコマンド (docs/03 §4.8 の BOX-2)。
+const BOX_EXTENDS: [&str; 12] = [
+    "select.extend_left",
+    "select.extend_right",
+    "select.extend_up",
+    "select.extend_down",
+    "select.extend_word_left",
+    "select.extend_word_right",
+    "select.extend_home",
+    "select.extend_end",
+    "select.extend_page_up",
+    "select.extend_page_down",
+    "select.extend_to_doc_start",
+    "select.extend_to_doc_end",
+];
+
+/// フォーカスのペインの View の矩形 (docs/03 §4.8 の BOX-3) の検査: 矩形があれば、Range の数が矩形の行の数以下で、各 Range が
+/// 1 つの行の中にあり、その行は矩形の行の範囲にあって、同じ行に 2 つの Range が無い。
+fn check_box(h: &Harness, what: &str) {
+    use eve_text::TextRead;
+    let st = h.editor.state();
+    let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
+        return;
+    };
+    let (Some((rows, _)), Some((top, bottom)), Some(v)) =
+        (st.box_size(view), st.box_lines(view), st.view(view))
+    else {
+        return;
+    };
+    let Some(d) = st.document(v.doc) else {
+        return;
+    };
+    let t = d.text();
+    assert!(
+        v.selection.len() <= rows,
+        "矩形の Range の数 {} が行の数 {rows} 以下 ({what})",
+        v.selection.len()
+    );
+    let mut prev: Option<usize> = None;
+    for r in v.selection.iter() {
+        let line = t.byte_to_line(r.start()).0;
+        assert_eq!(
+            line,
+            t.byte_to_line(r.end()).0,
+            "矩形の Range {r:?} は 1 つの行の中 ({what})"
+        );
+        assert!(
+            (top..=bottom).contains(&line),
+            "矩形の Range {r:?} の行 {line} は矩形の行 {top}〜{bottom} の中 ({what})"
+        );
+        assert!(
+            prev.is_none_or(|p| p < line),
+            "矩形の Range は行ごとに 1 つ ({what})"
+        );
+        prev = Some(line);
+    }
+}
+
+/// 矩形選択 (docs/03 §4.8 の BOX-1〜BOX-9、§15.9.1 と docs/09 §3.3 の `fuzz_editor`。v0.5 の M34 の段 7)。半分は 1〜8 個の
+/// Range を置いてから矩形選択のモードを入れ、選択を伸ばすコマンド (`count` 付きを含む)・面のセル (面の外を含む) のドラッグと
+/// 自動スクロール・`Shift` 付きのクリックを 1〜6 回混ぜる。編集の無い間は文書を変えず、矩形の検査 (`check_box`) を満たすことを
+/// 確かめる。半分は続けてコピーか切り取りと貼り付け・文字の入力・Undo のどれかをし、最後に `Esc` を 0〜3 回押す。
+fn box_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    use eve_view::{Modifiers, MouseButton, MouseKind};
+    let placed = if b.u8() & 1 == 0 {
+        place_ranges(h, b)
+    } else {
+        None
+    };
+    let st = h.editor.state();
+    let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
+        return "box (View なし)".to_owned();
+    };
+    if !st.box_mode(view) {
+        h.cmd("select.toggle_box");
+    }
+    let before = h.doc_text();
+    let mut what = format!("box ranges {placed:?}");
+    for _ in 0..1 + b.u8() % 6 {
+        match b.u8() % 4 {
+            0 | 1 => {
+                let id = BOX_EXTENDS[usize::from(b.u8()) % BOX_EXTENDS.len()];
+                if b.u8() & 1 == 0 {
+                    h.cmd(id);
+                    what.push_str(&format!(" {id}"));
+                } else {
+                    let n = 1 + i64::from(b.u8() % 20);
+                    h.cmd_with(id, Args::new().with_int("count", n));
+                    what.push_str(&format!(" {id}×{n}"));
+                }
+            }
+            2 => {
+                let (r0, c0) = (i32::from(b.u8() % 40) - 4, i32::from(b.u8()));
+                let (r1, c1) = (i32::from(b.u8() % 80) - 20, i32::from(b.u8()));
+                let ms = u64::from(b.u8() % 4) * 50;
+                // 多重クリックに数えないよう、押す前に時計を間隔より進める
+                h.advance_ms(eve_core::DOUBLE_CLICK_MS.0 + 1);
+                h.mouse(MouseKind::Down(MouseButton::Left), Modifiers::NONE, r0, c0);
+                h.mouse(MouseKind::Drag(MouseButton::Left), Modifiers::NONE, r1, c1);
+                h.advance_ms(ms);
+                h.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, r1, c1);
+                what.push_str(&format!(" drag {r0},{c0} → {r1},{c1} +{ms}ms"));
+            }
+            _ => {
+                let (r, c) = (i32::from(b.u8() % 40) - 4, i32::from(b.u8()));
+                h.mouse(MouseKind::Down(MouseButton::Left), Modifiers::SHIFT, r, c);
+                h.mouse(MouseKind::Up(MouseButton::Left), Modifiers::SHIFT, r, c);
+                what.push_str(&format!(" shift+click {r},{c}"));
+            }
+        }
+        check_box(h, &what);
+    }
+    assert_eq!(h.doc_text(), before, "矩形の選択は文書を変えない ({what})");
+    if b.u8() & 1 == 0 {
+        match b.u8() % 4 {
+            0 | 1 => {
+                let cut = b.u8() & 1 == 0;
+                h.cmd(if cut {
+                    "clipboard.cut"
+                } else {
+                    "clipboard.copy"
+                });
+                // 貼り付ける前に矩形を動かす (高さが同じ・違う矩形)
+                if b.u8() & 1 == 0 {
+                    let id = BOX_EXTENDS[usize::from(b.u8()) % BOX_EXTENDS.len()];
+                    h.cmd(id);
+                }
+                let seen = h.effects().len();
+                h.cmd("edit.paste");
+                let token = h.effects()[seen..].iter().rev().find_map(|e| match e {
+                    eve_view::Effect::RequestClipboard { token, .. } => Some(*token),
+                    _ => None,
+                });
+                let t = (b.u8() & 1 == 0).then(|| b.text(24));
+                if let Some(token) = token {
+                    h.clipboard_content(token, t.as_deref());
+                }
+                what.push_str(&format!(" cut {cut} + edit.paste {t:?}"));
+            }
+            2 => {
+                let t = b.text(4);
+                h.text(&t);
+                what.push_str(&format!(" text {t:?}"));
+            }
+            _ => {
+                h.cmd("edit.undo");
+                what.push_str(" undo");
+            }
+        }
+        check_box(h, &what);
+    }
+    let esc = b.u8() % 4;
+    for _ in 0..esc {
+        h.keys("escape");
+    }
+    let _ = h.frame();
+    format!("{what} esc ×{esc}")
+}
+
 /// 行コメントの切替 (docs/03 §15.6、docs/09 §3.3 の `fuzz_editor`。v0.5 の M33 の段 3)。半分は先に文書の言語を記号のある言語
 /// (`#`・`//`・`;`) か `plain` に替え、フォーカスのペインの View に 1〜8 個の Range (重なり・同じ位置・逆向き・文書の外を
 /// 含む) を置いて `edit.toggle_comment` を 1〜2 回実行し、ときどき Undo する。
@@ -1301,7 +1460,7 @@ pub fn editor_sequence(data: &[u8]) {
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
         // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
         // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で、保存時の変換 (M34) は操作 31 で、ダブル / トリプルクリック (M34) は操作 32 で、ジャンプ履歴
-        // (M34) は操作 33 で選ぶ
+        // (M34) は操作 33 で、矩形選択 (M34) は操作 34 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1323,6 +1482,7 @@ pub fn editor_sequence(data: &[u8]) {
                         | "select.shrink"
                         | "cursor.jump_back"
                         | "cursor.jump_forward"
+                        | "select.toggle_box"
                 )
         })
         .collect();
@@ -1345,7 +1505,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 34 {
+        match b.u8() % 35 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1537,6 +1697,11 @@ pub fn editor_sequence(data: &[u8]) {
             33 => {
                 // ジャンプ履歴 (v0.5 の M34 の段 8。docs/03 §5.9)
                 let what = jump_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            34 => {
+                // 矩形選択 (v0.5 の M34 の段 7。docs/03 §4.8)
+                let what = box_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

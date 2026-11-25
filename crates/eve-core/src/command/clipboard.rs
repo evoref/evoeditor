@@ -3,7 +3,8 @@
 //! コピーは常に内部レジスタへ書き (Snapshot と範囲を持つだけ。O(1))、システムクリップボードへは Effect で依頼する。
 //! 64 KiB 未満は文字列にして `Inline`、それ以上はハンドルで渡し、Host が `take_clipboard` で取り出してワーカーで文字列化する。
 //! 貼り付けは `RequestClipboard` で読み取りを要求し、応答 (`ClipboardContent`) が届いた時点の Selection に入れる。
-//! 複数カーソルのコピーは、空でない Range ごとの片を内部レジスタに持つ (03 §4.5.3 の MCUR-8)。
+//! 複数カーソルのコピーは、空でない Range ごとの片を内部レジスタに持つ (03 §4.5.3 の MCUR-8)。矩形のコピーは、矩形の行ごとの
+//! 片を持つ (03 §4.8 の BOX-4)。
 //!
 //! 不正バイトのエスケープ文字 (v0.4 の M23、03 §8.3.1 の「本文に入れる規則」): 内部レジスタはエスケープ文字のまま持ち、
 //! コピー元の `notation` と `escape_origin` を覚える。システムのクリップボードへ渡す文字列は `ClipboardSource::to_text`
@@ -223,23 +224,26 @@ impl EditorState {
 
     /// 選択をコピーする。空でない Range が無ければ何もしない (`false`)。内部レジスタへ書き、`SetClipboard` を積む。
     /// 空でない Range を文書の順に片にし、文書の既定の改行で連結する (03 §4.5.3 の MCUR-8。空のカーソルは数えない)。
+    /// 矩形があれば、矩形の行ごとに 1 つの片にする (Range の無い短い行は空の片。03 §4.8 の BOX-4)。
     pub(crate) fn copy_selection(&mut self) -> bool {
         let Some(doc_id) = self.active_document() else {
             return false;
         };
-        let Some(view) = self
-            .focused_window()
-            .and_then(|w| self.window_view(w))
-            .and_then(|v| self.docs.views.get(&v))
-        else {
+        let Some(view_id) = self.focused_window().and_then(|w| self.window_view(w)) else {
             return false;
         };
-        let pieces: Vec<ByteRange> = view
-            .selection
-            .iter()
-            .filter(|r| !r.is_empty())
-            .map(|r| ByteRange::new(r.start(), r.end()))
-            .collect();
+        let Some(view) = self.docs.views.get(&view_id) else {
+            return false;
+        };
+        let pieces: Vec<ByteRange> = match self.box_copy_pieces(view_id) {
+            Some(pieces) => pieces,
+            None => view
+                .selection
+                .iter()
+                .filter(|r| !r.is_empty())
+                .map(|r| ByteRange::new(r.start(), r.end()))
+                .collect(),
+        };
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return false;
         };
