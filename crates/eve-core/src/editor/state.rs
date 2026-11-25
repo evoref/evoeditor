@@ -257,6 +257,15 @@ pub(crate) struct IoState {
     /// 保存の連鎖の「変換を判定した」印 (文書ごと。03 §9.3.1 の SVT-4 (c))。連鎖の入口で「未判定」にし、保存ジョブを
     /// 投入する直前に 1 回だけ判定する。保存の成功で外す。
     pub(crate) save_transforms: BTreeMap<DocumentId, crate::io::save_transform::SaveTransform>,
+    /// 保存中 (`Saving`、後続なし) に届いた同じ文書の保存要求の待ち行列 (文書ごとに深さ 1、03 §9.3 手順 4・§9.7 の全状態の
+    /// 遷移表の `file.save` の列)。前の保存が `Saved` で終わったら再実行し、失敗・取消しでは捨てる。
+    pub(crate) save_queue: BTreeMap<DocumentId, crate::io::save::QueuedSave>,
+    /// 再実行を待つ保存要求 (届いた順)。オーバーレイ・検索バーが出ている間は再実行を保留し、閉じた後に流す (利用者が開いた
+    /// 入力・確認を、再実行の確認・名前の入力で黙って置き換えない。03 §12.7.6 の細目 (7) の `held_save_as` と同じ)。
+    pub(crate) held_queued_saves: Vec<(DocumentId, crate::io::save::QueuedSave)>,
+    /// 前の保存の警告・エラーが表示中に再実行した文書。再実行の完了のメッセージは背景の知らせとして出し、表示中の警告を
+    /// 置き換えない (履歴には残す)。
+    pub(crate) quiet_save_done: BTreeSet<DocumentId>,
 }
 
 /// 検索: 文書内検索の状態・検索バー・再検索の予約・全件の検索のジョブ (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -294,6 +303,9 @@ pub(crate) struct UiState {
     pub(crate) overlay: Option<crate::ui_model::overlay::Overlay>,
     /// 保存ジョブの完了後に続ける操作。
     pub(crate) continuations: BTreeMap<JobId, crate::ui_model::overlay::Continuation>,
+    /// `Esc` で後続を取り消した保存ジョブ (03 §9.7 の `cancel_origin = User`)。取消しは送り済みで、結果を待つ。
+    /// 「保存を中止して終了」(`cancel_origin = QuitAbort`) は `quit_abort` が表す。
+    pub(crate) save_cancelled_by_user: BTreeSet<JobId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
     pub(crate) quit_chain: Option<crate::ui_model::overlay::QuitChain>,
     /// 保存中に終了を求められている (03 §9.7 (f))。
@@ -410,6 +422,7 @@ impl EditorState {
             ui: UiState {
                 overlay: None,
                 continuations: BTreeMap::new(),
+                save_cancelled_by_user: BTreeSet::new(),
                 quit_chain: None,
                 quit_wait: None,
                 quit_abort: None,
@@ -460,6 +473,9 @@ impl EditorState {
                 system_encoding: None,
                 transform_sync_bytes: crate::document::transform::TRANSFORM_SYNC_BYTES,
                 save_transforms: BTreeMap::new(),
+                save_queue: BTreeMap::new(),
+                held_queued_saves: Vec::new(),
+                quiet_save_done: BTreeSet::new(),
                 log_path: None,
                 config_sources: None,
                 theme_name_at: None,

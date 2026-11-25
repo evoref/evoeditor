@@ -174,8 +174,9 @@ fn 保存中の入力は新しいノードになり_dirty_のまま残る() {
     assert!(doc(&s).1.is_dirty(), "保存中の編集は dirty のまま");
 }
 
+// spec: 03 §9.3 手順 4、03 §9.7 の全状態の遷移表 (`Saving` (`cont` が None) の `file.save` は深さ 1 の待ち行列に積む)
 #[test]
-fn 保存中の二重の保存要求は無視する() {
+fn 保存中の二重の保存要求は積み_保存の間に編集が無ければ再実行しない() {
     let mut s = env();
     s.fs.add_file("/w/a.txt", b"abc");
     open(&mut s, "/w/a.txt");
@@ -184,9 +185,15 @@ fn 保存中の二重の保存要求は無視する() {
     s.cmd("file.save");
     let second = s.cmd("file.save");
     assert_eq!(second, CommandResult::Done);
-    assert!(messages(&mut s).contains(&"info.save.in_progress".to_owned()));
+    // 積んだ要求は知らせない (04 §15.2 の `info.save.in_progress`。v0.4 までは知らせて捨てていた、#648)
+    assert!(!messages(&mut s).contains(&"info.save.in_progress".to_owned()));
     s.run_jobs();
     assert_eq!(s.pending_jobs(), 0);
+    let done = messages(&mut s)
+        .iter()
+        .filter(|m| *m == "info.save.done")
+        .count();
+    assert_eq!(done, 1, "前の保存が最新の本文を書いたので再実行しない");
 }
 
 #[test]
@@ -537,8 +544,9 @@ fn 名前を付けて保存の失敗はパスと_stamp_を変えない() {
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xabc");
 }
 
+// spec: 03 §9.3 手順 4、03 §9.7 の全状態の遷移表 (`file.save` の列は `file.save_as` を含む)
 #[test]
-fn 保存の待ちの間の名前を付けて保存は無視する() {
+fn 保存の待ちの間の名前を付けて保存は積み_保存の後に新しい要求として再実行する() {
     let mut s = env();
     s.fs.add_file("/w/a.txt", b"abc");
     open(&mut s, "/w/a.txt");
@@ -547,9 +555,11 @@ fn 保存の待ちの間の名前を付けて保存は無視する() {
     messages(&mut s);
     let r = s.cmd_with("file.save_as", Args::new().with_str("path", "/w/a.txt"));
     assert_eq!(r, CommandResult::Done);
-    assert!(messages(&mut s).contains(&"info.save.in_progress".to_owned()));
+    assert!(!messages(&mut s).contains(&"info.save.in_progress".to_owned()));
     s.run_jobs();
     assert_eq!(s.pending_jobs(), 0);
+    // 同じファイルへの名前を付けて保存は上書き保存として扱う (03 §9.7 (a) の 1)。前の保存の後は未編集なので書かない
+    assert!(messages(&mut s).contains(&"info.save.unchanged".to_owned()));
 }
 
 #[test]

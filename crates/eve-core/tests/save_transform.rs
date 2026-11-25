@@ -491,7 +491,7 @@ fn 書けずに終わっても変換は本文に残り_1_回の_undo_で戻り_�
     undo(&mut h);
     assert_eq!(h.doc_text(), "xa  ");
     assert_eq!(disk(&h, PATH), "a  ");
-    // 外部変更で中止 (今の実装は確認のキャンセルでメッセージを出さないが、変換が残れば中止と付記を出す)
+    // 外部変更で中止 (確認のキャンセルは中止。03 §9.7 の「中止」)
     let mut h = start(config(true, true), "a  ");
     type_at_start(&mut h, "x");
     h.fs.set_file(&FsPath::new(PATH), b"other");
@@ -502,15 +502,19 @@ fn 書けずに終わっても変換は本文に残り_1_回の_undo_で戻り_�
         format!("保存を中止しました (/w/a.txt は書き換えていません) {KEPT_UNDO}")
     );
     assert_eq!(h.doc_text(), "xa\n");
-    // 変換が無ければ (設定が偽) 外部変更のキャンセルは v0.4 と同じく何も出さない (中止のメッセージを出さないのは
-    // 今の実装の食い違いで #647。直したらこの検査も変える)
+    // 変換が無ければ (設定が偽) 外部変更のキャンセルは中止のメッセージだけを出し、付記を付けない (#647 で、確認の
+    // キャンセルでも `info.save.aborted` を出すように直した。v0.4 までは何も出さなかった)
     let mut h = start(Config::default(), "a  ");
     type_at_start(&mut h, "x");
     h.fs.set_file(&FsPath::new(PATH), b"other");
     save(&mut h);
     h.clear_log();
     h.keys("esc");
-    assert!(h.messages().is_empty(), "{:?}", h.messages());
+    assert_eq!(h.messages(), ["info.save.aborted"]);
+    assert_eq!(
+        message(&mut h),
+        "保存を中止しました (/w/a.txt は書き換えていません)"
+    );
     // 退避先に保存 (容量不足。書込権限なしは変換を戻す、下の試験)
     let mut h = start(config(true, true), "a  ");
     type_at_start(&mut h, "x");
@@ -1154,7 +1158,8 @@ fn 保存のジョブを待つ間は印を変えず_再試行で後から打っ�
     h.fs.fail_next(FsOp::WriteAtomic, FsErrorKind::Busy);
     h.cmd("file.save");
     assert_eq!(h.doc_text(), "xa");
-    // 保存のジョブを待つ間に行末に空白を打ち、もう一度保存する (保存中なので無視する、#648)
+    // 保存のジョブを待つ間に行末に空白を打ち、もう一度保存する (深さ 1 の待ち行列に積むが、前の保存が失敗したので
+    // 捨てる。続きは確認の選択で決める、03 §9.3 手順 4)
     h.advance_ms(5_000);
     h.keys("ctrl+end");
     h.text("  ");
