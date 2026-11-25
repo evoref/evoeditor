@@ -5,6 +5,7 @@
   "editor.backspace_unit": "grapheme",
   "editor.trim_trailing_whitespace_on_save": false,
   "editor.insert_final_newline_on_save": false,
+  "editor.auto_pairs": false,
   "editor.undo.total_max_bytes": 268435456,
   "file.default_encoding": "utf-8",
   "file.default_line_ending": "lf",
