@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 123 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 124 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -117,6 +117,7 @@
 | `select.extend_word_right` | 単語の右へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+Shift+→`, `Alt+Shift+→` | 出す |
 | `select.line` | 行を選択 | Motion | — | — | `read` | `editor`: `Ctrl+L` | 出す |
 | `select.shrink` | 選択を縮める | Motion | — | — | `read` | `editor`: `Alt+I`, `Ctrl+K I` | 出す |
+| `select.toggle_box` | 矩形選択のモードを切り替え | Ui | — | — | `ui` | `editor`: `Ctrl+K B` | 出す |
 | `ui.cancel` | 取り消し | Ui | — | — | `-` | `editor`: `Esc`<br>`prompt`: `Esc`<br>`dialog`: `Esc`<br>`help`: `Esc` | 出す |
 | `ui.confirm` | 決定 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `prompt`: `Enter`<br>`dialog`: `Enter` | 出さない |
 | `ui.dialog_choose` | 選択肢を選ぶ | Ui | `choice`: `int` | `overlay.active == "dialog"` | `-` | — | 出さない |
