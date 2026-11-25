@@ -172,7 +172,7 @@ fn priorities(doc01: &str) -> BTreeMap<String, String> {
 }
 
 /// 行列に並べる版 (01 §5.5 の `要件` 列の版の注記)。v0.3 は整理の版で §5.5 に行が無い。次の版の行を足したら、ここにも足す。
-const VERSIONS: &[&str] = &["v0.2", "v0.4"];
+const VERSIONS: &[&str] = &["v0.2", "v0.4", "v0.5"];
 
 /// ベンチの表 (09 §5.2) の見出し。
 const BENCH_HEADING: &str = "### 5.2 NFR とベンチ ID の対応";
