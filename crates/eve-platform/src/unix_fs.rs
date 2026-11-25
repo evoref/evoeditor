@@ -338,6 +338,7 @@ impl FileSystem for UnixFs {
         fs::remove_file(path.as_path()).map_err(|e| map_io_error(e, path))
     }
 
+    // spec: 05 §4.1, 05 §4.3
     fn write_atomic(
         &self,
         path: &FsPath,
@@ -670,12 +671,12 @@ impl FileSystem for UnixFs {
 
         hooks::point("after_replace");
         // 7. 事後: 置換後の T が自分の書いたものかを確かめて new_stamp にする (rename・renameat2・link の退路のどれも同じ規則)。
-        // 確かめられなければ自分の書いた値を返して警告を積む (次の保存の照合は、中身が同じでなければ Conflict になる)
-        let Ok(after) = self.metadata(&target_path) else {
-            return Err(FsError::new(FsErrorKind::Other));
-        };
-        let new_stamp =
-            save_check::verify(&written, &after, across_replace).into_stamp(&mut warnings);
+        // 確かめられなければ自分の書いた値を返して警告を積む (次の保存の照合は、中身が同じでなければ Conflict になる)。
+        // 事後の metadata を取れなくても、T はもう新しい内容なので保存は成功のまま返し、自分の書いた値と警告にする
+        // (後片付けも同じに行う。直接上書きの SAF-20 と揃える。Issue #637)
+        let after = self.metadata(&target_path).ok();
+        let new_stamp = save_check::after_replace(&written, after.as_ref(), across_replace)
+            .into_stamp(&mut warnings);
         // 8. 成功: フラグ (と同じキーに残る他の記録) を消す。一時ファイルが残ったときは自分のフラグを残す (SAF-40)
         if !leftover_tmp {
             flag.finish_success();
@@ -1352,6 +1353,125 @@ true
             e.detail,
             Some(FsErrorDetail::Hardlink { nlink: 2 })
         ));
+    }
+
+    // ---- 置換の後に事後の metadata(T) を取れないとき (05 §4.1 手順 7、Issue #637) ----
+    // 呼び出し点 `after_replace` (hooks::on_point) で T を消すか、親のディレクトリの検索の権限を外して metadata を失敗させる。
+    // 既存の T の rename と新規ファイルの renameat2 は save_check の on_disk の試験 (Windows と Linux) が確かめる
+
+    /// `after_replace` で T を消す (事後の metadata(T) は `NotFound`)。
+    fn remove_after_replace(a: &Path) {
+        let a = a.to_path_buf();
+        hooks::on_point("after_replace", move || {
+            fs::remove_file(&a).expect("T を消す");
+        });
+    }
+
+    #[test]
+    fn 退路の_link_で作った後に事後の_metadata_を取れなくても成功のまま警告しフラグを消す() {
+        let t = Tmp::new("postmeta-link");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        let _g = hooks::inject_errno("rename_noreplace", libc::ENOSYS);
+        remove_after_replace(&a);
+        let r = save(&ufs, &a, b"one\n", Expect::Absent).expect("失敗にしない");
+        assert_eq!(r.method, SaveMethod::NewFile);
+        assert_eq!(r.warnings, vec![SaveWarning::ChangedAfterSave]);
+        assert_eq!(r.new_stamp.len, 4, "自分の書いた長さ");
+        assert!(r.new_stamp.file_id.is_some(), "控えた識別");
+        assert!(!a.exists());
+        assert_eq!(leftovers_outside_state(&t), Vec::<String>::new());
+        assert_eq!(flag_files(&t), 0, "保存中フラグを消す");
+    }
+
+    // 退路の link の後に一時ファイルを消せなかったときは、事後の metadata を取れなくても、フラグを残す規則 (SAF-40) のまま
+    #[test]
+    fn 退路で一時ファイルも事後の_metadata_も失敗すれば両方を警告しフラグを残す() {
+        let t = Tmp::new("postmeta-link-unlink");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        let _g1 = hooks::inject_errno("rename_noreplace", libc::ENOSYS);
+        let _g2 = hooks::inject_errno("unlink_after_link", libc::EIO);
+        remove_after_replace(&a);
+        let r = save(&ufs, &a, b"one\n", Expect::Absent).expect("失敗にしない");
+        let tmp = leftovers_outside_state(&t)
+            .into_iter()
+            .find(|n| n.contains(".eve-tmp-"))
+            .expect("一時ファイルが残る");
+        assert_eq!(
+            r.warnings,
+            vec![
+                SaveWarning::TempNotRemoved {
+                    path: FsPath::new(t.p(&tmp))
+                },
+                SaveWarning::ChangedAfterSave
+            ]
+        );
+        assert_eq!(flag_files(&t), 1, "フラグは残る");
+    }
+
+    /// 落とすと (パニックでも) ディレクトリの権限を `0o755` に戻す (作業ディレクトリを消せるように)。
+    struct RestoreMode(PathBuf);
+
+    impl Drop for RestoreMode {
+        fn drop(&mut self) {
+            let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+        }
+    }
+
+    // 権限で取れない (EACCES): 置換の後に親のディレクトリの検索の権限を外す。root は外しても取れるので確かめない
+    #[test]
+    fn 置換の後に事後の_metadata_が_eacces_でも成功のまま警告しフラグを消す() {
+        if euid() == 0 {
+            return; // root は検索の権限に縛られない
+        }
+        let t = Tmp::new("postmeta-eacces");
+        let ufs = with_state(&t);
+        let sub = t.p("sub");
+        fs::create_dir(&sub).unwrap();
+        let _restore = RestoreMode(sub.clone());
+        let a = sub.join("a.txt");
+        fs::write(&a, b"old\n").unwrap();
+        let expect = stamp_of(&ufs, &a);
+        let blocked = std::rc::Rc::new(std::cell::Cell::new(false));
+        {
+            let (a, sub, blocked) = (a.clone(), sub.clone(), std::rc::Rc::clone(&blocked));
+            hooks::on_point("after_replace", move || {
+                fs::set_permissions(&sub, fs::Permissions::from_mode(0o600)).unwrap();
+                blocked
+                    .set(fs::metadata(&a).is_err_and(|e| e.raw_os_error() == Some(libc::EACCES)));
+            });
+        }
+        let r = save(&ufs, &a, b"new\n", expect);
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            blocked.get(),
+            "割り込みで事後の metadata が EACCES になっていない"
+        );
+        let r = r.expect("失敗にしない");
+        assert_eq!(r.method, SaveMethod::Atomic);
+        assert_eq!(r.warnings, vec![SaveWarning::ChangedAfterSave]);
+        assert_eq!(r.new_stamp.len, 4, "自分の書いた長さ");
+        // 識別も更新時刻も控えられたので、控えた値はディスクの値と同じ (Port の照合 (mtime, len, FileId) が合い、
+        // 被せられていなければ次の保存は通る)。控えられなかった更新時刻の最小値 (照合で必ず止まる) は save_check の単体試験
+        let disk = FileStamp::from_meta(&ufs.metadata(&FsPath::new(a.clone())).unwrap(), None);
+        assert_eq!(r.new_stamp, disk, "控えた値はディスクの値と同じ");
+        assert_eq!(fs::read(&a).unwrap(), b"new\n");
+        assert_eq!(flag_files(&t), 0, "保存中フラグを消す");
+        assert!(
+            fs::read_dir(&sub)
+                .unwrap()
+                .flatten()
+                .all(|e| !e.file_name().to_string_lossy().contains(".eve-")),
+            "一時ファイルを残さない"
+        );
+        // (i) 同じ長さの別の内容をパスで被せる (rename で置き換える): 識別が変わるので、次の保存は照合で Conflict
+        let other = sub.join("other");
+        fs::write(&other, b"them").unwrap();
+        fs::rename(&other, &a).unwrap();
+        let e = save(&ufs, &a, b"next", Expect::Stamp(r.new_stamp)).unwrap_err();
+        assert!(matches!(e.kind, FsErrorKind::Conflict { .. }), "{e:?}");
+        assert_eq!(fs::read(&a).unwrap(), b"them", "他者の内容が残る");
     }
 
     // 05 §4.1 手順 6・§4.3: ディレクトリの fsync の失敗は (置換の後なので) 警告にする
