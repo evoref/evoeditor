@@ -5018,21 +5018,21 @@ title = "依存関係とクリティカルパス"
 id = "08 §7"
 file = "docs/08-roadmap.md"
 line = 417
-end = 440
+end = 441
 title = "繰り越し記録"
 
 [[section]]
 id = "08 §8"
 file = "docs/08-roadmap.md"
-line = 441
-end = 466
+line = 442
+end = 467
 title = "1.0 の判定"
 
 [[section]]
 id = "08 §8.1"
 file = "docs/08-roadmap.md"
-line = 446
-end = 466
+line = 447
+end = 467
 title = "TUI 完成の定義 (OQ-151)"
 
 [[section]]
@@ -10403,37 +10403,37 @@ section = "08 §3"
 [[id]]
 id = "TC-1"
 file = "docs/08-roadmap.md"
-line = 452
+line = 453
 section = "08 §8.1"
 
 [[id]]
 id = "TC-2"
 file = "docs/08-roadmap.md"
-line = 453
+line = 454
 section = "08 §8.1"
 
 [[id]]
 id = "SB-1"
 file = "docs/08-roadmap.md"
-line = 459
+line = 460
 section = "08 §8.1"
 
 [[id]]
 id = "SB-2"
 file = "docs/08-roadmap.md"
-line = 460
+line = 461
 section = "08 §8.1"
 
 [[id]]
 id = "SB-3"
 file = "docs/08-roadmap.md"
-line = 461
+line = 462
 section = "08 §8.1"
 
 [[id]]
 id = "SB-4"
 file = "docs/08-roadmap.md"
-line = 462
+line = 463
 section = "08 §8.1"
 
 [[id]]
