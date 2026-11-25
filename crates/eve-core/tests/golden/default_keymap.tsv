@@ -195,3 +195,7 @@ finder	Alt+R	search.toggle_regex	Args({})	ContextExpr(Some(Cmp { var: "overlay.a
 finder	Ctrl+K X	search.toggle_regex	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
 finder	Alt+W	search.toggle_word	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
 finder	Ctrl+K B	search.toggle_word	Args({})	ContextExpr(Some(Cmp { var: "overlay.active", value: "workspace_search", equal: true }))	false
+prompt	Alt+Up	ui.history_prev	Args({})	ContextExpr(Some(Or(And(Cmp { var: "overlay.active", value: "", equal: true }, Var("search.active")), Cmp { var: "overlay.active", value: "workspace_search", equal: true })))	false
+prompt	Alt+Down	ui.history_next	Args({})	ContextExpr(Some(Or(And(Cmp { var: "overlay.active", value: "", equal: true }, Var("search.active")), Cmp { var: "overlay.active", value: "workspace_search", equal: true })))	false
+prompt	Ctrl+K Up	ui.history_prev	Args({})	ContextExpr(Some(Or(And(Cmp { var: "overlay.active", value: "", equal: true }, Var("search.active")), Cmp { var: "overlay.active", value: "workspace_search", equal: true })))	false
+prompt	Ctrl+K Down	ui.history_next	Args({})	ContextExpr(Some(Or(And(Cmp { var: "overlay.active", value: "", equal: true }, Var("search.active")), Cmp { var: "overlay.active", value: "workspace_search", equal: true })))	false

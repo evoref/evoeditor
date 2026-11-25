@@ -111,6 +111,8 @@ select.toggle_box	Ui	Ui	—
 ui.cancel	Ui	None	—
 ui.confirm	Ui	None	overlay.active != "" || search.active
 ui.dialog_choose	Ui	None	overlay.active == "dialog"
+ui.history_next	Ui	None	(overlay.active == "" && search.active) || overlay.active == "workspace_search"
+ui.history_prev	Ui	None	(overlay.active == "" && search.active) || overlay.active == "workspace_search"
 ui.list_next	Ui	None	overlay.active != "" || search.active
 ui.list_page_down	Ui	None	overlay.active != "" || search.active
 ui.list_page_up	Ui	None	overlay.active != "" || search.active
