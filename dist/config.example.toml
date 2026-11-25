@@ -24,6 +24,9 @@ trim_trailing_whitespace_on_save = false
 # 保存するときに、改行で終わらない文書の末尾に改行を 1 つ足す (false でも、ある改行は取り除きません)。
 # .editorconfig の insert_final_newline で替わります。
 insert_final_newline_on_save = false
+# 括弧・引用符の自動閉じ: ( [ { " ` を打つと閉じ字を足し、カーソルを間に置く (直後が行末・空白・閉じ字・句読点のときだけ)。
+# 組は言語定義の auto_pairs で言語ごとに替えられます (auto_pairs = {} でその言語だけ止める)。貼り付けでは足しません。
+auto_pairs = false
 
 [editor.undo]
 # 開いているすべての文書の、元に戻す履歴の合計の上限 (バイト。1048576〜1099511627776)。

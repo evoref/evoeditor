@@ -62,7 +62,7 @@ fn check_config_は言語定義のファイルと設定ファイルの言語定�
     std::fs::create_dir_all(d.join("languages")).unwrap();
     std::fs::write(
         d.join("languages").join("a.toml"),
-        "[[language]]\nname = \"go\"\nauto_pairs = { \"(\" = \")\" }\nindent = { width = 0 }\n",
+        "[[language]]\nname = \"go\"\nword_separators = \"\"\nindent = { width = 0 }\n",
     )
     .unwrap();
     let (code, out) = run(&d, &["--check-config"]);

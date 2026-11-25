@@ -1078,6 +1078,8 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 
 - **行の選択のキーの注意 (v0.5 の M34 の段 5)**: 「端末の設定」の節の複数カーソルへの貼り付けの行の後ろに、2 行を出す (文言は §15.2 の `ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`。07 §11.6 の「編集の拡張」のキーの選び方): 従来の端末では `Ctrl+Shift+L` が `Ctrl+L` (行の選択) として届くので、一致をすべて選ぶには `Ctrl+K E` を使う。画面の再描画は `Ctrl+K R` (`Ctrl+L` は行の選択)。
 
+- **自動閉じと貼り付けの注意 (v0.5 の M34 の段 4)**: 「端末の設定」の節の行の選択のキーの注意の 2 行の後ろに、1 行を出す (文言は §15.2 の `ui.help.terminal.auto_pairs_paste`。03 §15.7 の APR-8、01 §4.6 の既知の制約): 自動閉じ (`editor.auto_pairs`) を使っているときは `Ctrl+K V` で貼り付ける (ブラケットペーストの無い端末と Windows Terminal の短い貼り付けは打鍵として届き、閉じ字が足されることがある)。設定の値に依らず出す。
+
 - **標準入力の注意 (v0.4 の M25 の (9))**: 「端末の設定」の節の README の行の前に、標準入力 (`cmd | evoeditor -`) の既知の制約を 4 行で出す (07 §18.5 と同じ内容。文言は §15.2 の `ui.help.terminal.stdin_*`): 書き手が端末から読むコマンド (`cat` 単独・対話のスクリプト) ではキー入力を取り合う。書き手の stderr が画面に出たら `ui.redraw` で描き直す。Windows PowerShell 5.1 のパイプは非 ASCII を `?` に置き換える (`--encoding` でも直らない) ので、PowerShell 7.4 以降か `cmd /c "evoeditor - < file"` を使う。Windows で書込の誤りを無視するプログラム (`ping -t` など) は、読むのをやめても動き続ける (evoeditor の終了後に Ctrl+C)。
 
 ### 8.7 ステータスバー (FR-503)
@@ -1286,7 +1288,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.16 編集の拡張 (Could) の文言の案 (v0.5 の M34)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。段 8 の PR で、ジャンプ履歴の文言 (`cmd.cursor.jump_back` / `cmd.cursor.jump_forward`・`info.jump.no_back` / `info.jump.no_forward`) を同じく移した。段 7 の PR で、矩形選択の文言 (`cmd.select.toggle_box`・`status.box.*`・`status.box_mode.*`) を言語ファイルと §15.1 の目録へ移した。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §15.9.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。段 5 の PR で、選択の拡張の文言 (`cmd.select.line` / `cmd.select.expand` / `cmd.select.shrink`・`ui.help.terminal.ctrl_shift_l` / `ui.help.terminal.redraw`) を言語ファイルと §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。段 8 の PR で、ジャンプ履歴の文言 (`cmd.cursor.jump_back` / `cmd.cursor.jump_forward`・`info.jump.no_back` / `info.jump.no_forward`) を同じく移した。段 7 の PR で、矩形選択の文言 (`cmd.select.toggle_box`・`status.box.*`・`status.box_mode.*`) を言語ファイルと §15.1 の目録へ移した。段 4 の PR で、自動閉じの文言 (`msg.language.bad_auto_pairs`・`ui.help.terminal.auto_pairs_paste`) を言語ファイルと §15.2 の目録へ移した。`{rows}`・`{cols}`・`{lines}` は整数。`{detail}` は core が `info.save.transformed.trimmed` / `.final_newline` の 2 つの文言を `info.save.transformed.separator` でつないで組み立てる。`{key:edit.undo}` は割当のキーの表記 (07 §17.2)。`{item}` (`msg.language.bad_auto_pairs`) は設定ファイル由来の文字列で、§8.15 と同じく無害化してから入れる。
 
 **完了のメッセージと付記** (保存時の変換。03 §9.3.1 の SVT-5 / SVT-6 / SVT-8): 変換の知らせは独立のメッセージにせず、**その保存で最後に出す完了のメッセージの後ろに 1 つだけ付記する**。完了のメッセージの選び方は今のまま (`info.save.done`。つながりを承認した保存の成功は `info.save.escape_merged`、途中まで読んだ標準入力の文書は `info.save.partial_saved` が代わりに出る。直接上書きでは `info.save.in_place` が先に出て、続く完了のメッセージが最後)。付記は、変換で本文が変わったら `info.save.suffix.transformed`、設定は真だが 1 MiB を超えて変換しなかったら `info.save.suffix.transform_skipped_large` (2 つは同時に起きない)。`info.save.escape_merged` は要点が先頭にあるので、付記は後ろに足して先頭の要点を崩さない (80 桁を超えたら、メッセージ行の今の省略の規則で後ろから切る。全文はメッセージ履歴で読める)。書けずに終わったときは、失敗・中止のメッセージに `info.save.suffix.transform_kept` を付ける (完了の付記とは同時に起きない)。全保存の要約には `info.save_all.suffix.transformed` を付ける。
 
@@ -1844,6 +1846,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.help.terminal.multi_cursor_paste` (v0.5) | 端末の設定: 複数カーソルへの貼り付けの既知の制約 (03 §4.5.3 の MCUR-10。端末の短い貼り付けは個別のキーとして届き分配されないので、端末に横取りされない `Ctrl+K V` を案内する。M32 の段 3) | 複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません) |
 | `ui.help.terminal.ctrl_shift_l` (v0.5) | 端末の設定: 従来の端末で `Ctrl+Shift+L` (一致をすべて選ぶ) が `Ctrl+L` (行の選択) として届く (07 §11.6 の「編集の拡張」のキーの選び方。M34 の段 5) | 一部の端末では Ctrl+Shift+L が Ctrl+L (行を選択) として届きます。一致をすべて選ぶには Ctrl+K E を使ってください |
 | `ui.help.terminal.redraw` (v0.5) | 端末の設定: 画面の再描画のキー (`Ctrl+L` を再描画に使う端末の慣習と違うため。M34 の段 5) | 画面が乱れたときは Ctrl+K R で描き直します (Ctrl+L は行の選択です) |
+| `ui.help.terminal.auto_pairs_paste` (v0.5) | 端末の設定: 自動閉じと端末の短い貼り付け・行をまたぐ貼り付けの既知の制約 (03 §15.7 の APR-8。端末の短い貼り付けは打鍵として届き閉じ字が足されるので、端末に横取りされない `Ctrl+K V` を案内する。M34 の段 4) | 自動閉じを使っているときは Ctrl+K V で貼り付けてください (端末の短い貼り付けは打鍵として届き、閉じ字が足されることがあります) |
 | `ui.help.terminal.stdin_keys` | 端末の設定: 標準入力の書き手とキー入力の取り合い (v0.4 の M25、§8.6) | 標準入力 (cmd \| evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います |
 | `ui.help.terminal.stdin_redraw` | 端末の設定: 書き手の stderr で崩れた画面 (同上) | 書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください |
 | `ui.help.terminal.stdin_powershell` | 端末の設定: Windows PowerShell 5.1 のパイプ (同上) | Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c "evoeditor - < file" を使ってください |
@@ -2150,6 +2153,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.language.invalid_name` (v0.5) | 使えない言語の名前 (LANG-3。警告。その定義を使わない) | 言語の名前 {value} は使えません / 英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません) |
 | `msg.language.missing_name` (v0.5) | `name` の無い定義 (LANG-3。警告。その定義を使わない) | 言語定義に name がありません / name = "rust" のように言語の名前を書いてください。この定義は使いません |
 | `msg.language.too_long` (v0.5) | `display_name` (64 文字)・`first_line` と配列の要素 (256 バイト)・配列 (64 個) の上限の超過 (LANG-3。警告。その項目を使わない) | {item} が長すぎます / display_name は 64 文字、first_line と配列の要素は 256 バイト、配列は 64 個までです。この項目は使いません |
+| `msg.language.bad_auto_pairs` (v0.5) | 使えない `auto_pairs` (キーと値が 1 文字ずつでない・空白か制御文字か不正バイトのエスケープ文字か前の文字に付く文字 (結合文字など)・16 組を超える・値が文字列でない。07 §9.6 の LANG-3。警告。その項目を使わず下の層の値。M34 の段 4) | 言語定義の {item} の組が正しくありません (1 文字ずつ、16 組まで) / この項目は使わず、ほかの設定を使います |
 | `msg.language.bad_comment` (v0.5) | 使えない `comment.line` (1〜16 バイトで、空白・制御文字を含まない。LANG-3。警告) | {item} の記号 {value} は使えません / 1〜16 バイトで、空白と制御文字を含まない記号にしてください。この項目は使いません |
 | `msg.language.bad_first_line` (v0.5) | 組めない `first_line` の正規表現 (LANG-3。警告。`{reason}` は `regex` の説明の最後の行) | {item} の正規表現 {value} を組めません ({reason}) / 正規表現を直してください。この項目は使いません |
 | `msg.language.bad_glob` (v0.5) | 資源の上限 (`{` の入れ子 8 段・選択肢 1,024 個、07 §10.3 の EC-4) を超える `file_globs` の glob (警告。その glob を使わない) | {item} の glob {value} は複雑すぎます / {{ の入れ子は 8 段まで、選択肢は合わせて 1,024 個までにしてください。この glob は使いません |

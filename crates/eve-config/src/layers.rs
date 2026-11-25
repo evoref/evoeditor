@@ -706,6 +706,7 @@ mod tests {
                 "editor.backspace_unit",
                 "editor.trim_trailing_whitespace_on_save",
                 "editor.insert_final_newline_on_save",
+                "editor.auto_pairs",
                 "editor.undo.total_max_bytes",
                 "file.default_encoding",
                 "file.default_line_ending",

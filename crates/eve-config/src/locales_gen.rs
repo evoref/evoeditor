@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1125 件)。
+/// `locales/en.toml` の文言 (1128 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -534,6 +534,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.io.stalled.text"), B("A file operation is not responding (for example a file on the network)")),
     (B("msg.language.ambiguous.hint"), B("Fix file_types or other patterns in one of the definitions")),
     (B("msg.language.ambiguous.text"), B("{file} matches both {first} and {second}; using {second}")),
+    (B("msg.language.bad_auto_pairs.hint"), B("This item is ignored; other settings are used")),
+    (B("msg.language.bad_auto_pairs.text"), B("The pairs in {item} are invalid (one character each, up to 16 pairs)")),
     (B("msg.language.bad_comment.hint"), B("Use 1 to 16 bytes without spaces or control characters. This item is not used")),
     (B("msg.language.bad_comment.text"), B("The marker {value} of {item} is invalid")),
     (B("msg.language.bad_first_line.hint"), B("Fix the regular expression. This item is not used")),
@@ -1032,6 +1034,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.help.section.search"), B("Writing search patterns")),
     (B("ui.help.section.terminal"), B("Terminal settings")),
     (B("ui.help.terminal.alt"), B("On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives")),
+    (B("ui.help.terminal.auto_pairs_paste"), B("When auto-pairs are on, paste with Ctrl+K V (a short terminal paste arrives as keystrokes and may get closing characters added)")),
     (B("ui.help.terminal.chord"), B("Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels")),
     (B("ui.help.terminal.ctrl_shift_l"), B("Some terminals send Ctrl+Shift+L as Ctrl+L (Select Line); use Ctrl+K E to select all matches")),
     (B("ui.help.terminal.ime"), B("While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter")),
@@ -1138,7 +1141,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1125 件)。
+/// `locales/ja.toml` の文言 (1128 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1664,6 +1667,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.io.stalled.text"), B("ファイルの操作が応答していません (ネットワーク上のファイルなど)")),
     (B("msg.language.ambiguous.hint"), B("どちらかの定義の file_types などを直してください")),
     (B("msg.language.ambiguous.text"), B("{file} は言語 {first} と {second} の両方に当たるため、{second} を使います")),
+    (B("msg.language.bad_auto_pairs.hint"), B("この項目は使わず、ほかの設定を使います")),
+    (B("msg.language.bad_auto_pairs.text"), B("言語定義の {item} の組が正しくありません (1 文字ずつ、16 組まで)")),
     (B("msg.language.bad_comment.hint"), B("1〜16 バイトで、空白と制御文字を含まない記号にしてください。この項目は使いません")),
     (B("msg.language.bad_comment.text"), B("{item} の記号 {value} は使えません")),
     (B("msg.language.bad_first_line.hint"), B("正規表現を直してください。この項目は使いません")),
@@ -2162,6 +2167,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.help.section.search"), B("検索の書き方")),
     (B("ui.help.section.terminal"), B("端末の設定")),
     (B("ui.help.terminal.alt"), B("Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります")),
+    (B("ui.help.terminal.auto_pairs_paste"), B("自動閉じを使っているときは Ctrl+K V で貼り付けてください (端末の短い貼り付けは打鍵として届き、閉じ字が足されることがあります)")),
     (B("ui.help.terminal.chord"), B("Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます")),
     (B("ui.help.terminal.ctrl_shift_l"), B("一部の端末では Ctrl+Shift+L が Ctrl+L (行を選択) として届きます。一致をすべて選ぶには Ctrl+K E を使ってください")),
     (B("ui.help.terminal.ime"), B("IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください")),

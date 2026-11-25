@@ -16,10 +16,11 @@ const ITEM_MAX_BYTES: usize = 256;
 const LIST_MAX_ITEMS: usize = 64;
 /// `comment.line` の上限 (バイト)。
 const COMMENT_MAX_BYTES: usize = 16;
+/// `auto_pairs` の組の数の上限 (LANG-3)。
+const AUTO_PAIRS_MAX: usize = 16;
 
 /// v0.5 で効かない項目 (LANG-4)。書いても起動を妨げず、項目ごとに「このバージョンでは未対応」の情報診断にする。
 const UNSUPPORTED: &[&str] = &[
-    "auto_pairs",
     "word_separators",
     "grammar",
     "highlight_query",
@@ -226,6 +227,8 @@ impl Cx<'_> {
                         }
                     }
                 }
+                // 括弧・引用符の自動閉じの組 (FR-210。v0.5 の M34 の段 4 から読む、07 §9.6 の LANG-3)
+                "auto_pairs" => self.language_auto_pairs(&full, v, kat, &mut def),
                 "indent" => self.language_indent(&full, v, &mut def),
                 "comment" => self.language_comment(&full, v, &mut def),
                 k if UNSUPPORTED.contains(&k) => {
@@ -254,6 +257,39 @@ impl Cx<'_> {
                 );
                 None
             }
+        }
+    }
+
+    /// `auto_pairs = { "(" = ")", ... }` (開き字 → 閉じ字の表、LANG-3)。キーと値はどちらも 1 つのコードポイントで、空白・制御
+    /// 文字・不正バイトのエスケープ文字でないもの。16 組まで。違反は項目を使わずに警告し (`msg.language.bad_auto_pairs`)、
+    /// 下の層の値を使う。空の表 (`{}`) はその言語の自動閉じを止める (03 §15.7 の APR-1)。
+    fn language_auto_pairs(
+        &mut self,
+        full: &str,
+        v: &Spanned<DeValue<'_>>,
+        at: usize,
+        def: &mut LanguageDef,
+    ) {
+        let DeValue::Table(t) = v.get_ref() else {
+            self.mismatch(full, v, "table");
+            return;
+        };
+        let mut pairs = Vec::with_capacity(t.len());
+        let mut ok = t.len() <= AUTO_PAIRS_MAX;
+        for (k, iv) in t {
+            let close = match iv.get_ref() {
+                DeValue::String(c) => pair_char(c),
+                _ => None,
+            };
+            match (pair_char(k.get_ref()), close) {
+                (Some(o), Some(c)) => pairs.push((o, c)),
+                _ => ok = false,
+            }
+        }
+        if ok {
+            def.auto_pairs = Some(self.lang_value(pairs, at));
+        } else {
+            self.lang_problem(LanguageProblem::BadAutoPairs, full, v);
         }
     }
 
@@ -375,4 +411,17 @@ impl Cx<'_> {
         );
         self.set_value(v);
     }
+}
+
+/// `auto_pairs` の開き字・閉じ字に使える 1 文字 (1 つのコードポイントで、空白・制御文字・不正バイトのエスケープ文字
+/// `U+10FF00..=U+10FFFF` (03 §8.3.1)・前の文字に付く文字 (結合文字など。単独では打った書記素にならない) でないもの)。
+fn pair_char(s: &str) -> Option<char> {
+    let mut it = s.chars();
+    let (Some(c), None) = (it.next(), it.next()) else {
+        return None;
+    };
+    let escape = ('\u{10FF00}'..='\u{10FFFF}').contains(&c);
+    // 前の文字に付く (`a` の後ろに置くと 1 つの書記素になる) 文字
+    let extends = eve_text::first_grapheme(&format!("a{c}")).len() > 1;
+    (!c.is_whitespace() && !c.is_control() && !escape && !extends).then_some(c)
 }

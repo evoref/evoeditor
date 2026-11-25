@@ -12,6 +12,7 @@ use eve_text::{
 use eve_text::{WidthConfig, str_display_width};
 use eve_view::{DocumentId, ViewId};
 
+use crate::command::auto_pairs;
 use crate::command::ids;
 use crate::command::insert_rule::{self, EscapeContext, InsertNotice};
 use crate::document::{Document, Origin, Transaction};
@@ -256,11 +257,27 @@ fn insert_text(ctx: &mut CommandCtx<'_>) -> CommandResult {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
     let (text, pua) = insert_rule::external_text(&text, target);
-    let text: std::sync::Arc<str> = text.into();
     let notices: Vec<InsertNotice> = (pua > 0)
         .then_some(InsertNotice::PuaAsText(pua))
         .into_iter()
         .collect();
+    // 打鍵の経路の入力で、自動閉じが効いていて組の文字を含むなら、書記素ごとに自動閉じの規則を当てる (03 §15.7 の APR-2)
+    if let Some((view_id, doc_id, pairs)) = typed_pairs(ctx, &text) {
+        let r = if ctx
+            .state
+            .document(doc_id)
+            .is_some_and(Document::is_editable)
+        {
+            auto_pairs::insert_typed(ctx, view_id, doc_id, &text, &pairs)
+        } else {
+            CommandResult::Rejected(RejectReason::ReadOnly)
+        };
+        if matches!(r, CommandResult::Done) {
+            show_notices(ctx.state, &notices);
+        }
+        return r;
+    }
+    let text: std::sync::Arc<str> = text.into();
     let r = edit_each(ctx, |_, r| {
         Some(Plan {
             del: ByteRange::new(r.start(), r.end()),
@@ -272,6 +289,22 @@ fn insert_text(ctx: &mut CommandCtx<'_>) -> CommandResult {
         show_notices(ctx.state, &notices);
     }
     r
+}
+
+/// 打鍵の経路の入力 `text` に自動閉じを当てるなら、対象 (View, 文書) と組 (03 §15.7 の APR-1 / APR-2 (a))。打鍵の経路で
+/// ない (キーマップの割当・パレット)・自動閉じを切っている・組が無い・組の文字を含まないときは `None` (今の入力)。
+fn typed_pairs(
+    ctx: &CommandCtx<'_>,
+    text: &str,
+) -> Option<(ViewId, DocumentId, auto_pairs::Pairs)> {
+    if ctx.source != crate::command::InvocationSource::Typing {
+        return None;
+    }
+    let (view, doc) = active(ctx)?;
+    let pairs = auto_pairs::pairs_for(ctx.state, ctx.state.document(doc)?)?;
+    text.chars()
+        .any(|ch| pairs.iter().any(|(o, c)| *o == ch || *c == ch))
+        .then_some((view, doc, pairs))
 }
 
 /// 操作の対象の文書の、本文に入れる規則に効く値 (03 §8.3.1)。
@@ -352,7 +385,11 @@ pub(crate) fn paste_text(
     text: Option<&str>,
 ) -> CommandResult {
     let args = crate::command::Args::new();
-    let mut ctx = CommandCtx { state, args: &args };
+    let mut ctx = CommandCtx {
+        state,
+        args: &args,
+        source: crate::command::InvocationSource::Keymap,
+    };
     let Some((view_id, doc_id)) = active(&ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
@@ -480,7 +517,7 @@ fn delete_with(
 
 fn delete_backward(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let unit = ctx.state.config().backspace_unit;
-    delete_with(ctx, move |d, p| {
+    let span = move |d: &Document, p: ByteOff| {
         let g = prev_grapheme_boundary(d.text(), p);
         match unit {
             eve_config::BackspaceUnit::Grapheme => ByteRange::new(g, p),
@@ -495,7 +532,14 @@ fn delete_backward(ctx: &mut CommandCtx<'_>) -> CommandResult {
                 ByteRange::new(ByteOff(p.0 - last), p)
             }
         }
-    })
+    };
+    // 自動で足した閉じ字と開き字の間なら両方を消す (03 §15.7 の APR-4)
+    if let Some((view_id, doc_id)) = active(ctx)
+        && let Some(r) = auto_pairs::delete_backward_pairs(ctx, view_id, doc_id, &span)
+    {
+        return r;
+    }
+    delete_with(ctx, span)
 }
 
 fn delete_forward(ctx: &mut CommandCtx<'_>) -> CommandResult {

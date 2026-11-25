@@ -62,6 +62,18 @@ pub struct View {
     /// 矩形 (03 §4.8 の BOX-2)。矩形から Selection を作ったときの文書の Revision と Selection の写しを持ち、どちらかが
     /// 変わったら (編集・Undo・写像・再読込・選択を置き直すほかの操作の後) 無いものとする。
     pub(crate) box_mark: Option<crate::view::box_select::BoxMark>,
+    /// 自動で足した閉じ字の覚え (03 §15.7 の APR-3。閉じ字の位置の順)。編集の写像で追い、カーソルが対の間を離れたとき・
+    /// Undo / Redo・ほかの位置への移動 (`set_selection`) で忘れる。
+    pub(crate) auto_closed: Vec<crate::command::auto_pairs::AutoClosed>,
+}
+
+/// 選択を置くときに、自動で足した閉じ字の覚え (03 §15.7 の APR-3) を残すか。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PairMemory {
+    /// 忘れる (選択を置き直す操作)。
+    Forget,
+    /// 残す (カーソルの移動と飛び越え。対の間を離れたかは入力の後に位置で確かめる)。
+    Keep,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
@@ -754,6 +766,8 @@ impl EditorState {
             v.selection = v
                 .selection
                 .transform(t, |r| eve_text::Range::new(clamp(r.anchor), clamp(r.head)));
+            // 本文を差し替えたので、自動で足した閉じ字の覚えは古い本文の位置 (03 §15.7 の APR-3)
+            v.auto_closed.clear();
             let top = t.line_to_byte(t.byte_to_line(clamp(v.scroll.top)));
             if top != v.scroll.top {
                 v.scroll.top = top;
@@ -893,6 +907,7 @@ impl EditorState {
                 expand_history: None,
                 box_mode: false,
                 box_mark: None,
+                auto_closed: Vec::new(),
             },
         );
         id
@@ -1143,6 +1158,19 @@ impl EditorState {
         }
     }
 
+    /// 履歴に記録した後の会計 (03 §7.5): 文書の予算による破棄 (`pruned`) は文書ごとに 1 回だけ通知し、プロセス全体の予算を
+    /// 確かめる。
+    pub(crate) fn note_history_recorded(&mut self, doc: DocumentId, pruned: bool) {
+        if pruned && self.io.trim_notified.insert(doc) {
+            self.show_message(
+                eve_view::MessageLevel::Info,
+                keys::INFO_UNDO_HISTORY_TRIMMED,
+                &[],
+            );
+        }
+        self.enforce_total_undo_budget();
+    }
+
     /// `before` は適用の前の本文 (再読込とその Undo / Redo のジャンプ履歴の写像に使う。ほかの変更では使わない)。
     fn after_change(
         &mut self,
@@ -1151,15 +1179,7 @@ impl EditorState {
         issuer: Option<ViewId>,
         before: Option<&eve_text::Snapshot>,
     ) {
-        // 履歴の予算による破棄は、文書ごとに 1 回だけ通知する (03 §7.5)
-        if a.record.as_ref().is_some_and(|r| r.pruned) && self.io.trim_notified.insert(doc) {
-            self.show_message(
-                eve_view::MessageLevel::Info,
-                keys::INFO_UNDO_HISTORY_TRIMMED,
-                &[],
-            );
-        }
-        self.enforce_total_undo_budget();
+        self.note_history_recorded(doc, a.record.as_ref().is_some_and(|r| r.pruned));
         // 選択範囲内の検索の範囲も、同じ変更で写像する (03 §12.5)
         self.map_search_scope(doc, &a.changes);
         // 待っているテキスト変換の対象の範囲も写像する (作り直しに使う、03 §15.8 の TXT-6)
@@ -1205,6 +1225,15 @@ impl EditorState {
                     .selection
                     .map(&a.changes, eve_text::MapPolicy::Other)
                     .normalized(text);
+            }
+            // 自動で足した閉じ字の覚えも写像する (開き字・閉じ字が消えたものは忘れる。Undo / Redo は全部忘れる、03 §15.7 の
+            // APR-3)
+            if !view.auto_closed.is_empty() {
+                if a.is_undo {
+                    view.auto_closed.clear();
+                } else {
+                    crate::command::auto_pairs::map_auto_closed(&mut view.auto_closed, &a.changes);
+                }
             }
             // スクロール位置は同じ関数で写像し、行頭へ丸める
             let top = a.changes.map_pos(view.scroll.top, Bias::Before);
@@ -1253,8 +1282,10 @@ impl EditorState {
     }
 
     /// `set_selection` と同じだが、目標列 (`goal_dcol`) を指定する (垂直移動・ページ移動が維持する)。
+    /// カーソルの移動 (`cursor.*`・`select.extend_*`) が使うので、自動で足した閉じ字の覚えは捨てない (対の間を離れたかは
+    /// 入力の後に位置で確かめる。03 §15.7 の APR-3)。
     pub fn set_selection_with_goal(&mut self, view: ViewId, sel: Selection, goal: Option<u32>) {
-        self.set_selection(view, sel);
+        self.put_selection(view, sel, PairMemory::Keep);
         if let Some(v) = self.docs.views.get_mut(&view) {
             v.goal_dcol = goal;
         }
@@ -1445,8 +1476,14 @@ impl EditorState {
         self.out.needs_render = true;
     }
 
-    /// View の Selection を設定する (書記素境界へ正規化し、`goal_dcol` はクリア)。
+    /// View の Selection を設定する (書記素境界へ正規化し、`goal_dcol` はクリア)。選択を置き直す操作なので、自動で足した
+    /// 閉じ字の覚えを忘れる (03 §15.7 の APR-3)。
     pub fn set_selection(&mut self, view: ViewId, sel: Selection) {
+        self.put_selection(view, sel, PairMemory::Forget);
+    }
+
+    /// `set_selection` の本体。`memory` は自動で足した閉じ字の覚えを残すか (カーソルの移動と飛び越えは残す)。
+    pub(crate) fn put_selection(&mut self, view: ViewId, sel: Selection, memory: PairMemory) {
         let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
@@ -1462,6 +1499,10 @@ impl EditorState {
         v.expand_history = None;
         // 矩形も消す (矩形の操作は、この後に置き直す。03 §4.8 の BOX-2)。モードは残す
         v.box_mark = None;
+        // 選択を置き直す操作 (クリック・検索・行へ移動など) では、自動で足した閉じ字を忘れる (03 §15.7 の APR-3)
+        if memory == PairMemory::Forget {
+            v.auto_closed.clear();
+        }
         self.out.needs_render = true;
     }
 

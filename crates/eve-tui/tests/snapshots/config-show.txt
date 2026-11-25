@@ -8,8 +8,8 @@
 ~ │   editor.backspace_unit = "codepoint"                              --set │
 ~ │   editor.trim_trailing_whitespace_on_save = false                   既定 │
 ~ │   editor.insert_final_newline_on_save = false                       既定 │
-~ └─────────────────────────────────────────────────────────────────── 7/47 ─┘
-~
+~ │   editor.auto_pairs = false                                         既定 │
+~ └─────────────────────────────────────────────────────────────────── 8/48 ─┘
 ~
 ~
 memo.txt                                                     行 1, 桁 1 UTF-8 LF

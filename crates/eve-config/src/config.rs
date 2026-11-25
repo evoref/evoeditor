@@ -698,6 +698,10 @@ config_keys! {
     insert_final_newline_on_save: bool = false,
         "editor.insert_final_newline_on_save", boolean,
         P::Safe;
+    /// `editor.auto_pairs`: 括弧・引用符の自動閉じ (FR-210、03 §15.7)。組は文書の言語の `auto_pairs` (07 §9.6 の LANG-3)、
+    /// 無ければ既定の 5 組。文書ごとのキーではない (07 §3.6)。
+    auto_pairs: bool = false, "editor.auto_pairs", boolean,
+        P::Safe;
     /// `view.wrap`: 折り返しの方式 (FR-506)。
     wrap: WrapMode = WrapMode::Off, "view.wrap", choice,
         P::Safe;

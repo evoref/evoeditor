@@ -200,6 +200,7 @@ impl EditorState {
                     let mut ctx = CommandCtx {
                         state: self,
                         args: &args,
+                        source: crate::command::InvocationSource::Keymap,
                     };
                     crate::view::motion::goto_line_command(&mut ctx)
                 }

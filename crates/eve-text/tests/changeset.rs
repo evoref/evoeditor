@@ -277,6 +277,35 @@ proptest! {
         prop_assert_eq!((cs.len_before(), cs.len_after()), (before, after));
     }
 
+    // spec: 03 §6.4 CS4: 昇順の位置の並びを 1 回の走査で写す map_sorted は、位置ごとの map_pos と同じ (03 §15.7 の
+    // APR-3 の覚えの写像が使う)
+    #[test]
+    fn map_sorted_は位置ごとの_map_pos_と同じ(
+        s in any_text(),
+        raw in raw_edits(),
+        picks in prop::collection::vec((0usize..64, any::<bool>()), 0..24),
+    ) {
+        let t = Text::from(s.as_str());
+        let (cs, _) = make_cs(&t, &s, &raw);
+        let mut ps: Vec<(ByteOff, Bias)> = picks
+            .iter()
+            .map(|(p, after)| {
+                // 範囲の外 (文書の末尾より後ろ) も混ぜる
+                let p = p % (s.len() + 3);
+                (ByteOff(p), if *after { Bias::After } else { Bias::Before })
+            })
+            .collect();
+        ps.sort_by_key(|(p, _)| *p);
+        let want: Vec<ByteOff> = ps.iter().map(|(p, b)| cs.map_pos(*p, *b)).collect();
+        let before = eve_text::map_sorted_steps();
+        prop_assert_eq!(cs.map_sorted(&ps), want);
+        // 費用は演算の数 + 位置の数
+        prop_assert_eq!(
+            eve_text::map_sorted_steps() - before,
+            (cs.ops().len() + ps.len()) as u64
+        );
+    }
+
     // spec: 03 §6.4 CS4: map_pos は単調非減少。Before <= After。範囲は新しい文書の中
     #[test]
     fn cs4_位置写像は単調で範囲に収まる(s in any_text(), raw in raw_edits()) {
