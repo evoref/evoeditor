@@ -436,6 +436,10 @@ title = "Select Line"
 description = "Return to the selection before the last expand"
 title = "Shrink Selection"
 
+[cmd.select.toggle_box]
+description = "Turn box selection mode on; while it is on, extending the selection and dragging select a rectangle. Run it again to turn it off"
+title = "Toggle Box Selection Mode"
+
 [cmd.ui.cancel]
 description = "Close the open input field or dialog."
 title = "Cancel"
@@ -1671,6 +1675,14 @@ user_requested = "opened read-only by request (`--readonly`)"
 untitled = "Untitled-{n}"
 eol_mixed = "mixed"
 selection = "({count} chars selected)"
+
+[status.box]
+long = "(Box {rows}x{cols})"
+short = "Box {rows}x{cols}"
+
+[status.box_mode]
+long = "(Box mode)"
+short = "Box"
 
 [status.cursors]
 long = "{count} cursors"

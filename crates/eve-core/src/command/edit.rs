@@ -345,7 +345,8 @@ pub const MULTI_PASTE_MAX_BYTES: usize = 64 * 1024 * 1024;
 /// 解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
 ///
 /// Range が 2 つ以上なら、内部レジスタの片 → 行 → 全文の 3 段で分ける (03 §4.5.3 の MCUR-10、
-/// `insert_rule::resolve_multi_paste`)。入れる合計が `MULTI_PASTE_MAX_BYTES` を超えるなら何もせずに知らせる。
+/// `insert_rule::resolve_multi_paste`)。入れる合計が `MULTI_PASTE_MAX_BYTES` を超えるなら何もせずに知らせる。高さ 2 以上の
+/// 矩形があり、内部レジスタの片の数が矩形の高さと同じなら、矩形の行ごとに片を入れる (03 §4.8 の BOX-4)。
 pub(crate) fn paste_text(
     state: &mut crate::editor::state::EditorState,
     text: Option<&str>,
@@ -365,7 +366,47 @@ pub(crate) fn paste_text(
     let target = EscapeContext::of(&doc.format);
     let eol = doc.format.default_eol;
     let ranges = view.selection.len();
+    let box_rows = ctx.state.box_paste_rows(view_id);
     let register = ctx.state.clipboard_register();
+    // 矩形への貼り付け (03 §4.8 の BOX-4): 内部レジスタの片の数が矩形の高さと同じで、届いた文字列が内部レジスタと一致する
+    // なら、矩形の i 行目に i 番目の片を入れる (Range の無い行の片は入れない)。そうでなければ下の MCUR-10 の 3 段
+    // 高さ 1 の矩形 (Range は 1 つ) は今の経路のまま
+    if let Some((height, rows)) = box_rows.filter(|(height, _)| *height >= 2)
+        && register
+            .is_some_and(|r| r.pieces().len() == height && text.is_none_or(|a| r.matches_text(a)))
+    {
+        let plan = match insert_rule::resolve_multi_paste(
+            text,
+            register,
+            target,
+            eol,
+            PASTE_NORMALIZE_EOL,
+            height,
+            MULTI_PASTE_MAX_BYTES,
+        ) {
+            None => return CommandResult::Done,
+            Some(insert_rule::MultiPaste::TooLarge) => {
+                ctx.state.show_message(
+                    eve_view::MessageLevel::Info,
+                    keys::INFO_PASTE_MULTI_TOO_LARGE,
+                    &[],
+                );
+                return CommandResult::Done;
+            }
+            Some(insert_rule::MultiPaste::Plan(plan)) => plan,
+        };
+        let r = edit_each_as(&mut ctx, Origin::Paste, |_, i, r| {
+            Some(Plan {
+                del: ByteRange::new(r.start(), r.end()),
+                ins: plan.text_for(rows.get(i).copied().unwrap_or(i)),
+                cursor: CursorRule::AfterInsert,
+            })
+        });
+        if matches!(r, CommandResult::Done) {
+            show_notices(ctx.state, &plan.notices);
+        }
+        return r;
+    }
     if ranges >= 2 {
         let plan = match insert_rule::resolve_multi_paste(
             text,

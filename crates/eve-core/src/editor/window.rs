@@ -443,8 +443,11 @@ impl EditorState {
     }
 
     /// View `src` の選択・スクロール・上下の移動の目標の列・折り返しの設定を写した新しい View (PANE-1、PANE-5 (a))。
+    /// 矩形選択のモードと矩形は写さない (写した View は切った状態。03 §4.8 の BOX-1)。
     pub(crate) fn copy_view(&mut self, src: ViewId) -> Option<ViewId> {
-        let copy: View = self.docs.views.get(&src).cloned()?;
+        let mut copy: View = self.docs.views.get(&src).cloned()?;
+        copy.box_mode = false;
+        copy.box_mark = None;
         let id = self.add_view(copy.doc);
         if let Some(v) = self.docs.views.get_mut(&id) {
             *v = copy;

@@ -606,7 +606,7 @@ impl EditorState {
     }
 
     /// カーソルの数の上限を超える操作をしなかったことを知らせる (`info.cursor.limit`、MCUR-6)。
-    fn notify_cursor_limit(&mut self) {
+    pub(crate) fn notify_cursor_limit(&mut self) {
         let limit = MAX_CURSORS.to_string();
         self.show_message(
             MessageLevel::Info,

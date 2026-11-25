@@ -13,6 +13,7 @@ use crate::document::Document;
 use crate::ui_model::keys;
 
 use crate::layout::{Affinity, WrapSettings, line_rows};
+use crate::view::box_select::BoxMove;
 
 use crate::command::{
     ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
@@ -41,6 +42,24 @@ impl Motion {
             self,
             Motion::Up | Motion::Down | Motion::PageUp | Motion::PageDown
         )
+    }
+
+    /// 矩形選択のモードの間の、矩形の `head` の動かし方 (03 §4.8 の BOX-2)。
+    fn box_move(self) -> BoxMove {
+        match self {
+            Motion::Left => BoxMove::Left,
+            Motion::Right => BoxMove::Right,
+            Motion::Up => BoxMove::Up,
+            Motion::Down => BoxMove::Down,
+            Motion::WordLeft => BoxMove::WordLeft,
+            Motion::WordRight => BoxMove::WordRight,
+            Motion::Home => BoxMove::Home,
+            Motion::End => BoxMove::End,
+            Motion::DocStart => BoxMove::DocStart,
+            Motion::DocEnd => BoxMove::DocEnd,
+            Motion::PageUp => BoxMove::PageUp,
+            Motion::PageDown => BoxMove::PageDown,
+        }
     }
 }
 
@@ -294,6 +313,11 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
         Some(ArgValue::Int(n)) if *n >= 1 => usize::try_from(*n).unwrap_or(usize::MAX),
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
+    // 矩形選択のモードの間は、選択を伸ばすコマンドが矩形を作る・動かす (03 §4.8 の BOX-2)。移動 (`cursor.*`) は今までどおり
+    // (選択を置き直すので矩形は消える。モードは残る)
+    if extend && ctx.state.box_mode(view_id) {
+        return ctx.state.box_extend(view_id, m.box_move(), count);
+    }
     let rows = ctx.state.view_size(view_id).1 as usize;
     let (Some(doc), Some(view)) = (ctx.state.document(doc_id), ctx.state.view(view_id)) else {
         return CommandResult::Rejected(RejectReason::NoTarget);

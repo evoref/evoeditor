@@ -573,7 +573,7 @@ impl EditorState {
 
     /// 選択を動かさずに、`pos` が見えるようスクロールする。選択と、`set_selection` が消す目標の列・折り返し位置の帰属・
     /// 「単語の一致」の印 (03 §4.5.1 の MCUR-2 (e)。検索バーの逐次検索は選択を変えない)・選択の拡張の履歴 (03 §5.7 の
-    /// SEL-4) を戻す。
+    /// SEL-4)・矩形 (03 §4.8 の BOX-2) を戻す。
     fn reveal(&mut self, pos: ByteOff) {
         let Some(view) = self.focused_view() else {
             return;
@@ -586,6 +586,8 @@ impl EditorState {
                 v.word_match.clone(),
                 // 拡張の履歴は大きくなり得る (64 個の Selection) ので、写さずに預かって戻す
                 v.expand_history.take(),
+                // 矩形も Selection の写しを持つので、写さずに預かって戻す
+                v.box_mark.take(),
             )
         }) else {
             return;
@@ -599,6 +601,7 @@ impl EditorState {
                 v.cursor_affinity,
                 v.word_match,
                 v.expand_history,
+                v.box_mark,
             ) = saved;
         }
     }

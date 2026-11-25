@@ -443,6 +443,12 @@ pub(crate) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, u
     }
 }
 
+/// 長大行なら、その列の索引を走査済みのバイト数 (試験用。索引を作る量が要る位置に比例することを確かめる、03 §4.8 の BOX-9)。
+#[cfg(test)]
+pub(crate) fn long_built_to(doc: &Document, line: usize) -> Option<usize> {
+    long_index(doc, line).map(|(_, ix)| ix.built_state().1.byte)
+}
+
 /// 長大行なら、行内の位置 `byte` より前の書記素の数 (ステータスバーの桁、03 §14.4 の「使う側」の (b))。
 pub(crate) fn long_line_graphemes(doc: &Document, line: usize, byte: usize) -> Option<usize> {
     let (ls, ix) = long_index(doc, line)?;

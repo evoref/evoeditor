@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1119 件)。
+/// `locales/en.toml` の文言 (1125 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -227,6 +227,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.select.line.title"), B("Select Line")),
     (B("cmd.select.shrink.description"), B("Return to the selection before the last expand")),
     (B("cmd.select.shrink.title"), B("Shrink Selection")),
+    (B("cmd.select.toggle_box.description"), B("Turn box selection mode on; while it is on, extending the selection and dragging select a rectangle. Run it again to turn it off")),
+    (B("cmd.select.toggle_box.title"), B("Toggle Box Selection Mode")),
     (B("cmd.ui.cancel.description"), B("Close the open input field or dialog.")),
     (B("cmd.ui.cancel.title"), B("Cancel")),
     (B("cmd.ui.confirm.description"), B("Accept the input or the selected item.")),
@@ -728,6 +730,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.workspace.too_large.text"), B("Did not read {path}: it is too large")),
     (B("msg.workspace.too_many_keys.hint"), B("The bindings beyond the limit are not read")),
     (B("msg.workspace.too_many_keys.text"), B("There are more than {count} workspace key bindings")),
+    (B("status.box.long"), B("(Box {rows}x{cols})")),
+    (B("status.box.short"), B("Box {rows}x{cols}")),
+    (B("status.box_mode.long"), B("(Box mode)")),
+    (B("status.box_mode.short"), B("Box")),
     (B("status.cursors.long"), B("{count} cursors")),
     (B("status.cursors.short"), B("{count} cur")),
     (B("status.degraded.long_line.long"), B("[Long lines: no wrap]")),
@@ -1132,7 +1138,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1119 件)。
+/// `locales/ja.toml` の文言 (1125 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1351,6 +1357,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.select.line.title"), B("行を選択")),
     (B("cmd.select.shrink.description"), B("選択を広げる前に戻します")),
     (B("cmd.select.shrink.title"), B("選択を縮める")),
+    (B("cmd.select.toggle_box.description"), B("矩形選択のモードを入れます。入れている間は、選択を伸ばす操作とドラッグが矩形を選びます。もう一度実行すると切ります")),
+    (B("cmd.select.toggle_box.title"), B("矩形選択のモードを切り替え")),
     (B("cmd.ui.cancel.description"), B("開いている入力欄やダイアログを閉じます。")),
     (B("cmd.ui.cancel.title"), B("取り消し")),
     (B("cmd.ui.confirm.description"), B("入力内容や選択中の項目を決定します。")),
@@ -1852,6 +1860,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.workspace.too_large.text"), B("{path} を読みませんでした: 大きすぎます")),
     (B("msg.workspace.too_many_keys.hint"), B("超えた分の割当は読みません")),
     (B("msg.workspace.too_many_keys.text"), B("ワークスペースのキー割当が {count} 件を超えています")),
+    (B("status.box.long"), B("(矩形 {rows}行 {cols}列)")),
+    (B("status.box.short"), B("矩形{rows}x{cols}")),
+    (B("status.box_mode.long"), B("(矩形選択)")),
+    (B("status.box_mode.short"), B("矩形")),
     (B("status.cursors.long"), B("カーソル {count} 個")),
     (B("status.cursors.short"), B("{count}カーソル")),
     (B("status.degraded.long_line.long"), B("[長い行: 折り返しなし]")),

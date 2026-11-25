@@ -56,6 +56,12 @@ pub struct View {
     pub(crate) bracket: Option<crate::view::bracket::BracketMark>,
     /// 選択の拡張の履歴 (03 §5.7 の SEL-4。`select.expand` が積み、`select.shrink` が戻す。選択を置き直すと捨てる)。
     pub(crate) expand_history: Option<crate::view::select_expand::ExpandHistory>,
+    /// 矩形選択のモード (03 §4.8 の BOX-1。View ごと。`select.toggle_box` と `Esc` の層の最後で切り替える。写して作る View
+    /// (分割・ペインに初めて出す文書) は切った状態)。
+    pub(crate) box_mode: bool,
+    /// 矩形 (03 §4.8 の BOX-2)。矩形から Selection を作ったときの文書の Revision と Selection の写しを持ち、どちらかが
+    /// 変わったら (編集・Undo・写像・再読込・選択を置き直すほかの操作の後) 無いものとする。
+    pub(crate) box_mark: Option<crate::view::box_select::BoxMark>,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
@@ -885,6 +891,8 @@ impl EditorState {
                 word_match: None,
                 bracket: None,
                 expand_history: None,
+                box_mode: false,
+                box_mark: None,
             },
         );
         id
@@ -1452,6 +1460,8 @@ impl EditorState {
         v.word_match = None;
         // 選択の拡張の履歴も捨てる (`select.expand` / `select.shrink` は、この後に置き直す。03 §5.7 の SEL-4)
         v.expand_history = None;
+        // 矩形も消す (矩形の操作は、この後に置き直す。03 §4.8 の BOX-2)。モードは残す
+        v.box_mark = None;
         self.out.needs_render = true;
     }
 

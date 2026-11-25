@@ -670,7 +670,7 @@ impl ColIndex {
 
     /// 走査済みの範囲 (試験用): (記録点, `built_to`, 行末)。
     #[cfg(test)]
-    fn built_state(&self) -> (Vec<ColPoint>, ColPoint, Option<ColPoint>) {
+    pub(super) fn built_state(&self) -> (Vec<ColPoint>, ColPoint, Option<ColPoint>) {
         let b = self.built.borrow();
         (b.points.clone(), b.built_to, b.end)
     }

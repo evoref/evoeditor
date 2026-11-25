@@ -21,6 +21,8 @@ pub(crate) use units::{
     byte_at_col, cursor_cell, cursor_col, doc_width_config, is_long_line, long_line_graphemes,
 };
 // 子モジュール (long・wrap) が `super::` で使う
+#[cfg(test)]
+pub(crate) use units::long_built_to;
 use units::{Unit, is_plain_wide, unit_slow};
 #[cfg(test)]
 use units::{units, units_with, width_config};

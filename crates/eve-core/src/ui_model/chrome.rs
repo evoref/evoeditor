@@ -265,7 +265,31 @@ pub(crate) fn status_model(
 
     // 右群: 選択・位置・文字コード・改行コード
     let r = view.selection.primary();
-    if view.selection.len() >= 2 {
+    if let Some(b) = state.box_status(view_id) {
+        // 矩形選択のモード: カーソルの数・選択情報の代わりに、矩形の大きさかモードを出す (03 §4.8 の BOX-7、04 §8.7。優先度 4)
+        let (long, short) = match b {
+            crate::view::box_select::BoxStatus::Rect { rows, cols } => {
+                let a = [("rows", rows.to_string()), ("cols", cols.to_string())];
+                let a: Vec<(&str, &str)> = a.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                (
+                    render(state, keys::STATUS_BOX_LONG, &a),
+                    render(state, keys::STATUS_BOX_SHORT, &a),
+                )
+            }
+            crate::view::box_select::BoxStatus::Mode => (
+                render(state, keys::STATUS_BOX_MODE_LONG, &[]),
+                render(state, keys::STATUS_BOX_MODE_SHORT, &[]),
+            ),
+        };
+        items.push(item(
+            StatusKind::Selection,
+            &long,
+            Some(&short),
+            4,
+            Right,
+            CutPolicy::Never,
+        ));
+    } else if view.selection.len() >= 2 {
         // 複数カーソル: 選択情報の代わりにカーソルの数を出す (03 §4.5.5、04 §8.7。優先度 4)
         let count = [("count", view.selection.len().to_string())];
         let count: Vec<(&str, &str)> = count.iter().map(|(k, v)| (*k, v.as_str())).collect();

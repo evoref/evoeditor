@@ -107,6 +107,7 @@ select.extend_word_left	Motion	Read	—
 select.extend_word_right	Motion	Read	—
 select.line	Motion	Read	—
 select.shrink	Motion	Read	—
+select.toggle_box	Ui	Ui	—
 ui.cancel	Ui	None	—
 ui.confirm	Ui	None	overlay.active != "" || search.active
 ui.dialog_choose	Ui	None	overlay.active == "dialog"

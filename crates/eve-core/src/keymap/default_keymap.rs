@@ -277,6 +277,9 @@ pub(crate) fn default_keymap() -> Keymap {
     ] {
         bind("editor", keys, cmd);
     }
+    // 矩形選択のモード (v0.5 の M34、FR-212。07 §11.6 の「編集の拡張」。規則は 03 §4.8 の BOX-1〜BOX-9)。検索バー・横断検索の
+    // `ctrl+k b` (単語単位の切替) とはフォーカスの場所が違う
+    bind("editor", "ctrl+k b", "select.toggle_box");
     // チョードの代替キー ((alt))
     for (keys, cmd) in [
         ("ctrl+k left", "cursor.home"),

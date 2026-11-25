@@ -122,21 +122,45 @@ impl LineRows {
         cursor_in_rows(&self.units, &self.rows, rel, affinity)
     }
 
+    /// 表示行 `r` の (継続行のずらし, 先頭の表示列, 表示単位)。範囲の外の `r` は空の表示行。
+    fn row_parts(&self, r: usize) -> (usize, usize, &[Unit]) {
+        let Some(row) = self.rows.get(r) else {
+            return (0, 0, &[]);
+        };
+        let base = self.units.get(row.first).map_or(0, |u| u.col);
+        let units = self.units.get(row.first..row.end).unwrap_or(&[]);
+        (row.indent, base, units)
+    }
+
     /// 表示行 `r` の画面上の列 `col` の位置 (セルの途中は前に寄せる)。行の幅を超えたら表示行の末尾で、
     /// 折り返し位置なら上の表示行の末尾 (`Before`) にとどめる。
     pub fn at_col(&self, r: usize, col: usize) -> (usize, Affinity) {
-        let row = self.rows[r];
-        let base = self.units.get(row.first).map_or(0, |u| u.col);
-        let want = col.saturating_sub(row.indent) + base;
-        for u in &self.units[row.first..row.end] {
-            if want < u.col + u.width {
-                return (u.byte, Affinity::After);
-            }
+        let (indent, base, units) = self.row_parts(r);
+        let want = col.saturating_sub(indent) + base;
+        if let Some(u) = units.iter().find(|u| want < u.col + u.width) {
+            return (u.byte, Affinity::After);
         }
-        if r + 1 == self.rows.len() {
-            (self.content_len, Affinity::After)
+        match self.rows.get(r) {
+            Some(row) if r + 1 < self.rows.len() => (self.byte_of_unit(row.end), Affinity::Before),
+            _ => (self.content_len, Affinity::After),
+        }
+    }
+
+    /// 表示行 `r` の画面上の列 `col` の、論理行の行頭からの表示列 (矩形選択のマウスの位置、03 §4.8 の BOX-6)。表示行の中の
+    /// セルはその書記素の始まりの列 (全角・タブの途中のセルも前に寄せる。継続行のずらしの左のセルは表示行の先頭)。最後の
+    /// 表示行の末尾より右のセルは、その末尾の表示列にはみ出したセルの数を足した列 (仮想の列)。途中の表示行 (折り返し位置で
+    /// 終わる表示行) の末尾より右のセルは、その表示行の末尾の表示列 (単語の折り返し・禁則の右の空きを、次の表示行の列に
+    /// 数えない)。
+    pub fn display_col_at(&self, r: usize, col: usize) -> usize {
+        let (indent, base, units) = self.row_parts(r);
+        let want = col.saturating_sub(indent) + base;
+        if let Some(u) = units.iter().find(|u| want < u.col + u.width) {
+            return u.col;
+        }
+        if r + 1 < self.rows.len() {
+            units.last().map_or(base, |u| u.col + u.width)
         } else {
-            (self.byte_of_unit(row.end), Affinity::Before)
+            want
         }
     }
 }
