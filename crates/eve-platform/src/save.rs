@@ -139,6 +139,7 @@ fn abort(tmp: &Path, flag: &mut FlagGuard) {
 }
 
 impl WinFs {
+    // spec: 05 §4.1, 05 §4.2
     pub(crate) fn write_atomic_impl(
         &self,
         path: &FsPath,
@@ -418,12 +419,12 @@ impl WinFs {
 
         hooks::point("after_replace");
         // 7. 事後: 置換後の T が自分の書いたものかを確かめて new_stamp にする。確かめられなければ (置換の直後に他のプログラムが
-        // T を置き換えた可能性) 自分の書いた値を返して警告を積む (次の保存の照合は、中身が同じでなければ Conflict になる)
-        let Ok(after) = self.metadata(&target_path) else {
-            return Err(FsError::new(FsErrorKind::Other));
-        };
-        let new_stamp =
-            save_check::verify(&written, &after, across_replace).into_stamp(&mut warnings);
+        // T を置き換えた可能性) 自分の書いた値を返して警告を積む (次の保存の照合は、中身が同じでなければ Conflict になる)。
+        // 事後の metadata を取れなくても、T はもう新しい内容なので保存は成功のまま返し、自分の書いた値と警告にする
+        // (後片付けも同じに行う。直接上書きの SAF-20 と揃える。Issue #637)
+        let after = self.metadata(&target_path).ok();
+        let new_stamp = save_check::after_replace(&written, after.as_ref(), across_replace)
+            .into_stamp(&mut warnings);
         // 退避名を消せたらフラグを消す。消せなければフラグを残す (v0.2 の起動時の走査の手掛かり)
         let mut bak_gone = true;
         if let Some(bak) = backup
