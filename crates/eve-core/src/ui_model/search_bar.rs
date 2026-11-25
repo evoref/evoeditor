@@ -22,6 +22,7 @@ use crate::search::{
 };
 use crate::time::Tick;
 use crate::ui_model::keys;
+use crate::ui_model::search_history::Recall;
 
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
@@ -129,6 +130,10 @@ pub(crate) struct SearchBarState {
     pub memo: SearchBarMemo,
     /// 検索バーを開いてから、検索の移動の前の位置をジャンプ履歴に記録した (続く移動では記録しない、03 §5.9 の JMP-1 (b))。
     pub jump_noted: bool,
+    /// 検索欄の履歴の呼び出しの位置 (03 §12.8 の SHI-4。バーを開くたびに最新から)。
+    pub recall_search: Recall,
+    /// 置換欄の履歴の呼び出しの位置 (置換欄を足すたびに最新から)。
+    pub recall_replace: Recall,
 }
 
 /// この件数以上のすべて置換は、Undo の記録を 1 件の置き換えにしてよい (`REPLACE_COARSE_UNDO_MIN`、03 §12.5)。
@@ -201,6 +206,8 @@ impl EditorState {
             all_selected: false,
             memo: SearchBarMemo::default(),
             jump_noted: false,
+            recall_search: Recall::default(),
+            recall_replace: Recall::default(),
         });
         self.set_bar_rows();
         CommandResult::Done
@@ -222,6 +229,7 @@ impl EditorState {
         if let Some(bar) = &mut self.find.search_bar {
             if bar.replace.is_none() {
                 bar.replace = Some((String::new(), 0));
+                bar.recall_replace.reset();
             }
             // 検索語が空なら検索欄、あれば置換欄にフォーカスを置く
             bar.all_selected = false;
@@ -616,6 +624,11 @@ impl EditorState {
             self.search_replace_all();
             return SearchStep::NoQuery;
         }
+        // 次 / 前を実行した検索語を履歴に記録する (一致の有無・探さない理由に依らない、03 §12.8 の SHI-2)
+        self.record_search_term();
+        let Some(bar) = &self.find.search_bar else {
+            return SearchStep::NoQuery;
+        };
         // 探さない理由がある: 何もせず、メッセージ行に理由を出す (03 §12.3.1 の「探さない場合」)
         if bar.refusal.is_some() {
             self.notify_search_limit();
@@ -1114,6 +1127,11 @@ impl EditorState {
     /// `search.replace_all` (03 §12.5): 検索欄の検索語・大小の区別で、置換欄の文字列にすべて置き換える。1 つの Undo 単位。
     /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで `ChangeSet` を作る。
     pub fn search_replace_all(&mut self) -> CommandResult {
+        // 置換を実行した検索語と置換の文字列を履歴に記録する (置換欄があるときだけ。読み取り専用の文書で断るときは記録しない。
+        // `when` の `!doc.read_only` で断る経路と、ボタンの `Enter` から直に呼ぶ経路をそろえる、03 §12.8.1)
+        if self.active_document_editable() {
+            self.record_replace();
+        }
         let Some(bar) = &self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
@@ -1290,6 +1308,11 @@ impl EditorState {
     /// `search.replace` (03 §12.5): 現在の一致を置換欄の文字列に置き換え、次の一致を強調する。置換ごとに別の Undo 単位。
     /// 正規表現では `$1` / `${name}` を展開し、`\n` を既定の改行にする。
     pub fn search_replace(&mut self) -> CommandResult {
+        // 置換を実行した検索語と置換の文字列を履歴に記録する (置換欄があるときだけ。読み取り専用の文書で断るときは記録しない。
+        // `when` の `!doc.read_only` で断る経路と、ボタンの `Enter` から直に呼ぶ経路をそろえる、03 §12.8.1)
+        if self.active_document_editable() {
+            self.record_replace();
+        }
         let Some(bar) = &self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };

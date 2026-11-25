@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 124 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 126 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -121,6 +121,8 @@
 | `ui.cancel` | 取り消し | Ui | — | — | `-` | `editor`: `Esc`<br>`prompt`: `Esc`<br>`dialog`: `Esc`<br>`help`: `Esc` | 出す |
 | `ui.confirm` | 決定 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `prompt`: `Enter`<br>`dialog`: `Enter` | 出さない |
 | `ui.dialog_choose` | 選択肢を選ぶ | Ui | `choice`: `int` | `overlay.active == "dialog"` | `-` | — | 出さない |
+| `ui.history_next` | 次の履歴 | Ui | — | `(overlay.active == "" && search.active) \|\| overlay.active == "workspace_search"` | `-` | `prompt`: `Alt+↓`, `Ctrl+K ↓` | 出さない |
+| `ui.history_prev` | 前の履歴 | Ui | — | `(overlay.active == "" && search.active) \|\| overlay.active == "workspace_search"` | `-` | `prompt`: `Alt+↑`, `Ctrl+K ↑` | 出さない |
 | `ui.list_next` | 次の項目 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `search`: `Tab`<br>`list`: `↓`, `Ctrl+N`<br>`dialog`: `Tab`, `→`, `↓`<br>`help`: `↓` | 出さない |
 | `ui.list_page_down` | 一覧の次のページ | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`: `PgDn`<br>`help`: `PgDn` | 出さない |
 | `ui.list_page_up` | 一覧の前のページ | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`: `PgUp`<br>`help`: `PgUp` | 出さない |

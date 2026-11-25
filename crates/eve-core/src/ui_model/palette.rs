@@ -31,6 +31,9 @@ pub fn hidden(id: &str) -> bool {
                 | ids::UI_LIST_PAGE_DOWN
                 | ids::UI_LIST_PAGE_UP
                 | ids::UI_DIALOG_CHOOSE
+                // 入力欄の履歴 (パレットから選ぶとフォーカスがパレットに移り、効く欄が無い。07 §11.6)
+                | ids::UI_HISTORY_PREV
+                | ids::UI_HISTORY_NEXT
         )
 }
 

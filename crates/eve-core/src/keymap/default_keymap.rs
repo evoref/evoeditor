@@ -329,6 +329,23 @@ pub(crate) fn default_keymap() -> Keymap {
         )
         .expect("既定キーマップの書式は正しい");
     }
+    // 検索履歴 (v0.5 の M34、FR-407。07 §11.6 の「編集の拡張」。規則は 03 §12.8)。`prompt` に置き、検索バーの欄と横断検索の
+    // 入力欄だけで効く (ほかの入力欄では `when` が偽でキーは下の層へ進む、SHI-6)。`alt+up` / `alt+down` は Windows Terminal が
+    // 横取りするので、全端末で届くチョードの代替を持つ (2 打目に `shift` を使わない)
+    for (keys, cmd) in [
+        ("alt+up", "ui.history_prev"),
+        ("alt+down", "ui.history_next"),
+        ("ctrl+k up", "ui.history_prev"),
+        ("ctrl+k down", "ui.history_next"),
+    ] {
+        l.bind(
+            "prompt",
+            keys,
+            cmd,
+            crate::ui_model::search_history::HISTORY_WHEN,
+        )
+        .expect("既定キーマップの書式は正しい");
+    }
     Keymap::new(vec![l]).expect("既定キーマップに曖昧なチョードはない")
 }
 
