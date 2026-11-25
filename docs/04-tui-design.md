@@ -1766,7 +1766,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save_as.now_open_in_other` | 名前を付けて保存は成功したが、保存の完了の時点で、照合の後に開いた別の文書と同じファイルになっていた (03 §12.7.6 の 2。どちらの文書も閉じない。拒んだときの `msg.save_as.open_in_other` と読み違えないよう別のキーにする)。`{path}` は保存したパス、`{other}` は相手の文書の表示用のパス | {path} に保存しましたが、同じファイルを別の文書 {other} としても開いています / どちらかの文書を閉じてから編集を続けてください |
 | `msg.save_as.target_read_only` | 名前を付けて保存の保存先が読み取り専用属性のファイル (03 §9.7 (a) の 5。上書きの確認の前に拒否し、名前の入力プロンプトに戻る) | {path} は読み取り専用属性のファイルなので上書きできません / 別のファイル名を入力してください |
 | `msg.save_as.not_a_file` | 名前を付けて保存の保存先がフォルダ・デバイス等 (03 §9.7 (a) の 4。パスの不正は `msg.save.invalid_path`、metadata の失敗 ((a) の 7) は `msg.save.failed` / `msg.save.permission_denied` / `msg.save.busy`) | {path} はファイルではありません (フォルダ等) / 別のファイル名を入力してください |
-| `info.save.aborted` | 保存の連鎖の中止 (03 §9.7 の「中止」: 名前の入力・確認のキャンセル、保存の待ちの取消し (`JobError::Cancelled`)。後続の終了・置き換え・開き直しも行わない) | 保存を中止しました ({path} は書き換えていません) |
+| `info.save.aborted` | 保存の連鎖の中止 (03 §9.7 の「中止」: 名前の入力・確認のキャンセル (未保存の確認 `AskUnsaved` のキャンセルは除く。保存を始めていないため、v0.5、Issue #647)、保存の待ちの取消し (`JobError::Cancelled`)。後続の終了・置き換え・開き直しも行わない) | 保存を中止しました ({path} は書き換えていません) |
 | `ui.confirm.unsaved.title` | 未保存で終了する (FR-107。v0.2 からは文書を閉じるときも) | 未保存の変更 |
 | `ui.confirm.unsaved.message` | 同上。v0.2 で dirty な文書が 2 件以上のときは `ui.confirm.unsaved.chain` を使う | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved.chain` | v0.2 の終了の連鎖 (03 §9.8) で、dirty な文書が 2 件以上のときの本文。何件目か (`{index}` / `{total}`) を前置する | ({index}/{total}) {path} には保存されていない変更があります |
@@ -2037,7 +2037,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.save.transformed.final_newline` (v0.5) | 上の `{detail}` の部分。末尾に改行を足したとき | 末尾に改行を足しました |
 | `info.save.transformed.separator` (v0.5) | 上の `{detail}` の 2 つの部分の区切り | 、 |
 | `info.save.suffix.transform_skipped_large` (v0.5) | 保存の成功で、保存時の変換の設定は真だが、文書が 1 MiB (`TRANSFORM_SYNC_BYTES`) を超えたので変換しなかったとき (SVT-6)。完了のメッセージの後ろに付ける | (1 MiB を超える文書なので、行末の空白の除去と末尾の改行はしていません) |
-| `info.save.suffix.transform_kept` (v0.5) | 保存時の変換を当てた連鎖が書けずに終わった・中止したとき (SVT-8)。失敗・中止のメッセージ (`msg.save.*` の本文 (`ui.confirm.save_failed` の本文を含む)・`info.save.aborted`・`info.save.escape_merge_cancelled`・`info.save.to_recovery`・`msg.save.recovery_failed`) と、全保存の失敗の一覧の各行の `{reason}` の後ろに付ける。外部変更・原子的置換不可などの確認と名前の入力のキャンセルは、変換が残っているときだけ `info.save.aborted` にこれを付けて出す (残っていなければ v0.4 と同じく出さない)。「保存を中止して終了」では出さない。変換の Undo のノードが履歴の今の位置のときだけ。今の位置でなければ下の `transform_remains`、Undo で戻されていれば付けない | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています。{key:edit.undo} で戻せます |
+| `info.save.suffix.transform_kept` (v0.5) | 保存時の変換を当てた連鎖が書けずに終わった・中止したとき (SVT-8)。失敗・中止のメッセージ (`msg.save.*` の本文 (`ui.confirm.save_failed` の本文を含む)・`info.save.aborted`・`info.save.escape_merge_cancelled`・`info.save.to_recovery`・`msg.save.recovery_failed`) と、全保存の失敗の一覧の各行の `{reason}` の後ろに付ける。外部変更・原子的置換不可などの確認のキャンセルと名前の入力の `Esc` では、常に `info.save.aborted` を出し (03 §9.7 の「中止」)、変換が残っていればこれを付ける (v0.5、Issue #647。v0.4 までは何も出さず、段 3 では変換が残っているときだけ出していた)。「保存を中止して終了」では出さない。変換の Undo のノードが履歴の今の位置のときだけ。今の位置でなければ下の `transform_remains`、Undo で戻されていれば付けない | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています。{key:edit.undo} で戻せます |
 | `info.save.suffix.transform_remains` (v0.5) | 上と同じ場面で、変換の Undo のノードが履歴の今の位置でない (後に別の編集がある) とき (03 §9.3.1 の SVT-8) | 保存時の変換 (行末の空白・末尾の改行) は本文に残っています |
 | `info.save.suffix.transform_reverted` (v0.5) | 上書き保存が書込権限なしで失敗し、文書を読み取り専用にする前に変換を戻したとき (SVT-8 の例外)。`ui.confirm.save_failed` の本文と全保存の失敗の一覧の `{reason}` の後ろに付ける | 保存時の変換 (行末の空白・末尾の改行) は戻しました |
 | `info.save_all.suffix.transformed` (v0.5) | 全保存の要約 (`info.save_all.done` / `.done_skipped`) の後ろに付ける。保存時の変換で本文が変わって保存できた文書が 1 件以上あるとき (`{count}` はその件数) | (うち {count} 件は保存時に行末の空白・末尾の改行を整えました) |

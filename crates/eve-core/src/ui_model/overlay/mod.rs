@@ -164,7 +164,7 @@ impl EditorState {
             return CommandResult::Done;
         }
         // 取り消す順 (03 §12.7.6 の細目 (9)、04 §7.5): 表示中の文書の読込 (標準入力の確認を含む) → 未編集の上書き保存の
-        // 照合 → 名前を付けて保存の照合 → 表示していない文書の読込 → 表現不能の置換の一覧の作成。読込の結果は
+        // 照合 → 名前を付けて保存の照合 → 表示していない文書の読込 → 表現不能の置換の一覧の作成 → 後続のある保存。読込の結果は
         // `Failed { Cancelled }` で届き、旧文書があれば残る (FR-122)
         if self.ui.overlay.is_none() && self.cancel_own_loading() {
             return CommandResult::Done;
@@ -185,6 +185,11 @@ impl EditorState {
         if self.ui.overlay.is_none() && self.cancel_building_replacement() {
             return CommandResult::Done;
         }
+        // 後続 (終了・閉じる・開き直し) を持つ保存を待っている (`Saving`、`cont` が Some) なら、保存の取消しを送って後続を
+        // 取り消す (`cancel_origin = User`、03 §9.7)。後続の無い保存・取り消し済みの保存は素通りして次の段へ
+        if self.ui.overlay.is_none() && self.cancel_save_continuation() {
+            return CommandResult::Done;
+        }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
         if let Some(Overlay::Confirm(c)) = &self.ui.overlay {
             let cancel = c.cancel_index();
@@ -202,8 +207,8 @@ impl EditorState {
             self.open_aborted(&ask);
             return CommandResult::Done;
         }
-        // 名前を付けて保存の名前の入力の `Esc` は保存の連鎖の中止。保存時の変換が本文に残っていれば知らせる (03 §9.3.1 の
-        // SVT-8。残っていなければ v0.4 と同じく何も出さない)
+        // 名前を付けて保存の名前の入力 (`AskName`) の `Esc` は保存の連鎖の中止 (`info.save.aborted`、03 §9.7 の「中止」)。
+        // 保存時の変換が本文に残っていれば付記する (03 §9.3.1 の SVT-8)
         let save_as_doc = match &self.ui.overlay {
             Some(Overlay::Prompt(PromptState {
                 kind: PromptKind::SaveAs { doc, .. } | PromptKind::SaveAsFormat { doc, .. },
@@ -213,7 +218,7 @@ impl EditorState {
         };
         if self.take_overlay().is_some() {
             if let Some(doc) = save_as_doc {
-                self.notify_transform_kept_on_abort(doc);
+                self.notify_save_aborted(doc, None);
             }
             self.mark_dirty_render();
             return CommandResult::Done;

@@ -148,7 +148,7 @@ impl EditorState {
 
     /// 文書 `doc` の保存の連鎖がジョブを待っている (保存・未編集の照合・名前を付けて保存の照合・置換の一覧・退避先への
     /// 保存)。
-    fn save_chain_busy(&self, doc: DocumentId) -> bool {
+    pub(crate) fn save_chain_busy(&self, doc: DocumentId) -> bool {
         self.save_in_progress(doc)
             || self.io.pending.values().any(|p| match p {
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
@@ -382,25 +382,6 @@ impl EditorState {
         match suffix {
             Some(s) => self.show_message_appended(level, key, args, s),
             None => self.show_message(level, key, args),
-        }
-    }
-
-    /// 保存の中止のメッセージ (`info.save.aborted`) を、変換が本文に残っていれば付記を付けて出す (SVT-8)。今の実装で
-    /// 中止のメッセージを出さない確認 (外部変更・原子的置換不可などのキャンセル、名前の入力のキャンセル) は、変換が
-    /// 残っているときだけ出す (残っていなければ v0.4 と同じく何も出さない)。
-    pub(crate) fn notify_transform_kept_on_abort(&mut self, doc: DocumentId) {
-        if let Some(suffix) = self.save_transform_kept_suffix(doc) {
-            let shown = self
-                .document(doc)
-                .and_then(|d| d.path.as_ref())
-                .map(FsPath::display)
-                .unwrap_or_default();
-            self.show_message_appended(
-                MessageLevel::Info,
-                keys::INFO_SAVE_ABORTED,
-                &[("path", &shown)],
-                &suffix,
-            );
         }
     }
 

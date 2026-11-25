@@ -44,6 +44,18 @@ pub(crate) struct FallbackAsk {
     pub conflict_current: Option<crate::FileStamp>,
 }
 
+/// 保存中 (`Saving`、後続なし) に届いた同じ文書の保存要求。前の保存が `Saved` で終わった後に、新しい要求として再実行する
+/// (03 §9.3 手順 4・§9.7 の全状態の遷移表の `file.save` の列。`file.save` は `file.save_as` / `file.set_encoding` を含む)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum QueuedSave {
+    /// `file.save`。
+    Save,
+    /// `file.save_as` (入力した名前と、`file.set_encoding` の名前の入力から来たときの新しい書式)。
+    SaveAs { raw: String, fmt: Option<NewFormat> },
+    /// `file.set_encoding` (新しい書式。パスが無い・読み取り専用の文書は、再実行で名前を尋ねる)。
+    SetEncoding(NewFormat),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FallbackKind {
     /// 開いた後に既存のファイルが外部で変更された (`ui.confirm.save.conflict_changed`、03 §9.5)。選択肢: 上書き / 別名で保存 (既定)。
@@ -131,7 +143,12 @@ impl EditorState {
             _ => None,
         });
         if let Some(job) = in_flight {
+            // 後続を付け直したので、`Esc` で後続を取り消した印 (`cancel_origin = User`) は外す (03 §9.7 の
+            // `cancel_origin = User` の行の `app.quit` と同じ。取消しが間に合っていれば中止になり、後続は行わない)
+            self.ui.save_cancelled_by_user.remove(&job);
             self.ui.continuations.insert(job, cont);
+            // 後続を付けた保存は単独の保存でなくなるので、積んだ保存要求も捨てる (03 §9.3 手順 4)
+            self.io.save_queue.remove(&doc_id);
             return CommandResult::Pending(job);
         }
         // `AskUnsaved` の「保存」は新しい連鎖 (保存の完了の後に出し直したものも。03 §9.3.1 の SVT-4 (c))
@@ -215,14 +232,26 @@ impl EditorState {
         if doc.load_state != crate::document::LoadState::Ready {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
-        if self.save_in_progress(doc_id) {
-            self.message(
-                MessageLevel::Info,
-                keys::INFO_SAVE_IN_PROGRESS,
-                &path.display(),
-            );
-            return CommandResult::Done;
+        // 保存の連鎖の途中: 単独の保存を待っていれば積み、ほかは無視する (03 §9.7 の全状態の遷移表の `file.save` の列)。
+        // 後続のある名前の入力 (`AskUnsaved` の「保存」から) の確定は積まない (後続は保存中の連鎖に付く)
+        let shown = path.display();
+        let deferred = match &cont {
+            None => self.queue_or_ignore_save_request(
+                doc_id,
+                QueuedSave::SaveAs {
+                    raw: raw_path.to_owned(),
+                    fmt,
+                },
+                &shown,
+            ),
+            Some(_) => self.ignore_save_request(doc_id, &shown),
+        };
+        if let Some(r) = deferred {
+            return r;
         }
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         // 03 §9.7 (a) の 1 (構文的に同じパス、I/O なし): 通常の上書き保存。読み取り専用の文書は同じファイルへ書かない
         if doc.path.as_ref() == Some(&path) {
             return self.save_as_same_file(doc_id, raw_path, cont, fmt);
@@ -692,6 +721,200 @@ impl EditorState {
         }
     }
 
+    /// 文書 `doc` の保存の連鎖がジョブを待っていれば (`CheckingUnchanged`・`CheckTarget`・`Saving`・`BuildingReplacement`・
+    /// `WritingRecovery`。判定は `save_chain_busy`)、同じ文書の保存要求を無視して
+    /// `info.save.in_progress` (`{path}` は `shown`) を示し、`Some` を返す (03 §9.7 の全状態の遷移表の「無視」)。
+    /// 待っていなければ `None` (呼び側が続ける)。
+    ///
+    /// spec: 03 §9.7
+    pub(crate) fn ignore_save_request(
+        &mut self,
+        doc: DocumentId,
+        shown: &str,
+    ) -> Option<CommandResult> {
+        if !self.save_chain_busy(doc) {
+            return None;
+        }
+        self.message(MessageLevel::Info, keys::INFO_SAVE_IN_PROGRESS, shown);
+        Some(CommandResult::Done)
+    }
+
+    /// 同じ文書の保存要求 `req` が保存の連鎖の途中に届いた (03 §9.7 の全状態の遷移表の `file.save` の列)。単独の保存
+    /// (`Saving`。後続が無く、`Esc` で取り消しておらず、「保存を中止して終了」の最中でない) を待っていれば、深さ 1 の
+    /// 待ち行列に積む (後に届いた要求で置き換える。知らせない、04 §15.2 の `info.save.in_progress`)。ほかの待ち (未編集の
+    /// 照合・名前を付けて保存の照合・後続のある保存・取り消した保存・置換の一覧の作成・退避先への保存) では `ignore_save_request` のとおり
+    /// 無視する。連鎖の途中でなければ `None` (呼び側が続ける)。
+    ///
+    /// spec: 03 §9.3, 03 §9.7
+    pub(crate) fn queue_or_ignore_save_request(
+        &mut self,
+        doc: DocumentId,
+        req: QueuedSave,
+        shown: &str,
+    ) -> Option<CommandResult> {
+        let single = self.ui.quit_abort.is_none()
+            && self.io.pending.iter().any(|(job, p)| {
+                matches!(p, Pending::Save { doc: d, .. } if *d == doc)
+                    && !self.ui.continuations.contains_key(job)
+                    && !self.ui.save_cancelled_by_user.contains(job)
+            });
+        if !single {
+            return self.ignore_save_request(doc, shown);
+        }
+        self.io.save_queue.insert(doc, req);
+        Some(CommandResult::Done)
+    }
+
+    /// 前の保存が `Saved` で終わった後、待ち行列に積んだ保存要求を再実行する。オーバーレイ・検索バーが出ていれば保留し、
+    /// 閉じた後に `flush_held_queued_saves` が流す (利用者が開いた入力・確認を黙って置き換えない)。
+    ///
+    /// spec: 03 §9.3, 03 §9.7
+    pub(crate) fn rerun_queued_save(&mut self, doc: DocumentId, req: QueuedSave) {
+        if self.auto_switch_blocked() || !self.io.held_queued_saves.is_empty() {
+            self.io.held_queued_saves.push((doc, req));
+            return;
+        }
+        self.run_queued_save(doc, req);
+    }
+
+    /// 保留した保存の再実行を、オーバーレイ・検索バーが閉じている間、届いた順に流す (`flush_open_switches` から呼ぶ)。
+    pub(crate) fn flush_held_queued_saves(&mut self) {
+        while !self.auto_switch_blocked() && !self.io.held_queued_saves.is_empty() {
+            let (doc, req) = self.io.held_queued_saves.remove(0);
+            self.run_queued_save(doc, req);
+        }
+    }
+
+    /// 積んだ保存要求を新しい要求として再実行する (03 §9.3 手順 4。保存時の変換も新しい連鎖として判定する、§9.3.1 の
+    /// SVT-4 (c))。コマンドの経路と同じ判定を通す: `file.save` は読込済みで読み取り専用でない文書だけ (`when` の
+    /// `!doc.read_only` と §9.3 手順 1。積んだ後に読み取り専用にした文書は書かない)、かつ dirty のときだけ (保存の間に編集が
+    /// 無ければ、前の保存が最新の本文を書いている)。`file.save_as` / `file.set_encoding` は入口の関数を通す (同じファイルで
+    /// 読み取り専用なら拒む・名前を尋ねるなど、その時点の文書の状態で決まる)。照合の期待値は、前の保存の結果で更新した
+    /// `disk_stamp`。表示中のメッセージが警告・エラー (前の保存の警告など) なら、再実行の完了のメッセージは背景の知らせに
+    /// する。文書が閉じられていれば何もしない。
+    ///
+    /// spec: 03 §9.3, 03 §9.3.1, 03 §9.7
+    fn run_queued_save(&mut self, doc: DocumentId, req: QueuedSave) {
+        let Some(d) = self.document(doc) else {
+            return;
+        };
+        let runnable = match &req {
+            QueuedSave::Save => {
+                d.is_dirty()
+                    && d.read_only.is_empty()
+                    && d.load_state == crate::document::LoadState::Ready
+            }
+            QueuedSave::SaveAs { .. } | QueuedSave::SetEncoding(_) => true,
+        };
+        if !runnable {
+            return;
+        }
+        if self.message_is_alert() {
+            self.io.quiet_save_done.insert(doc);
+        }
+        match req {
+            QueuedSave::Save => {
+                self.request_save_for(doc);
+            }
+            QueuedSave::SaveAs { raw, fmt } => {
+                // 書式付き (`file.set_encoding` の名前の入力から) なら、変換の発行コマンドは `file.set_encoding` (SVT-5)
+                let command = if fmt.is_some() {
+                    crate::command::ids::FILE_SET_ENCODING
+                } else {
+                    crate::command::ids::FILE_SAVE_AS
+                };
+                self.begin_save_chain(doc, command);
+                self.request_save_as_fmt(doc, &raw, None, fmt);
+            }
+            QueuedSave::SetEncoding(fmt) => {
+                self.set_encoding_for(doc, Some(fmt.encoding), Some(fmt.bom));
+            }
+        }
+        // 保存ジョブを投入しなかった (照合・名前の入力・確認・拒否) なら、背景の知らせの印は使わない
+        let saving = self
+            .io
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc));
+        if !saving {
+            self.io.quiet_save_done.remove(&doc);
+        }
+    }
+
+    /// `Esc` の段 (04 §7.5): 後続 (終了・閉じる・開き直し) を持つ保存 (`Saving`、`cont` が Some) を待っていれば、保存ジョブに
+    /// 取消しを常に送り (ジョブの段は見ない)、後続を捨てて `cancel_origin = User` にする (03 §9.7 の全状態の遷移表)。
+    /// 結果は単独の保存として扱う: `Saved` は採用して後続を行わず、`Cancelled` は中止 (`info.save.aborted`)、ほかの失敗は
+    /// (e) の表。後続の無い保存・取り消し済みの保存・「保存を中止して終了」の最中は取り消さない (`false` を返して次の段へ
+    /// 通す)。今の文書の保存を、無ければ最後に投入した保存を取り消す。後続が終了なら、終了そのものを取り消す (ほかの文書の
+    /// 保存に付けた終了も外し、終了の連鎖と保存中の終了の待ちを止める。外した保存は単独の保存として続ける)。
+    ///
+    /// spec: 03 §9.7, 04 §7.5
+    pub(crate) fn cancel_save_continuation(&mut self) -> bool {
+        if self.ui.quit_abort.is_some() {
+            return false;
+        }
+        let active = self.active_document();
+        let saves: Vec<(eve_view::JobId, DocumentId)> = self
+            .io
+            .pending
+            .iter()
+            .filter_map(|(job, p)| match p {
+                Pending::Save { doc, .. }
+                    if self.ui.continuations.contains_key(job)
+                        && !self.ui.save_cancelled_by_user.contains(job) =>
+                {
+                    Some((*job, *doc))
+                }
+                _ => None,
+            })
+            .collect();
+        let Some((job, _)) = active_or_latest(&saves, active) else {
+            return false;
+        };
+        self.jobs.cancel(job);
+        self.ui.save_cancelled_by_user.insert(job);
+        if self.ui.continuations.remove(&job) == Some(Continuation::Quit) {
+            let pending = &self.io.pending;
+            self.ui.continuations.retain(|j, c| {
+                *c != Continuation::Quit || !matches!(pending.get(j), Some(Pending::Save { .. }))
+            });
+            self.ui.quit_chain = None;
+            self.ui.quit_wait = None;
+        }
+        self.mark_dirty_render();
+        true
+    }
+
+    /// 中止のメッセージの `{path}`: 文書のパス、無題なら文書の名前 (`無題-1` など)。文書が無ければ `None`。
+    pub(crate) fn save_abort_path(&self, doc: DocumentId) -> Option<String> {
+        let d = self.document(doc)?;
+        Some(match d.path.as_ref() {
+            Some(p) => p.display(),
+            None => self.untitled_label(d),
+        })
+    }
+
+    /// 保存の連鎖の中止を `info.save.aborted` で示す (03 §9.7 の「中止」、04 §15.2)。`{path}` は `path` (無ければ
+    /// `save_abort_path`)。保存時の変換が本文に残っていれば付記する (03 §9.3.1 の SVT-8)。文書が閉じられていて `path` も
+    /// 無ければ何も出さない。
+    ///
+    /// spec: 03 §9.7, 03 §9.3.1
+    pub(crate) fn notify_save_aborted(&mut self, doc: DocumentId, path: Option<&FsPath>) {
+        let Some(shown) = path
+            .map(FsPath::display)
+            .or_else(|| self.save_abort_path(doc))
+        else {
+            return;
+        };
+        let kept = self.save_transform_kept_suffix(doc);
+        self.show_message_with_suffix(
+            MessageLevel::Info,
+            keys::INFO_SAVE_ABORTED,
+            &[("path", &shown)],
+            kept.as_deref(),
+        );
+    }
+
     /// `Esc` の段 (04 §7.5): 未編集の上書き保存の照合 (`CheckingUnchanged`) を待っていれば、照合の結果を捨てて後続も捨てる
     /// (03 §9.7 の全状態の遷移表。何も書いていない)。今の文書の照合を、無ければ最後に投入した照合を中止する。中止したら `true`。
     pub(crate) fn cancel_unchanged_check(&mut self) -> bool {
@@ -705,11 +928,7 @@ impl EditorState {
                 _ => None,
             })
             .collect();
-        let Some(&(job, doc)) = checks
-            .iter()
-            .find(|(_, d)| Some(*d) == active)
-            .or_else(|| checks.iter().max_by_key(|(j, _)| j.0))
-        else {
+        let Some((job, doc)) = active_or_latest(&checks, active) else {
             return false;
         };
         self.jobs.cancel(job);
@@ -741,11 +960,7 @@ impl EditorState {
                 _ => None,
             })
             .collect();
-        let Some(&(job, _)) = jobs
-            .iter()
-            .find(|(_, d)| Some(*d) == active)
-            .or_else(|| jobs.iter().max_by_key(|(j, _)| j.0))
-        else {
+        let Some((job, _)) = active_or_latest(&jobs, active) else {
             return false;
         };
         self.jobs.cancel(job);
@@ -906,9 +1121,16 @@ impl EditorState {
                 // SVT-6)。連鎖はここで終わるので印を外す
                 let suffix = self.take_save_transform_suffix(doc_id);
                 let last = done.len().saturating_sub(1);
+                // 積んだ要求の再実行で、前の保存の警告・エラーが表示中なら、完了は背景の知らせにして置き換えない
+                // (03 §9.7 の「深さ 1 の待ち行列の細目」)
+                let quiet = self.io.quiet_save_done.remove(&doc_id);
                 for (i, (key, args)) in done.iter().enumerate() {
                     let s = if i == last { suffix.as_deref() } else { None };
-                    self.show_message_with_suffix(MessageLevel::Info, key, args, s);
+                    if quiet {
+                        self.show_background_message_with_suffix(MessageLevel::Info, key, args, s);
+                    } else {
+                        self.show_message_with_suffix(MessageLevel::Info, key, args, s);
+                    }
                 }
                 self.show_save_warning(path, &report.warnings);
                 if path_changed {
@@ -1190,6 +1412,18 @@ impl EditorState {
             _ => {}
         }
     }
+}
+
+/// `Esc` で取り消すジョブの選び方 (04 §7.5 の保存の連鎖の段で共通): 表示中の文書 `active` のジョブを先に、無ければ最後に
+/// 投入したもの (`JobId` の大きいもの)。
+fn active_or_latest(
+    jobs: &[(eve_view::JobId, DocumentId)],
+    active: Option<DocumentId>,
+) -> Option<(eve_view::JobId, DocumentId)> {
+    jobs.iter()
+        .find(|(_, d)| Some(*d) == active)
+        .or_else(|| jobs.iter().max_by_key(|(j, _)| j.0))
+        .copied()
 }
 
 pub(crate) fn fallback_kind(

@@ -228,6 +228,23 @@ impl EditorState {
         });
     }
 
+    /// `show_background_message` に付記 `suffix` (無ければ付けない) を足したもの。表示中のメッセージが警告・エラーなら
+    /// 置き換えずに履歴にだけ積む (積んだ保存要求の再実行の完了、03 §9.7 の「深さ 1 の待ち行列の細目」)。
+    pub(crate) fn show_background_message_with_suffix(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        args: &[(&str, &str)],
+        suffix: Option<&str>,
+    ) {
+        let (text, hint) = self.resolve_message(self.catalog(), key, args);
+        let text = match suffix {
+            Some(s) => format!("{text} {s}"),
+            None => text,
+        };
+        self.push_background_message(level, key, text, hint);
+    }
+
     /// `show_message` の本文の後ろに `suffix` を空白をはさんで足したもの (保存時の変換の付記、04 §8.16)。対処 (`.hint`) は
     /// そのまま。
     pub(crate) fn show_message_appended(

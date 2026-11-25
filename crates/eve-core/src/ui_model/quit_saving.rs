@@ -64,9 +64,13 @@ impl EditorState {
             self.ui.quit_wait = None;
             return None;
         };
-        // 終了で置き換える (置き換え・開き直しなどの後続は終了に統合する)
-        for (j, _) in &jobs {
+        // 終了で置き換える (置き換え・開き直しなどの後続は終了に統合する)。`Esc` で後続を取り消した保存も、後続を終了にして
+        // `cancel_origin` を None に戻す (03 §9.7 の `cancel_origin = User` の行。取消しが間に合っていれば中止になり、終了しない)
+        // 後続を付けた保存は単独の保存でなくなるので、積んだ保存要求も捨てる (03 §9.3 手順 4)
+        for (j, d) in &jobs {
+            self.ui.save_cancelled_by_user.remove(j);
             self.ui.continuations.insert(*j, Continuation::Quit);
+            self.io.save_queue.remove(d);
         }
         match self.ui.quit_wait {
             // もう一度 `app.quit`: 確認をすぐに出す
@@ -166,6 +170,8 @@ impl EditorState {
         let jobs = self.saving_jobs();
         for (j, _) in &jobs {
             self.ui.continuations.remove(j);
+            // `cancel_origin = QuitAbort` (`quit_abort`) が `User` に代わる
+            self.ui.save_cancelled_by_user.remove(j);
             self.jobs.cancel(*j);
         }
         // 読込中の標準入力の文書は黙って捨てない: 受け取った量によらず読込を止め (`Stopped` と同じ。受け渡し待ちの分も

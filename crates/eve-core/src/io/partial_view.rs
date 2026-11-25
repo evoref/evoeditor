@@ -413,6 +413,8 @@ impl EditorState {
         self.flush_stdin_continuations();
         // 保留した名前を付けて保存の照合の結果 (03 §12.7.6 の細目 (7))
         self.flush_held_save_as();
+        // 保留した保存の再実行 (03 §9.7 の「深さ 1 の待ち行列の細目」)
+        self.flush_held_queued_saves();
         if self.auto_switch_blocked() {
             return;
         }

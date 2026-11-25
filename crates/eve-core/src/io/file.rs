@@ -169,6 +169,9 @@ impl EditorState {
                 self.io.closing_snapshots.insert(doc, snap);
             }
             self.forget_save_transform(doc);
+            // 保存中に積んだ保存要求も捨てる (閉じた文書は再実行しない、03 §9.3 手順 4)
+            self.io.save_queue.remove(&doc);
+            self.io.held_queued_saves.retain(|(d, _)| *d != doc);
             // 退避用の公開物から外す (破棄した内容を緊急退避に残さない。保存中の文書は上で残している)
             self.mark_snapshot_update(doc);
             self.push_event(EditorEvent::DocumentClosed { doc });
@@ -268,12 +271,30 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.request_save_for(doc_id)
+    }
+
+    /// `request_save` の対象を文書 `doc_id` に固定する版 (保存中に積んだ `file.save` の再実行、03 §9.3 手順 4)。
+    /// 保存の連鎖の途中なら、単独の保存を待つ間は深さ 1 の待ち行列に積み、ほかは無視する (03 §9.7 の全状態の遷移表)。
+    ///
+    /// spec: 03 §9.3, 03 §9.7
+    pub(crate) fn request_save_for(&mut self, doc_id: DocumentId) -> CommandResult {
         // 名前の入力 (無題の文書)・未編集の照合 (手順 0) より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
         if self.reject_stateful_invalid(doc_id, None) {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         // 保存の連鎖を始める (保存時の変換の印、03 §9.3.1 の SVT-4 (c)。保存中なら前の連鎖の印を保つ)
         self.begin_save_chain(doc_id, crate::command::ids::FILE_SAVE);
+        // 保存の連鎖の途中なら積むか無視する。名前の入力より先に見る (無題の文書の最初の保存の間も積む、03 §9.7 の
+        // 全状態の遷移表)
+        let Some(shown) = self.save_abort_path(doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        if let Some(r) =
+            self.queue_or_ignore_save_request(doc_id, super::save::QueuedSave::Save, &shown)
+        {
+            return r;
+        }
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -288,14 +309,6 @@ impl EditorState {
             );
             return CommandResult::Done;
         };
-        if self.save_in_progress(doc_id) {
-            self.message(
-                MessageLevel::Info,
-                keys::INFO_SAVE_IN_PROGRESS,
-                &path.display(),
-            );
-            return CommandResult::Done;
-        }
         if !doc.is_dirty() {
             // 手順 0: 未編集なら、ディスク上のファイルも変わっていないことを確かめてから書かない
             let job = self.jobs.spawn(
@@ -362,11 +375,17 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let path = doc.path.clone();
-        if self.save_in_progress(doc_id) {
-            let shown = path.as_ref().map(FsPath::display).unwrap_or_default();
-            self.message(MessageLevel::Info, keys::INFO_SAVE_IN_PROGRESS, &shown);
-            return CommandResult::Done;
+        let shown = path.as_ref().map(FsPath::display).unwrap_or_default();
+        if let Some(r) = self.queue_or_ignore_save_request(
+            doc_id,
+            super::save::QueuedSave::SetEncoding(fmt),
+            &shown,
+        ) {
+            return r;
         }
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         match path {
             Some(path) if doc.is_editable() => {
                 let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);

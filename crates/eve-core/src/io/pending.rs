@@ -480,6 +480,14 @@ impl EditorState {
                     merged,
                 };
                 let saved = matches!(r, JobResult::Saved { .. });
+                // `Esc` で後続を取り消した保存 (`cancel_origin = User`、03 §9.7)。後続は取り消したときに外してあるので、結果は
+                // 単独の保存として扱う
+                let user_cancelled = self.ui.save_cancelled_by_user.remove(&job);
+                // 保存中に積んだ同じ文書の保存要求 (03 §9.3 手順 4)。単独の保存 (後続なし・取り消していない) が `Saved` で
+                // 終わったときだけ再実行し、失敗 (`Cancelled` を含む)・後続のある保存・「保存を中止して終了」では捨てる
+                let queued = self.io.save_queue.remove(&doc).filter(|_| {
+                    saved && cont.is_none() && !user_cancelled && self.ui.quit_abort.is_none()
+                });
                 // 保持方式の記録を使う保存の確かめ (03 §8.6 E2 の確認 (i)・(ii)) で止まった: 記録を全部捨てて「保持なし」に
                 // する (03 §8.7.1 の「保存」。同じ表を渡し続けると、同じ文字コードで二度と保存できない)。全保存・「保存を
                 // 中止して終了」の経路を含めて、ここで 1 回だけ行う
@@ -514,6 +522,11 @@ impl EditorState {
                 self.release_closing_snapshot(doc, &path, saved);
                 if in_batch.is_some() {
                     self.finish_save_all_if_done();
+                }
+                // 再実行の完了を背景の知らせにする印は、この保存の結果で使い終える
+                self.io.quiet_save_done.remove(&doc);
+                if let Some(req) = queued {
+                    self.rerun_queued_save(doc, req);
                 }
             }
         }
