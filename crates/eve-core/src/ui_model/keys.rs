@@ -293,6 +293,7 @@ pub(crate) const UI_HELP_SEARCH_OTHER_TOOLS: &str = "ui.help.search.other_tools"
 pub(crate) const UI_HELP_SEARCH_SINGLE_LINE: &str = "ui.help.search.single_line";
 pub(crate) const UI_HELP_SEARCH_SUGAR: &str = "ui.help.search.sugar";
 pub(crate) const UI_HELP_TERMINAL_ALT: &str = "ui.help.terminal.alt";
+pub(crate) const UI_HELP_TERMINAL_AUTO_PAIRS_PASTE: &str = "ui.help.terminal.auto_pairs_paste";
 pub(crate) const UI_HELP_TERMINAL_CHORD: &str = "ui.help.terminal.chord";
 pub(crate) const UI_HELP_TERMINAL_CTRL_SHIFT_L: &str = "ui.help.terminal.ctrl_shift_l";
 pub(crate) const UI_HELP_TERMINAL_IME: &str = "ui.help.terminal.ime";
@@ -679,6 +680,7 @@ const ALL: &[&str] = &[
     UI_HELP_SEARCH_SINGLE_LINE,
     UI_HELP_SEARCH_SUGAR,
     UI_HELP_TERMINAL_ALT,
+    UI_HELP_TERMINAL_AUTO_PAIRS_PASTE,
     UI_HELP_TERMINAL_CHORD,
     UI_HELP_TERMINAL_CTRL_SHIFT_L,
     UI_HELP_TERMINAL_IME,

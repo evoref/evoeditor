@@ -1061,6 +1061,10 @@ text = "The section [{item}] in .editorconfig is too complex"
 hint = "Fix file_types or other patterns in one of the definitions"
 text = "{file} matches both {first} and {second}; using {second}"
 
+[msg.language.bad_auto_pairs]
+hint = "This item is ignored; other settings are used"
+text = "The pairs in {item} are invalid (one character each, up to 16 pairs)"
+
 [msg.language.bad_comment]
 hint = "Use 1 to 16 bytes without spaces or control characters. This item is not used"
 text = "The marker {value} of {item} is invalid"
@@ -1904,6 +1908,7 @@ alt = "On terminals where Alt does not reach the editor (such as the default Ter
 multi_cursor_paste = "To paste one line per cursor, use Ctrl+K V (a short terminal paste cannot be split per cursor)"
 ctrl_shift_l = "Some terminals send Ctrl+Shift+L as Ctrl+L (Select Line); use Ctrl+K E to select all matches"
 redraw = "If the screen looks garbled, press Ctrl+K R to redraw (Ctrl+L selects the line)"
+auto_pairs_paste = "When auto-pairs are on, paste with Ctrl+K V (a short terminal paste arrives as keystrokes and may get closing characters added)"
 stdin_keys = "When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input"
 stdin_redraw = "If the writer's error output garbles the screen, redraw it with {key:ui.redraw}"
 stdin_powershell = "Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\""

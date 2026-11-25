@@ -852,6 +852,12 @@ impl Document {
         self.history.seal();
     }
 
+    /// 文書を変えない自動閉じの入力 (閉じ字の飛び越え) を、連続入力の結合の判定に数える (03 §15.7 の APR-7。
+    /// `UndoHistory::absorb_identity`)。文書の予算で古いノードを捨てたら `true`。
+    pub(crate) fn absorb_identity_input(&mut self, tx: &crate::document::Transaction) -> bool {
+        self.history.absorb_identity(tx)
+    }
+
     /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 窓ごとに、旧文書と新文書の改行を数え直して差し替える。
     fn update_eol_stats(&mut self, before: &Snapshot, cs: &ChangeSet) {
         let windows = eol_windows(cs);

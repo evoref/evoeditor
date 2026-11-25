@@ -41,7 +41,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "clipboard.system_max_bytes",
     "clipboard.x11_exit_wait_ms",
     "editor.auto_indent",
-    "editor.auto_pairs",
     "editor.backspace_unindent",
     "editor.newline_keep_whitespace_only_line",
     "editor.paste_normalize_eol",

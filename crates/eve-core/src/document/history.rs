@@ -67,6 +67,19 @@ struct UndoNode {
     format: Option<FormatChange>,
     /// この Transaction の適用で外した保持方式の記録 (03 §7.1 の `preserved_removed`)。
     preserved: PreservedUndo,
+    /// 連続入力の結合 (R7 / R8) で直前のノードとして比べる、変更のまとまりごとの最後の入力 (文書の順。03 §7.1 の
+    /// `UndoNode.tail`)。自動閉じの入力 (`Transaction::coalesce_as`、03 §15.7 の APR-7) を記録・結合したノードと、その後に
+    /// 結合した入力のノードが持つ。`None` のノードは、合成した変更のまとまり (`redo`) の適用後の範囲と長さで比べる。
+    tail: Option<Arc<[TailHunk]>>,
+}
+
+/// 連続入力の結合で比べる、変更のまとまり 1 つの最後の入力 (`UndoNode::tail`)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TailHunk {
+    /// 最後の入力の適用後の範囲 (R7 は末尾、R8 は先頭を比べる)。
+    at: ByteRange,
+    /// R7 の長さの条件で数える、このまとまりの挿入の長さの合計 (自動閉じを切っていたときの入力として数えた長さ)。
+    total: usize,
 }
 
 /// Undo のノードが持つ、保持方式の記録 (03 §7.1 の `preserved_removed`、§8.7.1)。再読込・復旧の表の全体の入れ替えは
@@ -186,6 +199,65 @@ fn kind_of(hunks: &[(ByteRange, ByteRange)]) -> EditKind {
     } else {
         EditKind::Mixed
     }
+}
+
+/// 結合の判定に使う `tx` の変更のまとまり (自動閉じの入力は `coalesce_as`、03 §15.7 の APR-7)。
+fn tx_hunks(tx: &Transaction) -> std::borrow::Cow<'_, [(ByteRange, ByteRange)]> {
+    match &tx.coalesce_as {
+        Some(h) => std::borrow::Cow::Borrowed(h),
+        None => std::borrow::Cow::Owned(hunks(&tx.changes)),
+    }
+}
+
+/// 直前のノードとして比べる変更のまとまり (`tail` があればそれ、無ければ合成した変更のまとまり)。
+enum PrevHunks<'a> {
+    Tail(&'a [TailHunk]),
+    Composed(&'a [(ByteRange, ByteRange)]),
+}
+
+impl PrevHunks<'_> {
+    fn len(&self) -> usize {
+        match self {
+            PrevHunks::Tail(t) => t.len(),
+            PrevHunks::Composed(c) => c.len(),
+        }
+    }
+
+    /// `i` 番目の位置の比べに使う範囲。
+    fn at(&self, i: usize) -> ByteRange {
+        match self {
+            PrevHunks::Tail(t) => t[i].at,
+            PrevHunks::Composed(c) => c[i].1,
+        }
+    }
+
+    /// `i` 番目の挿入の長さの合計 (R7 の長さの条件)。
+    fn total(&self, i: usize) -> usize {
+        match self {
+            PrevHunks::Tail(t) => t[i].total,
+            PrevHunks::Composed(c) => c[i].1.len(),
+        }
+    }
+}
+
+/// `prev` に `tx` を結合した (または `tx` だけの) ノードの `tail`。`tx` が自動閉じの入力か、`prev` が `tail` を持つときだけ
+/// 作る (それ以外は合成した変更のまとまりで足りる)。長さの合計は、まとまりの数が同じなら前の合計に足す。
+fn next_tail(prev: Option<&PrevHunks<'_>>, tx: &Transaction) -> Option<Arc<[TailHunk]>> {
+    let has_prev_tail = matches!(prev, Some(PrevHunks::Tail(_)));
+    if tx.coalesce_as.is_none() && !has_prev_tail {
+        return None;
+    }
+    let new = tx_hunks(tx);
+    let same = prev.is_some_and(|p| p.len() == new.len());
+    Some(
+        new.iter()
+            .enumerate()
+            .map(|(i, (_, after))| TailHunk {
+                at: *after,
+                total: after.len() + prev.filter(|_| same).map_or(0, |p| p.total(i)),
+            })
+            .collect(),
+    )
 }
 
 fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &eve_text::InsertText> {
@@ -471,8 +543,13 @@ impl UndoHistory {
         if tx.timestamp.saturating_sub(prev.last_edit_at) > GROUP_TIMEOUT {
             return false;
         }
-        let new_hunks = hunks(&tx.changes);
+        let new_hunks = tx_hunks(tx);
         let prev_hunks = hunks(&prev.redo);
+        // 直前のノードとして比べるまとまり (自動閉じの入力の後は、最後の入力。03 §15.7 の APR-7)
+        let prev_pos = match &prev.tail {
+            Some(t) => PrevHunks::Tail(t),
+            None => PrevHunks::Composed(&prev_hunks),
+        };
         let new_kind = kind_of(&new_hunks);
         // R5
         if new_kind == EditKind::Mixed || new_kind != kind_of(&prev_hunks) {
@@ -485,7 +562,7 @@ impl UndoHistory {
         {
             return false;
         }
-        if new_hunks.len() != prev_hunks.len() {
+        if new_hunks.len() != prev_pos.len() {
             return false;
         }
         match new_kind {
@@ -498,8 +575,8 @@ impl UndoHistory {
                 // R7 の位置の条件: 新しい挿入位置 == 直前の挿入の末尾 (各 Range)
                 let adjacent = new_hunks
                     .iter()
-                    .zip(&prev_hunks)
-                    .all(|((nb, _), (_, pa))| nb.start == pa.end);
+                    .enumerate()
+                    .all(|(i, (nb, _))| nb.start == prev_pos.at(i).end);
                 if !adjacent {
                     return false;
                 }
@@ -509,14 +586,14 @@ impl UndoHistory {
                 newline
                     || new_hunks
                         .iter()
-                        .zip(&prev_hunks)
-                        .all(|((_, na), (_, pa))| na.len() + pa.len() <= MAX_COALESCED_INSERT)
+                        .enumerate()
+                        .all(|(i, (_, na))| na.len() + prev_pos.total(i) <= MAX_COALESCED_INSERT)
             }
             // R8: Backspace の連打 (新しい削除の末尾 == 直前の削除の先頭) か Delete の連打 (先頭 == 直前の削除の先頭)
-            EditKind::Delete => new_hunks
-                .iter()
-                .zip(&prev_hunks)
-                .all(|((nb, _), (_, pa))| nb.end == pa.start || nb.start == pa.start),
+            EditKind::Delete => new_hunks.iter().enumerate().all(|(i, (nb, _))| {
+                let pa = prev_pos.at(i);
+                nb.end == pa.start || nb.start == pa.start
+            }),
             EditKind::Mixed => false,
         }
     }
@@ -558,6 +635,15 @@ impl UndoHistory {
             }
         };
         prev.preserved = merged_preserved;
+        // 比べるまとまり: 自動閉じの入力と、その後に続いた普通の入力は、最後の入力 (合成した範囲の末尾は、まだ打っていない
+        // 閉じ字の後ろになるため。03 §15.7 の APR-7)。合成する前の `redo` で数える
+        let composed = hunks(&prev.redo);
+        let before = match &prev.tail {
+            Some(t) => PrevHunks::Tail(t),
+            None => PrevHunks::Composed(&composed),
+        };
+        let tail = next_tail(Some(&before), tx);
+        prev.tail = tail;
         let old_id = prev.id;
         prev.redo = Arc::new(redo);
         prev.undo = Arc::new(undo);
@@ -627,7 +713,57 @@ impl UndoHistory {
             bytes,
             format,
             preserved,
+            tail: next_tail(None, tx),
         });
+    }
+
+    /// 文書を変えない自動閉じの入力 (閉じ字の飛び越えだけ、03 §15.7 の APR-3 / APR-7) を、閉じ字の入力として結合の判定に
+    /// 数える。`tx` の変更は恒等で、`coalesce_as` に閉じ字の挿入とみなす範囲を持つ。直前のノードに結合する入力なら、その
+    /// ノードの最後の入力の位置・時刻・適用後の選択を進める (本文は同じなので通番は変えない)。結合しない入力なら直前の
+    /// ノードを封印する (自動閉じを切っていれば閉じ字の入力が新ノードになり、続く入力はそれに結合するので、続く入力を
+    /// 新ノードにする)。会計は `record` と同じく、選択の分を数え直して文書の予算を確かめる。予算で古いノードを捨てたら
+    /// `true` (通知とプロセス全体の予算は呼び出し側)。
+    pub(crate) fn absorb_identity(&mut self, tx: &Transaction) -> bool {
+        debug_assert!(
+            tx.changes.is_identity(),
+            "文書を変える入力は record で記録する"
+        );
+        let merge = tx.undo_group == UndoGroupHint::Auto
+            && self
+                .undo
+                .back()
+                .is_some_and(|prev| self.should_merge(prev, tx));
+        if !merge {
+            self.seal();
+            return false;
+        }
+        let Some(prev) = self.undo.back_mut() else {
+            return false;
+        };
+        let composed = hunks(&prev.redo);
+        let before = match &prev.tail {
+            Some(t) => PrevHunks::Tail(t),
+            None => PrevHunks::Composed(&composed),
+        };
+        let tail = next_tail(Some(&before), tx);
+        prev.tail = tail;
+        prev.last_edit_at = tx.timestamp;
+        if tx.selection_after.is_some() {
+            let old = prev.bytes;
+            prev.selection_after = tx.selection_after.clone();
+            prev.bytes = cost_of(
+                &prev.redo,
+                &prev.undo,
+                [&prev.selection_before, &prev.selection_after],
+                preserved_cost(prev.format.as_ref(), &prev.preserved),
+            );
+            let new = prev.bytes;
+            self.total = self.total - old + new;
+        }
+        if tx.view.is_some() {
+            prev.view = tx.view;
+        }
+        self.prune()
     }
 
     /// 予算を超えたら古い側から破棄する (最低 1 ノードは残す)。破棄したら `true`。
@@ -1155,5 +1291,143 @@ mod tests {
             "QXYab
 XYQcd"
         );
+    }
+
+    // ---------- 自動閉じの入力の結合 (03 §15.7 の APR-7。`coalesce_as`・`tail`・`absorb_identity`) ----------
+
+    impl Doc {
+        /// 自動閉じの入力: `pos` に `ins` を入れ、結合では `virt` (適用前の範囲, 適用後の範囲) の入力とみなす。
+        fn auto(
+            &mut self,
+            pos: usize,
+            ins: &str,
+            virt: (usize, usize, usize, usize),
+            dt: u64,
+        ) -> RecordOutcome {
+            self.now += dt;
+            let snap = self.text.snapshot();
+            let cs = ChangeSet::from_sorted_edits(
+                &snap,
+                [Edit {
+                    range: ByteRange::from(pos..pos),
+                    insert: ins.into(),
+                }],
+            )
+            .unwrap();
+            let inverse = cs.invert(&snap);
+            self.text.apply(&cs).unwrap();
+            let (a, b, c, d) = virt;
+            let tx = Transaction::new(cs, Origin::User, Tick(self.now))
+                .with_coalesce_as(vec![(ByteRange::from(a..b), ByteRange::from(c..d))]);
+            self.h.record(&tx, inverse)
+        }
+
+        /// 飛び越え: 本文を変えず、`pos` に `len` バイトの閉じ字を打ったとみなす。結合したかを返す (封印の有無で見る)。
+        fn skip(&mut self, pos: usize, len: usize, dt: u64) -> bool {
+            self.now += dt;
+            let cs = ChangeSet::from_sorted_edits(&self.text.snapshot(), []).unwrap();
+            let tx = Transaction::new(cs, Origin::User, Tick(self.now)).with_coalesce_as(vec![(
+                ByteRange::from(pos..pos),
+                ByteRange::from(pos..pos + len),
+            )]);
+            let _ = self.h.absorb_identity(&tx);
+            self.h.undo.back().is_some_and(|n| !n.group_sealed)
+        }
+    }
+
+    #[test]
+    fn 自動閉じの入力は開き字だけの入力として結合し_飛び越えは閉じ字の入力として数える() {
+        let mut d = Doc::new("");
+        // `(` → `()` (開き字だけの挿入とみなす)、`a` は開き字の後ろ、`)` は飛び越え、`b` は閉じ字の後ろ
+        assert!(!d.auto(0, "()", (0, 0, 0, 1), 10).merged);
+        assert!(
+            d.type_at(1, "a", 10).merged,
+            "合成した範囲の末尾 (3) ではなく最後の入力の末尾 (2) と比べる"
+        );
+        let id = d.h.current();
+        let total = d.h.bytes();
+        assert!(d.skip(2, 1, 10), "飛び越えは結合する");
+        assert_eq!(d.h.current(), id, "本文は同じなので通番を変えない");
+        assert_eq!(d.h.undo_len(), 1);
+        assert!(
+            d.type_at(3, "b", 10).merged,
+            "飛び越えの後ろへ続く入力は結合する"
+        );
+        assert_eq!(d.s(), "(a)b");
+        assert_eq!(d.h.undo_len(), 1);
+        assert!(d.h.bytes() >= total, "会計は選択の分を数え直す");
+        assert!(d.undo());
+        assert_eq!(d.s(), "");
+    }
+
+    #[test]
+    fn 結合できない飛び越えは直前のノードを封印する() {
+        let mut d = Doc::new("");
+        d.auto(0, "()", (0, 0, 0, 1), 10);
+        assert!(!d.skip(1, 1, 1_500), "時間窓を過ぎた飛び越えは封印する");
+        assert!(!d.type_at(2, "b", 10).merged, "続く入力は新しいノード");
+        assert_eq!(d.h.undo_len(), 2);
+        // 位置の合わない飛び越え (R7) も封印する
+        let mut d = Doc::new("");
+        d.auto(0, "()", (0, 0, 0, 1), 10);
+        assert!(!d.skip(0, 1, 10));
+    }
+
+    #[test]
+    fn 飛び越えは保存点を動かさず_dirty_にしない() {
+        let mut d = Doc::new("");
+        d.auto(0, "()", (0, 0, 0, 1), 10);
+        d.h.mark_saved();
+        assert!(!d.h.is_dirty());
+        assert!(d.skip(1, 1, 10));
+        assert!(
+            !d.h.is_dirty(),
+            "本文を変えない飛び越えでは保存点が今の位置のまま"
+        );
+    }
+
+    #[test]
+    fn 普通の入力が続いたノードの_tail_は最後の入力で_長さは合計で数える() {
+        let mut d = Doc::new("");
+        d.auto(0, "()", (0, 0, 0, 1), 10);
+        d.type_at(1, "ab", 10);
+        let t = d.h.undo.back().and_then(|n| n.tail.clone()).expect("tail");
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].at, ByteRange::from(1..3), "最後の入力の範囲");
+        assert_eq!(
+            t[0].total, 3,
+            "開き字 1 + ab 2 (まだ打っていない閉じ字は数えない)"
+        );
+        // R7 の長さの上限は合計で見る
+        let mut d = Doc::new("");
+        d.auto(0, "()", (0, 0, 0, 1), 10);
+        let big = "x".repeat(MAX_COALESCED_INSERT - 1);
+        assert!(d.type_at(1, &big, 10).merged, "合計がちょうど上限");
+        assert!(
+            !d.type_at(1 + big.len(), "y", 10).merged,
+            "超えると新ノード"
+        );
+    }
+
+    #[test]
+    fn 飛び越えの会計は文書の予算で古いノードを捨てる() {
+        let mut d = Doc::new("");
+        d.h = UndoHistory::new(UndoBudget {
+            max_bytes: usize::MAX,
+            max_nodes: 2,
+        });
+        d.type_at(0, "x", 10);
+        d.type_at(1, "\n", 10);
+        d.auto(2, "()", (2, 2, 2, 3), 2_000);
+        assert_eq!(d.h.undo_len(), 2, "記録で予算を守る");
+        d.h.budget.max_nodes = 1;
+        let tx = Transaction::new(
+            ChangeSet::from_sorted_edits(&d.text.snapshot(), []).unwrap(),
+            Origin::User,
+            Tick(d.now + 10),
+        )
+        .with_coalesce_as(vec![(ByteRange::from(3..3), ByteRange::from(3..4))]);
+        assert!(d.h.absorb_identity(&tx), "飛び越えでも予算を確かめる");
+        assert_eq!(d.h.undo_len(), 1);
     }
 }

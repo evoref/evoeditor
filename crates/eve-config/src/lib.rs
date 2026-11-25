@@ -52,10 +52,11 @@ pub use editorconfig::{
 };
 pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use language::{
-    AUTO, Ambiguity, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection, DocLayers,
-    DocValue, DocValues, FIRST_LINE_BYTES, LANGUAGE_DEFS_MAX, LangOrigin, LangValue, Language,
-    LanguageDef, LanguageLayer, LanguageProblem, LanguageSet, ListValue, PLAIN, ValueOrigin,
-    doc_values, first_line_compiles, first_line_of, is_language_name, precompile_builtin,
+    AUTO, Ambiguity, AutoPairs, BUILTIN_LANGUAGES, BuiltinLanguage, DetectInput, Detection,
+    DocLayers, DocValue, DocValues, FIRST_LINE_BYTES, LANGUAGE_DEFS_MAX, LangOrigin, LangValue,
+    Language, LanguageDef, LanguageLayer, LanguageProblem, LanguageSet, ListValue, PLAIN,
+    ValueOrigin, doc_values, first_line_compiles, first_line_of, is_language_name,
+    precompile_builtin,
 };
 pub use layers::{
     Composed, KeyOrigin, Origin, Origins, Resolved, SET_SOURCE, Source, UserLayer, check_ui_locale,

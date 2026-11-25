@@ -20,7 +20,7 @@ mod word;
 
 pub use changeset::{
     Bias, ChangeSet, ChangeSetError, ComposeError, Edit, EditError, InsertText, Op, OverlapKind,
-    RangeMap,
+    RangeMap, map_sorted_steps,
 };
 pub use cluster::first_grapheme_len;
 pub use grapheme::{

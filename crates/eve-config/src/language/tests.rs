@@ -189,7 +189,7 @@ fn 併合は項目ごとで_配列は置換か追加() {
 // verifies: AC-FR-704-2
 #[test]
 fn 効かない項目は未対応の情報で_誤りは項目だけを使わない() {
-    let text = "[[language]]\nname = \"rust\"\nauto_pairs = { \"(\" = \")\" }\nformatter = \"rustfmt\"\n\
+    let text = "[[language]]\nname = \"rust\"\nword_separators = \"\"\nformatter = \"rustfmt\"\n\
                 indent = { unit = \"tabs\", width = 20, tab_width = 8 }\ncomment = { line = \"# \", block = [\"/*\", \"*/\"] }\n\
                 file_typs = [\"rs\"]\n";
     let (d, diags) = load_language_str("languages/rust.toml", text);
@@ -198,7 +198,7 @@ fn 効かない項目は未対応の情報で_誤りは項目だけを使わな�
         .map(|x| (x.key.as_str(), x.severity, &x.kind))
         .collect();
     assert!(kinds.contains(&(
-        "language.auto_pairs",
+        "language.word_separators",
         Severity::Info,
         &DiagKind::Unsupported
     )));
@@ -668,4 +668,101 @@ fn 保存時の変換の値は_set_と_editorconfig_と言語と一般の値の�
     // `--set` (8) は最も強い
     let set_off = ["editor.trim_trailing_whitespace_on_save=false".to_owned()];
     assert_eq!(values(on, &set_off, None, Some(&ec(true))), (false, true));
+}
+
+// verifies: AC-FR-210-1
+#[test]
+fn auto_pairs_は表ごと置き換え_空の表を保ち_組込みは持たない() {
+    let set = LanguageSet::builtin();
+    for b in BUILTIN_LANGUAGES {
+        assert!(
+            set.get(b.id).is_some_and(|l| l.auto_pairs.is_none()),
+            "{}",
+            b.id
+        );
+    }
+    let pairs = |set: &LanguageSet, l: &str| {
+        set.get(l)
+            .and_then(|l| l.auto_pairs.as_ref().map(|(p, _)| p.to_vec()))
+    };
+    // 後の層の表は前の層の表を置き換える (キーごとに重ねない)
+    let user = defs(
+        "[[language]]\nname = \"rust\"\nauto_pairs = { \"(\" = \")\", \"'\" = \"'\" }\n\
+         [[language]]\nname = \"rust\"\nauto_pairs = { \"<\" = \">\" }\n",
+    );
+    let (set, reports) = LanguageSet::build(&user);
+    assert!(reports.is_empty(), "{reports:?}");
+    assert_eq!(pairs(&set, "rust"), Some(vec![('<', '>')]));
+    // 空の表はその言語の自動閉じを止める (下の層の値に戻さない)
+    let ws = defs("[[language]]\nname = \"rust\"\nauto_pairs = {}\n");
+    let (set, _) = LanguageSet::build_layers(&user, &ws);
+    assert_eq!(pairs(&set, "rust"), Some(Vec::new()));
+    assert!(set.dump().contains("auto_pairs = {}\n"), "{}", set.dump());
+    // 全角の括弧・引用符も 1 文字なら使える (並びは TOML の表の読み方の順)
+    let (set, _) = LanguageSet::build(&defs(
+        "[[language]]\nname = \"markdown\"\nauto_pairs = { \"「\" = \"」\", '\"' = '\"' }\n",
+    ));
+    assert_eq!(
+        pairs(&set, "markdown"),
+        Some(vec![('"', '"'), ('「', '」')])
+    );
+    assert!(
+        set.dump()
+            .contains("auto_pairs = { \"\\\"\" = \"\\\"\", \"「\" = \"」\" }\n"),
+        "{}",
+        set.dump()
+    );
+}
+
+// verifies: AC-FR-210-1
+#[test]
+fn 誤った_auto_pairs_は項目だけを使わずに警告する() {
+    let many: String = (0..17)
+        .map(|i| format!("\"{}\" = \")\"", char::from(b'a' + i)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let bad = [
+        "{ \"((\" = \")\" }".to_owned(),
+        "{ \"(\" = \"\" }".to_owned(),
+        "{ \" \" = \")\" }".to_owned(),
+        "{ \"(\" = \"\t\" }".to_owned(),
+        r#"{ "(" = "\u0007" }"#.to_owned(),
+        r#"{ "(" = "\U0010FF80" }"#.to_owned(),
+        // 単独の結合文字 (前の文字に付くので、打った書記素にならない)
+        r#"{ "\u0301" = ")" }"#.to_owned(),
+        r#"{ "(" = "\u200D" }"#.to_owned(),
+        "{ \"(\" = 1 }".to_owned(),
+        format!("{{ {many} }}"),
+    ];
+    for v in &bad {
+        let text = format!("[[language]]\nname = \"rust\"\nauto_pairs = {v}\n");
+        let (d, diags) = load_language_str("languages/a.toml", &text);
+        assert_eq!(diags.len(), 1, "{v}: {diags:?}");
+        assert_eq!(diags[0].key, "language.auto_pairs", "{v}");
+        assert_eq!(
+            diags[0].kind,
+            DiagKind::Language(LanguageProblem::BadAutoPairs),
+            "{v}"
+        );
+        assert_eq!(diags[0].severity, Severity::Warning, "{v}");
+        assert_eq!(d.len(), 1, "定義は使う");
+        assert!(d[0].auto_pairs.is_none(), "項目は使わない: {v}");
+    }
+    // 表でない値は型の誤り
+    let (d, diags) = load_language_str(
+        "languages/a.toml",
+        "[[language]]\nname = \"rust\"\nauto_pairs = \"()\"\n",
+    );
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert_eq!(diags[0].key, "language.auto_pairs");
+    assert!(d[0].auto_pairs.is_none());
+    // 16 組までは使える
+    let sixteen: String = (0..16)
+        .map(|i| format!("\"{}\" = \")\"", char::from(b'a' + i)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let d = defs(&format!(
+        "[[language]]\nname = \"rust\"\nauto_pairs = {{ {sixteen} }}\n"
+    ));
+    assert_eq!(d[0].auto_pairs.as_ref().map(|v| v.value.len()), Some(16));
 }

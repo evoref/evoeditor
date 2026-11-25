@@ -194,6 +194,8 @@ impl EditorState {
             v.scroll = ScrollPos::default();
             v.goal_dcol = None;
             v.cursor_affinity = Default::default();
+            // 自動で足した閉じ字の覚えは古い本文の位置 (03 §15.7 の APR-3)
+            v.auto_closed.clear();
         }
     }
 
@@ -207,6 +209,8 @@ impl EditorState {
         let text = d.text();
         for v in self.docs.views.values_mut().filter(|v| v.doc == doc) {
             v.selection = v.selection.clone().normalized(text);
+            // 本文を全文へ差し替えたので、自動で足した閉じ字の覚えを忘れる (03 §15.7 の APR-3)
+            v.auto_closed.clear();
         }
     }
 

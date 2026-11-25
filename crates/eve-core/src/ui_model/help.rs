@@ -237,6 +237,8 @@ impl EditorState {
             // `Ctrl+L` を行の選択に割り当てたことによる案内 (07 §11.6 の「編集の拡張」のキーの選び方。v0.5 の M34)
             keys::UI_HELP_TERMINAL_CTRL_SHIFT_L,
             keys::UI_HELP_TERMINAL_REDRAW,
+            // 自動閉じと端末の短い貼り付けの既知の制約 (03 §15.7 の APR-8、04 §8.6。v0.5 の M34 の段 4)
+            keys::UI_HELP_TERMINAL_AUTO_PAIRS_PASTE,
             // 標準入力 (`cmd | evoeditor -`) の既知の制約 (07 §18.5、04 §8.6。v0.4 の M25)
             keys::UI_HELP_TERMINAL_STDIN_KEYS,
             keys::UI_HELP_TERMINAL_STDIN_REDRAW,

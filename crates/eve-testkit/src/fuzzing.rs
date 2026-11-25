@@ -1240,6 +1240,71 @@ fn save_transform_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     format!("save_transform trim {trim} final_newline {final_newline} undo {undo}")
 }
 
+/// 自動閉じを入れて文字を打つ (docs/03 §15.7 の APR-1〜APR-8、§15.9.1 の fuzz。v0.5 の M34 の段 4)。`editor.auto_pairs` を
+/// 真にし、半分は 1〜8 個の Range を置いてから、組の文字・英数字・空白・全角の文字を混ぜた 1〜4 書記素の `Text` を 1〜6 回
+/// 打ち、ときどき `edit.delete_backward` を挟む。打つ前に時計を結合の時間窓より進め、増えた Undo のノードの数だけ Undo すると
+/// 打つ前の本文に戻ることを確かめる (自動閉じの入力が、ノードを作らずに本文を変えない。APR-7)。
+#[allow(
+    clippy::disallowed_methods,
+    reason = "設定を差し替えるコマンドが無いので、testkit は EditorState に直接触れる (STR-B3)"
+)]
+fn auto_pairs_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const KEYS: [&str; 14] = [
+        "(", ")", "[", "]", "{", "}", "\"", "`", "a", "1", " ", "日", "（", "e\u{301}",
+    ];
+    if !h.editor.state().config().auto_pairs {
+        let config = eve_config::Config {
+            auto_pairs: true,
+            ..h.editor.state().config().clone()
+        };
+        h.editor.state_mut().set_config(config);
+    }
+    let ranges = if b.u8() & 1 == 0 {
+        place_ranges(h, b).unwrap_or(0)
+    } else {
+        0
+    };
+    let nodes = |h: &Harness| {
+        let st = h.editor.state();
+        st.active_document()
+            .and_then(|d| st.document(d))
+            .map_or(0, |d| d.history().undo_len())
+    };
+    h.advance_ms(5_000);
+    // 文字がオーバーレイ・検索バーの入力欄 (確認のアクセラレータを含む) へ行くときは、本文の検査をしない
+    let in_editor = |h: &mut Harness| h.overlay().is_empty() && h.frame().search.is_none();
+    let checked = in_editor(h);
+    let before = h.doc_text();
+    let base = nodes(h);
+    let mut typed = Vec::new();
+    for _ in 0..1 + b.u8() % 6 {
+        if b.u8().is_multiple_of(5) {
+            h.keys("backspace");
+            typed.push("⌫".to_owned());
+            continue;
+        }
+        let s: String = (0..1 + b.u8() % 4)
+            .map(|_| KEYS[usize::from(b.u8()) % KEYS.len()])
+            .collect();
+        h.text(&s);
+        typed.push(s);
+    }
+    let added = nodes(h).saturating_sub(base);
+    let undo = b.u8() & 1 == 0;
+    if undo && checked && in_editor(h) && nodes(h) >= base {
+        for _ in 0..added {
+            h.cmd("edit.undo");
+        }
+        assert_eq!(
+            h.doc_text(),
+            before,
+            "増えた Undo のノード ({added}) だけ戻すと、打つ前の本文に戻る: {typed:?}"
+        );
+    }
+    let _ = h.frame();
+    format!("auto_pairs ranges {ranges} typed {typed:?} nodes +{added} undo {undo}")
+}
+
 /// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
 /// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
 /// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは `cmd` の一覧の外の操作 26 で選ぶ)。
@@ -1460,7 +1525,7 @@ pub fn editor_sequence(data: &[u8]) {
         // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で、カーソルを足す
         // コマンドは操作 26 で、対応括弧への移動は操作 27 で選ぶ (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)。
         // 行コメントの切替 (M33) は操作 28 で、テキスト変換 (M34) は操作 29 で、選択の拡張 (M34) は操作 30 で、保存時の変換 (M34) は操作 31 で、ダブル / トリプルクリック (M34) は操作 32 で、ジャンプ履歴
-        // (M34) は操作 33 で、矩形選択 (M34) は操作 34 で選ぶ
+        // (M34) は操作 33 で、矩形選択 (M34) は操作 34 で、自動閉じの入力 (M34) は操作 35 で選ぶ
         .filter(|id| {
             !id.starts_with("app.quit")
                 && !id.starts_with("pane.")
@@ -1505,7 +1570,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 35 {
+        match b.u8() % 36 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1702,6 +1767,11 @@ pub fn editor_sequence(data: &[u8]) {
             34 => {
                 // 矩形選択 (v0.5 の M34 の段 7。docs/03 §4.8)
                 let what = box_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            35 => {
+                // 自動閉じを入れて文字を打つ (v0.5 の M34 の段 4。docs/03 §15.7)
+                let what = auto_pairs_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

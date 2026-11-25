@@ -4,6 +4,7 @@
 //! spec: 02 §6, 07 §11.6 (カタログ), 03 §15 (編集・クリップボード)
 
 pub(crate) mod arg_schema;
+pub(crate) mod auto_pairs;
 pub(crate) mod clipboard;
 pub(crate) mod comment;
 pub(crate) mod context;
@@ -100,6 +101,9 @@ impl Args {
 pub enum InvocationSource {
     /// チョードを含む。
     Keymap,
+    /// 打鍵の経路の文字の入力 (`InputEvent::Text` と、割当の無い文字のキー。`edit.insert_text` だけ)。括弧・引用符の自動閉じ
+    /// はこの経路だけに当てる (03 §15.7 の APR-2 (a)。キーマップの割当で引数を付けて呼んだ `edit.insert_text` は `Keymap`)。
+    Typing,
     /// コマンドパレット。
     Palette,
     /// コマンド行 (CLI) からの呼び出し。
@@ -176,6 +180,8 @@ pub struct CommandCtx<'a> {
     pub state: &'a mut EditorState,
     /// 呼び出しの引数。
     pub args: &'a Args,
+    /// 呼び出しの主体 (打鍵の経路かを見る、03 §15.7 の APR-2 (a))。
+    pub source: InvocationSource,
 }
 
 /// コマンドの処理の本体。
@@ -365,6 +371,7 @@ impl CommandRegistry {
         let mut ctx = CommandCtx {
             state,
             args: &inv.args,
+            source: inv.source,
         };
         let res = (spec.handler)(&mut ctx);
         if let Some(probe) = end_probe {

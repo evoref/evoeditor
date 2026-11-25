@@ -1059,6 +1059,10 @@ text = ".editorconfig のセクション [{item}] は複雑すぎます"
 hint = "どちらかの定義の file_types などを直してください"
 text = "{file} は言語 {first} と {second} の両方に当たるため、{second} を使います"
 
+[msg.language.bad_auto_pairs]
+hint = "この項目は使わず、ほかの設定を使います"
+text = "言語定義の {item} の組が正しくありません (1 文字ずつ、16 組まで)"
+
 [msg.language.bad_comment]
 hint = "1〜16 バイトで、空白と制御文字を含まない記号にしてください。この項目は使いません"
 text = "{item} の記号 {value} は使えません"
@@ -1902,6 +1906,7 @@ alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K 
 multi_cursor_paste = "複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません)"
 ctrl_shift_l = "一部の端末では Ctrl+Shift+L が Ctrl+L (行を選択) として届きます。一致をすべて選ぶには Ctrl+K E を使ってください"
 redraw = "画面が乱れたときは Ctrl+K R で描き直します (Ctrl+L は行の選択です)"
+auto_pairs_paste = "自動閉じを使っているときは Ctrl+K V で貼り付けてください (端末の短い貼り付けは打鍵として届き、閉じ字が足されることがあります)"
 stdin_keys = "標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います"
 stdin_redraw = "書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください"
 stdin_powershell = "Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください"

@@ -386,7 +386,7 @@ fn 効かない項目は未対応の情報で起動を妨げず_誤りはファ�
         &[
             (
                 "/evo/config/languages/a.toml",
-                b"[[language]]\nname = \"rust\"\nauto_pairs = { \"(\" = \")\" }\nformatter = \"rustfmt\"\nindent = { width = 0 }\n",
+                b"[[language]]\nname = \"rust\"\nword_separators = \"\"\nformatter = \"rustfmt\"\nindent = { width = 0 }\n",
             ),
             ("/w/a.rs", b""),
         ],
@@ -412,9 +412,10 @@ fn 効かない項目は未対応の情報で起動を妨げず_誤りはファ�
         })
         .collect();
     assert!(
-        rows.iter().any(|(l, p)| l.contains("language.auto_pairs")
-            && l.contains("このバージョン")
-            && p == "languages/a.toml:3"),
+        rows.iter()
+            .any(|(l, p)| l.contains("language.word_separators")
+                && l.contains("このバージョン")
+                && p == "languages/a.toml:3"),
         "{rows:?}"
     );
     assert!(

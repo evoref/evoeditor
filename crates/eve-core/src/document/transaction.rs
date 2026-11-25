@@ -1,6 +1,6 @@
 //! `Transaction` と `Origin` (docs/03-core-design.md §6.3)。文書を変える唯一の単位。
 
-use eve_text::{ChangeSet, Selection};
+use eve_text::{ByteRange, ChangeSet, Selection};
 use eve_view::{CommandId, OriginTag, ViewId};
 
 use crate::time::Tick;
@@ -84,6 +84,10 @@ pub struct Transaction {
     /// Undo の記録 (逆変換) を、変更の最初から最後までの範囲を旧本文で置き換える 1 件にしてよい (大量のすべて置換、
     /// 03 §12.5)。メモリが増えないときだけそうする (`document::coarse_inverse`)。
     pub coarse_undo: bool,
+    /// 連続入力の結合 (03 §7.3 の R5〜R8) で、実際の変更の代わりに見る変更のまとまり (適用前の範囲, 適用後の範囲) の並び
+    /// (文書の順)。括弧・引用符の自動閉じ (03 §15.7 の APR-7) が、自動閉じを切っていたときの入力と同じに数えるために
+    /// 渡す (対にした挿入は開き字だけ、飛び越えは閉じ字の挿入、対の間の Backspace は開き字だけの削除)。`None` は実際の変更。
+    pub(crate) coalesce_as: Option<std::sync::Arc<[(ByteRange, ByteRange)]>>,
 }
 
 impl Transaction {
@@ -105,7 +109,14 @@ impl Transaction {
             meta: TransactionMeta::default(),
             format_change: None,
             coarse_undo: false,
+            coalesce_as: None,
         }
+    }
+
+    /// 連続入力の結合で、実際の変更の代わりに見る変更のまとまりを持たせる (03 §15.7 の APR-7)。
+    pub(crate) fn with_coalesce_as(mut self, hunks: Vec<(ByteRange, ByteRange)>) -> Transaction {
+        self.coalesce_as = Some(hunks.into());
+        self
     }
 
     /// Undo の記録を 1 件の置き換えにしてよい (大量のすべて置換、03 §12.5)。

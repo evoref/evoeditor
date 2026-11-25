@@ -14,6 +14,19 @@ use ropey::Rope;
 use crate::text::{Snapshot, Text, TextRead};
 use crate::types::{ByteOff, ByteRange};
 
+std::thread_local! {
+    /// [`ChangeSet::map_sorted`] がたどった演算と位置の数の通算 (スレッドごと。[`map_sorted_steps`])。
+    static MAP_SORTED_STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// このスレッドで [`ChangeSet::map_sorted`] がたどった演算と位置の数の通算 (試験が、写像の費用が演算の数 + 位置の数で
+/// あることを数えて確かめる)。
+#[doc(hidden)]
+#[must_use]
+pub fn map_sorted_steps() -> u64 {
+    MAP_SORTED_STEPS.with(std::cell::Cell::get)
+}
+
 /// 挿入する文字列。Undo 履歴と Transaction で共有する (コピーしない)。
 /// `Debug` は本文を出さず、バイト数だけを出す (本文を log やパニックに出さない)。
 /// 等しさは内容で比べる (`Str` と `Rope` でも、同じ内容なら等しい)。
@@ -631,6 +644,67 @@ impl ChangeSet {
             }
         }
         ByteOff(new)
+    }
+
+    /// 位置の昇順の並び `ps` (位置と寄せる向き) を、演算を 1 回だけたどって写す (各位置の結果は `map_pos` と同じ)。費用は
+    /// 演算の数 + 位置の数 (位置ごとに `map_pos` を呼ぶと、その積になる)。同じ位置の向きの順は問わない。
+    ///
+    /// # Panics
+    ///
+    /// デバッグのビルドで、`ps` が位置の昇順でないとき。
+    pub fn map_sorted(&self, ps: &[(ByteOff, Bias)]) -> Vec<ByteOff> {
+        debug_assert!(
+            ps.windows(2).all(|w| w[0].0 <= w[1].0),
+            "map_sorted の位置は昇順"
+        );
+        let mut out = Vec::with_capacity(ps.len());
+        let mut i = 0;
+        let (mut old, mut new) = (0usize, 0usize);
+        let mut steps = 0u64;
+        let mut it = self.ops.iter().peekable();
+        while let Some(op) = it.next() {
+            steps += 1;
+            match op {
+                Op::Retain(k) => {
+                    let end = old.saturating_add(*k);
+                    while let Some(&(p, _)) = ps.get(i).filter(|(p, _)| p.0 < end) {
+                        out.push(ByteOff(new + (p.0 - old)));
+                        i += 1;
+                    }
+                    old = end;
+                    new = new.saturating_add(*k);
+                }
+                Op::Delete(k) => {
+                    let end = old.saturating_add(*k);
+                    let ins = match it.peek() {
+                        Some(Op::Insert(s)) => s.len(),
+                        _ => 0,
+                    };
+                    while let Some(&(_, bias)) = ps.get(i).filter(|(p, _)| p.0 <= end) {
+                        out.push(ByteOff(match bias {
+                            Bias::After => new + ins,
+                            Bias::Before => new,
+                        }));
+                        i += 1;
+                    }
+                    old = end;
+                }
+                Op::Insert(s) => {
+                    while let Some(&(_, bias)) = ps.get(i).filter(|(p, _)| p.0 == old) {
+                        out.push(ByteOff(match bias {
+                            Bias::Before => new,
+                            Bias::After => new + s.len(),
+                        }));
+                        i += 1;
+                    }
+                    new = new.saturating_add(s.len());
+                }
+            }
+        }
+        out.resize(ps.len(), ByteOff(new));
+        steps += ps.len() as u64;
+        MAP_SORTED_STEPS.with(|c| c.set(c.get() + steps));
+        out
     }
 
     /// 範囲の写像 (03 §6.4)。範囲の端の写像は `start` を `After`、`end` を `Before` で行う。

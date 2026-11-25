@@ -239,6 +239,9 @@ pub const BUILTIN_LANGUAGES: &[BuiltinLanguage] = &[
     ),
 ];
 
+/// 括弧・引用符の自動閉じの組 (開き字, 閉じ字) の並び (03 §15.7 の APR-1)。重ねた結果を、複製せずに文書へ渡す。
+pub type AutoPairs = std::sync::Arc<[(char, char)]>;
+
 /// 言語定義の誤りの種類 (07 §9.6 の LANG-2 / LANG-3 / LANG-6。文言は `msg.language.<名前>`)。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LanguageProblem {
@@ -275,6 +278,9 @@ pub enum LanguageProblem {
     TooManyFiles,
     /// `languages/` のファイルが大きすぎる (LANG-2)。そのファイルを読まない。
     FileTooLarge,
+    /// `auto_pairs` の組が使えない (キーと値が 1 文字ずつでない・空白か制御文字・前の文字に付く文字・16 組を超える。LANG-3)。
+    /// その項目を使わない。
+    BadAutoPairs,
 }
 
 impl LanguageProblem {
@@ -294,6 +300,7 @@ impl LanguageProblem {
             LanguageProblem::Ambiguous { .. } => "ambiguous",
             LanguageProblem::TooManyFiles => "too_many_files",
             LanguageProblem::FileTooLarge => "file_too_large",
+            LanguageProblem::BadAutoPairs => "bad_auto_pairs",
         }
     }
 }
@@ -352,6 +359,8 @@ pub struct LanguageDef {
     pub trim_trailing_whitespace_on_save: Option<LangValue<bool>>,
     /// `insert_final_newline_on_save` (同上)。
     pub insert_final_newline_on_save: Option<LangValue<bool>>,
+    /// `auto_pairs` (開き字 → 閉じ字の組。FR-210。v0.5 の M34 の段 4。層を重ねるときは表ごと置き換える)。
+    pub auto_pairs: Option<LangValue<Vec<(char, char)>>>,
 }
 
 /// 言語定義の値の由来 (`config.show` の右の列、07 §3.5)。
@@ -575,6 +584,9 @@ pub struct Language {
     pub ws_trim_on_save: Option<(bool, LangOrigin)>,
     /// ワークスペース層の定義の `insert_final_newline_on_save` (同上)。
     pub ws_final_newline_on_save: Option<(bool, LangOrigin)>,
+    /// `auto_pairs` (括弧・引用符の自動閉じの組、03 §15.7 の APR-1。表ごと置き換える。空は自動閉じを止める)。組込みの定義は
+    /// 持たない (既定の組を使う)。ワークスペース層の値は、ワークスペース層を重ねた集まりにだけある (`comment_line` と同じ)。
+    pub auto_pairs: Option<(AutoPairs, LangOrigin)>,
 }
 
 impl Language {
@@ -609,6 +621,7 @@ impl Language {
             final_newline_on_save: None,
             ws_trim_on_save: None,
             ws_final_newline_on_save: None,
+            auto_pairs: None,
         }
     }
 
@@ -652,6 +665,7 @@ impl Language {
             final_newline_on_save: None,
             ws_trim_on_save: None,
             ws_final_newline_on_save: None,
+            auto_pairs: None,
         }
     }
 }
@@ -911,6 +925,10 @@ impl LanguageSet {
         if let Some(v) = &def.comment_line {
             l.comment_line = Some((v.value.clone(), at(v.line, v.column)));
         }
+        // 自動閉じの組は表ごと置き換える (キーごとに重ねない。03 §15.7 の APR-1)
+        if let Some(v) = &def.auto_pairs {
+            l.auto_pairs = Some((v.value.as_slice().into(), at(v.line, v.column)));
+        }
         // 保存時の変換も、ワークスペース層の値は別の段 (§3.6 の (7)) に置く
         let (trim, final_newline) = if workspace {
             (&mut l.ws_trim_on_save, &mut l.ws_final_newline_on_save)
@@ -1061,6 +1079,17 @@ impl LanguageSet {
             }
             if let Some((b, _)) = &l.final_newline_on_save {
                 let _ = writeln!(out, "insert_final_newline_on_save = {b}");
+            }
+            if let Some((pairs, _)) = &l.auto_pairs {
+                let items: Vec<String> = pairs
+                    .iter()
+                    .map(|(o, c)| format!("{} = {}", quote(&o.to_string()), quote(&c.to_string())))
+                    .collect();
+                if items.is_empty() {
+                    out.push_str("auto_pairs = {}\n");
+                } else {
+                    let _ = writeln!(out, "auto_pairs = {{ {} }}", items.join(", "));
+                }
             }
         }
         out

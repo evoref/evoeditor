@@ -260,6 +260,8 @@ impl Editor {
                 &CommandInvocation::new(&id, InvocationSource::Palette).with_args(args),
             );
         }
+        // カーソルが対の間を離れた、自動で足した閉じ字を忘れる (03 §15.7 の APR-3)
+        self.state.prune_auto_pairs();
         // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
         self.state.flush_open_switches();
         // 文書を開く・閉じるとタブラインの出し入れが変わる (03 §9.9 の PANE-12 (b))
@@ -463,6 +465,8 @@ impl Editor {
             }
             _ => {}
         }
+        // カーソルが対の間を離れた (クリック・ドラッグなど)、自動で足した閉じ字を忘れる (03 §15.7 の APR-3)
+        self.state.prune_auto_pairs();
         // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
         self.state.flush_open_switches();
         self.state.sync_tab_line();
@@ -548,10 +552,12 @@ impl Editor {
         self.insert_text(s);
     }
 
+    /// 打鍵の経路の文字の入力 (`InputEvent::Text` と、割当の無い文字のキー)。主体は `Typing` (自動閉じはこの経路だけに当てる。
+    /// 03 §15.7 の APR-2 (a))。
     fn insert_text(&mut self, s: &str) {
         let args = Args::new().with_str("text", s);
         self.execute(
-            CommandInvocation::new(ids::EDIT_INSERT_TEXT, InvocationSource::Keymap).with_args(args),
+            CommandInvocation::new(ids::EDIT_INSERT_TEXT, InvocationSource::Typing).with_args(args),
         );
     }
 
