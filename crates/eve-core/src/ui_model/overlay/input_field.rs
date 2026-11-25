@@ -218,6 +218,8 @@ impl EditorState {
             }
         }
         if edited {
+            // 編集した欄の履歴の呼び出しを止める (編集した文字列が次の下書きになる、03 §12.8 の段 9 の細目)
+            self.reset_field_recall();
             if is_prompt {
                 if let Some(p) = self.prompt_mut() {
                     p.error = None;

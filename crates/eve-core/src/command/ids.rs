@@ -114,6 +114,8 @@ pub const SELECT_TOGGLE_BOX: &str = "select.toggle_box";
 pub const UI_CANCEL: &str = "ui.cancel";
 pub const UI_CONFIRM: &str = "ui.confirm";
 pub const UI_DIALOG_CHOOSE: &str = "ui.dialog_choose";
+pub const UI_HISTORY_NEXT: &str = "ui.history_next";
+pub const UI_HISTORY_PREV: &str = "ui.history_prev";
 pub const UI_LIST_NEXT: &str = "ui.list_next";
 pub const UI_LIST_PAGE_DOWN: &str = "ui.list_page_down";
 pub const UI_LIST_PAGE_UP: &str = "ui.list_page_up";
@@ -129,7 +131,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 124] = [
+pub const ALL: [&str; 126] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -242,6 +244,8 @@ pub const ALL: [&str; 124] = [
     UI_CANCEL,
     UI_CONFIRM,
     UI_DIALOG_CHOOSE,
+    UI_HISTORY_NEXT,
+    UI_HISTORY_PREV,
     UI_LIST_NEXT,
     UI_LIST_PAGE_DOWN,
     UI_LIST_PAGE_UP,

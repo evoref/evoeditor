@@ -282,6 +282,8 @@ pub(crate) struct SearchSet {
     /// 実行中のすべて置換で、置換の文字列 1 つあたりに `<U+10FFNN>` にした私用文字の数 (03 §8.3.1。適用のときに
     /// 件数を掛けて `info.paste.pua_as_text` で知らせる。すべて置換は同時に 1 つだけ)。
     pub(crate) replace_all_pua: u64,
+    /// 検索語と置換の文字列の履歴 (プロセスに 1 つ。メモリだけに持つ、03 §12.8 の SHI-1 / SHI-5)。
+    pub(crate) history: crate::ui_model::search_history::SearchHistory,
 }
 
 /// UI: オーバーレイと保存の連鎖・パレット・メッセージ行とその履歴・終了の連鎖と保存中の終了・後で実行するコマンド (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -432,6 +434,7 @@ impl EditorState {
                 find_since: None,
                 tuning: crate::search::SearchTuning::default(),
                 replace_all_pua: 0,
+                history: crate::ui_model::search_history::SearchHistory::default(),
             },
             io: IoState {
                 closing_snapshots: BTreeMap::new(),

@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (1128 件)。
+/// `locales/en.toml` の文言 (1132 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -235,6 +235,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.ui.confirm.title"), B("Confirm")),
     (B("cmd.ui.dialog_choose.description"), B("Choose a dialog option by number.")),
     (B("cmd.ui.dialog_choose.title"), B("Choose Dialog Option")),
+    (B("cmd.ui.history_next.description"), B("Put the next search term (or replacement, in the replace field) in the field.")),
+    (B("cmd.ui.history_next.title"), B("Next History Entry")),
+    (B("cmd.ui.history_prev.description"), B("Put the previous search term (or replacement, in the replace field) in the field.")),
+    (B("cmd.ui.history_prev.title"), B("Previous History Entry")),
     (B("cmd.ui.list_next.description"), B("Move to the next item in a list or dialog.")),
     (B("cmd.ui.list_next.title"), B("Next Item")),
     (B("cmd.ui.list_page_down.description"), B("Scroll the list down by one screen.")),
@@ -1141,7 +1145,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (1128 件)。
+/// `locales/ja.toml` の文言 (1132 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1368,6 +1372,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.ui.confirm.title"), B("決定")),
     (B("cmd.ui.dialog_choose.description"), B("ダイアログの選択肢を指定して選びます。")),
     (B("cmd.ui.dialog_choose.title"), B("選択肢を選ぶ")),
+    (B("cmd.ui.history_next.description"), B("入力欄に 1 つ新しい検索語 (置換欄では置換の文字列) を入れます。")),
+    (B("cmd.ui.history_next.title"), B("次の履歴")),
+    (B("cmd.ui.history_prev.description"), B("入力欄に 1 つ前の検索語 (置換欄では置換の文字列) を入れます。")),
+    (B("cmd.ui.history_prev.title"), B("前の履歴")),
     (B("cmd.ui.list_next.description"), B("一覧やダイアログで次の項目へ移ります。")),
     (B("cmd.ui.list_next.title"), B("次の項目")),
     (B("cmd.ui.list_page_down.description"), B("一覧を一画面ぶん下へ送ります。")),

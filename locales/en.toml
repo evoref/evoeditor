@@ -452,6 +452,14 @@ title = "Confirm"
 description = "Choose a dialog option by number."
 title = "Choose Dialog Option"
 
+[cmd.ui.history_next]
+description = "Put the next search term (or replacement, in the replace field) in the field."
+title = "Next History Entry"
+
+[cmd.ui.history_prev]
+description = "Put the previous search term (or replacement, in the replace field) in the field."
+title = "Previous History Entry"
+
 [cmd.ui.list_next]
 description = "Move to the next item in a list or dialog."
 title = "Next Item"

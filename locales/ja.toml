@@ -450,6 +450,14 @@ title = "決定"
 description = "ダイアログの選択肢を指定して選びます。"
 title = "選択肢を選ぶ"
 
+[cmd.ui.history_next]
+description = "入力欄に 1 つ新しい検索語 (置換欄では置換の文字列) を入れます。"
+title = "次の履歴"
+
+[cmd.ui.history_prev]
+description = "入力欄に 1 つ前の検索語 (置換欄では置換の文字列) を入れます。"
+title = "前の履歴"
+
 [cmd.ui.list_next]
 description = "一覧やダイアログで次の項目へ移ります。"
 title = "次の項目"

@@ -14,4 +14,5 @@ pub(crate) mod palette;
 pub(crate) mod pane_bar;
 pub(crate) mod quit_saving;
 pub(crate) mod search_bar;
+pub(crate) mod search_history;
 pub(crate) mod tab_line;

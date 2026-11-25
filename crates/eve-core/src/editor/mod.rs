@@ -91,6 +91,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::command::comment::register(&mut r);
     crate::command::transform::register(&mut r);
     crate::ui_model::overlay::register(&mut r);
+    crate::ui_model::search_history::register(&mut r);
     crate::workspace::finder::register(&mut r);
     crate::workspace::ws_search_ui::register(&mut r);
     r

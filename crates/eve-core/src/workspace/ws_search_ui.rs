@@ -35,6 +35,7 @@ use crate::ui_model::keys;
 use crate::ui_model::overlay::{Overlay, field_selection};
 use crate::ui_model::palette::WINDOW;
 use crate::ui_model::search_bar::{invalid_regex_reason, limit_message};
+use crate::ui_model::search_history::Recall;
 
 /// 編集面の選択を初期値にする上限 (バイト。1 行の中で、これ以下のときだけ、03 §12.7.5 の「開く」)。
 pub(crate) const WS_SELECTION_QUERY_MAX: usize = 256;
@@ -84,6 +85,11 @@ pub(crate) struct WsSearchOverlay {
     selected: usize,
     /// 今の検索の世代。
     generation: u64,
+    /// 入力欄の検索語の履歴の呼び出しの位置 (03 §12.8 の SHI-4。開くたびに最新から)。
+    pub(crate) recall: Recall,
+    /// この開いている間に、利用者が今の検索語で走査を始めた (入力欄の編集・トグル)、または結果へジャンプした。閉じるときに
+    /// 立っていれば検索語の履歴に記録する。開いたときの初期値・履歴の呼び出しで始めた走査では立てない (03 §12.8.1)。
+    pub(crate) searched: bool,
 }
 
 impl Default for WsSearchOverlay {
@@ -101,6 +107,8 @@ impl Default for WsSearchOverlay {
             status: Status::Empty,
             selected: 0,
             generation: 0,
+            recall: Recall::default(),
+            searched: false,
         }
     }
 }
@@ -309,6 +317,10 @@ impl EditorState {
         state.cursor = text.len();
         state.text = text;
         state.all_selected = false;
+        // 開き直すと履歴の呼び出しの位置は最新に戻る (下書きも捨てる、03 §12.8 の SHI-4)。前回の結果の出し直し・初期値での
+        // 走査は、利用者が探した印にしない (03 §12.8.1)
+        state.recall.reset();
+        state.searched = false;
         // 前回の結果をそのまま出すのは、検索が終わっていた (失敗を含む) か探さない状態のときだけ。取り消した・ルートを
         // 待っていた検索は探し直す
         let start = matches!(
@@ -536,8 +548,11 @@ impl EditorState {
         }
     }
 
-    /// 入力欄が変わった: 待ち時間を置かずに探し直す。
+    /// 入力欄が変わった (利用者の編集): 待ち時間を置かずに探し直す。閉じるときに検索語を履歴に記録する印を立てる。
     pub(crate) fn ws_search_edited(&mut self) {
+        if let Some(Overlay::WorkspaceSearch(w)) = &mut self.ui.overlay {
+            w.searched = true;
+        }
         self.ws_search_start();
     }
 
@@ -552,6 +567,8 @@ impl EditorState {
             WsToggle::Regex => w.regex = !w.regex,
             WsToggle::Word => w.whole_word = !w.whole_word,
         }
+        // トグルを替えて探し直すのも、利用者が今の検索語で走査を始めたことにする (03 §12.8.1)
+        w.searched = true;
         self.ws_search_start();
         Some(CommandResult::Done)
     }
@@ -600,6 +617,16 @@ impl EditorState {
             return CommandResult::Done;
         };
         let path = h.path.clone();
+        // 結果へのジャンプは、出し直した結果・呼び出した語へのものでも検索語を記録する (03 §12.8.1)
+        if let Some(Overlay::WorkspaceSearch(w)) = &mut self.ui.overlay {
+            w.searched = true;
+        }
+        let Some(Overlay::WorkspaceSearch(w)) = &self.ui.overlay else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        let Some(h) = w.hits.get(w.selected.min(w.hits.len().saturating_sub(1))) else {
+            return CommandResult::Done;
+        };
         let jump = WsJump {
             pane: self.focused_pane(),
             line: h.line,
@@ -760,6 +787,17 @@ impl EditorState {
     /// 横断検索のオーバーレイを閉じた (`set_overlay` / `take_overlay` が呼ぶ): 走っている検索を取り消し (次に開いたときに
     /// 探し直す)、状態を持っておく。
     pub(crate) fn ws_search_closed(&mut self, mut w: WsSearchOverlay) {
+        // 利用者が今の検索語で走査を始めていたら (検索中・終わった・失敗した)、その検索語を検索語の履歴に記録する。入力のたびに
+        // 走査を始め直すので、打っている途中の語は記録せず、閉じる時点の語だけを記録する。呼び出しで眺めただけの語・前回の
+        // 結果を出し直しただけの語は記録しない (結果へジャンプしたときは記録する。03 §12.8 の SHI-2 と §12.8.1)
+        if w.searched
+            && matches!(
+                w.status,
+                Status::Running { .. } | Status::Done { .. } | Status::Failed
+            )
+        {
+            self.record_workspace_term(&w.text);
+        }
         match w.status {
             Status::Running { job } => {
                 self.jobs.cancel(job);
