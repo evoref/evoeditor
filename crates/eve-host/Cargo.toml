@@ -18,14 +18,14 @@ test-hooks = []
 
 [dependencies]
 arc-swap = "1.9.3"
-eve-config = { version = "0.4.0", path = "../eve-config" }
-eve-core = { version = "0.4.0", path = "../eve-core" }
-eve-platform = { version = "0.4.0", path = "../eve-platform" }
-eve-view = { version = "0.4.0", path = "../eve-view" }
+eve-config = { version = "0.5.0-rc.1", path = "../eve-config" }
+eve-core = { version = "0.5.0-rc.1", path = "../eve-core" }
+eve-platform = { version = "0.5.0-rc.1", path = "../eve-platform" }
+eve-view = { version = "0.5.0-rc.1", path = "../eve-view" }
 
 [dev-dependencies]
-eve-testkit = { version = "0.4.0", path = "../eve-testkit" }
-eve-text = { version = "0.4.0", path = "../eve-text" }
+eve-testkit = { version = "0.5.0-rc.1", path = "../eve-testkit" }
+eve-text = { version = "0.5.0-rc.1", path = "../eve-text" }
 
 # BM-125s (ワークスペースの走査の時間と、走査の間の io / bg の開始の遅れ。docs/09 §5.2。参考値)
 [[bench]]

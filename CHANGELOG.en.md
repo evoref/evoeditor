@@ -11,6 +11,10 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
+## [0.5.0-rc.1] - TBD
+
+This is the release candidate for v0.5, the first step toward everyday use. **It adds split panes, a finder to find and open files (`Ctrl+O`), search across the workspace, and multiple cursors.** It also adds a tab line, file watching and automatic reloading of settings files, per-OS/environment and per-language settings, workspace settings (`.eve/config.toml`) and `.editorconfig`, your own chords, bracket matching, toggling line comments, block selection, jump history, search history, and more, and startup is as fast as in v0.3.0 again. The downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updates, and known limitations are in the bundled `README.en.md` (Japanese: `README.md`). When you update from v0.4.0, your settings files keep working. Changes in behavior, such as `Ctrl+O` now opening the finder, are listed under "Changed" below.
+
 ### Added
 
 - **Split panes**: you can split the editing area left/right and top/bottom to show different documents, or different places in the same document, side by side. `Ctrl+\` (or `Ctrl+K \`) splits to the right and `Ctrl+K -` splits down; `F6` / `Shift+F6` (or `Ctrl+K Tab` / `Ctrl+K Shift+Tab`) move to the next / previous pane. `Ctrl+K Q` closes the pane (not the document), `Ctrl+K ]` / `Ctrl+K [` change its size, and `Ctrl+K =` evens them out. Moving to the pane on the left, right, above, or below is available from the command palette (no default keys). With two or more panes, each pane shows a header line with the document name at its bottom; the focused pane's header is reversed and starts with `▶`. Files with the same name are told apart by their parent folder, like `mod.rs (a)`. Clicking a header moves the focus to that pane; clicking the text of another pane moves the focus there and moves the cursor. When the terminal becomes too small for the panes, only the focused pane is shown

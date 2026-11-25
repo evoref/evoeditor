@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 # 言語ファイルの検査の書記素と表示幅 (07 §17.4 の検査 3・5・9。03 §13.2 の幅と同じ関数を使う)
-eve-text = { version = "0.4.0", path = "../eve-text" }
+eve-text = { version = "0.5.0-rc.1", path = "../eve-text" }
 toml = "1.1.8"
 # 言語定義の `first_line` (先頭行の正規表現、07 §9.6 の LANG-3)。eve-core の依存として既に入っている crate で、数は増えない。
 # feature は eve-core とそろえる。組込みの定義の正規表現は使うときに組む (起動の経路で組まない、02 §12.1)
