@@ -537,7 +537,7 @@ palette_open = "Commands"
 open_file = "Open"
 
 [info.app]
-release_summary = "Saves the parts you did not edit with their original bytes, and lets you edit documents with invalid bytes. Also adds multi-line regular expressions, standard input, high-contrast themes, and more. See the release notes for details"
+release_summary = "Adds split panes, a finder to open files, search across the workspace, and multiple cursors. Also adds file watching, per-language and workspace settings, and more. See the release notes for details"
 updated = "Updated to evoeditor {version}: {summary}"
 
 [info.cli]
