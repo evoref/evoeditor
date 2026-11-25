@@ -15,6 +15,14 @@ pub(crate) fn default_keymap() -> Keymap {
         "search.replace_focused",
     )
     .expect("既定キーマップの書式は正しい");
+    // `[A] すべて置換` のボタンの `enter` はすべて置換 (コマンドとして実行し、`when` と権限の判定を通す。04 §8.4、Issue #655)
+    l.bind(
+        "search",
+        "enter",
+        "search.replace_all",
+        "search.replace_all_focused",
+    )
+    .expect("既定キーマップの書式は正しい");
     let mut bind = |ctx: &'static str, keys: &str, cmd: &str| {
         l.bind(ctx, keys, cmd, "")
             .expect("既定キーマップの書式は正しい");
@@ -482,5 +490,27 @@ mod tests {
             missing.is_empty(),
             "届く既定キーが無い頻出操作: {missing:?}"
         );
+    }
+
+    // spec: 04 §8.4、07 §7.3 (`search.replace_all_focused`)
+    #[test]
+    fn 検索バーの_enter_はフォーカスの欄で_置換_すべて置換_次へに解決する() {
+        use super::super::{FOCUS_SEARCH, Resolution};
+        use crate::command::context::CtxValue;
+        let enter = parse_sequence("enter").expect("キーの書式")[0];
+        let mut km = default_keymap();
+        let mut run = |focused: Option<&str>| {
+            let lookup = |n: &str| Some(CtxValue::Bool(Some(n) == focused));
+            match km.resolve(FOCUS_SEARCH, enter, &lookup) {
+                Resolution::Run(inv) => inv.id.as_str().to_owned(),
+                other => panic!("{focused:?}: {other:?}"),
+            }
+        };
+        assert_eq!(
+            run(Some("search.replace_all_focused")),
+            "search.replace_all"
+        );
+        assert_eq!(run(Some("search.replace_focused")), "search.replace");
+        assert_eq!(run(None), "search.next", "検索欄");
     }
 }

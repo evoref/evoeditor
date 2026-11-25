@@ -1571,7 +1571,7 @@ verb       := [a-z][a-z0-9_]*
 | `search.toggle_selection` (v0.2) | `cmd.search.toggle_selection` | Ui | — | `search.active` | `ui` | `search` | `alt+l`, `ctrl+k l` (alt) | - |
 | `search.replace_open` | `cmd.search.replace_open` | Ui | — | `!doc.read_only` | `ui` | `editor`, `search` | `mod+r`, `ctrl+h` [E] | - |
 | `search.replace` (v0.2) | `cmd.search.replace` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` (置換欄) | `enter` (置換欄で。v0.1 の置換欄の `enter` は `search.next`。キーマップの `when` は `search.replace_focused`) | search:3 |
-| `search.replace_all` | `cmd.search.replace_all` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` | `alt+a` (`tab` で置換欄から `[A] すべて置換` のボタンへ移り `enter` でも実行できる。v0.5 で、ボタンの `enter` をキーマップの `when` が `search.replace_all_focused` の既定の割当にする (Issue #655。入れる実装の PR でこの列に `enter` を出す)。04 §8.4) | overlay:1 |
+| `search.replace_all` | `cmd.search.replace_all` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` | `alt+a`、`enter` (`tab` で置換欄から `[A] すべて置換` のボタンへ移って。キーマップの `when` は `search.replace_all_focused` (v0.5、Issue #655)。04 §8.4) | overlay:1 |
 | `search.workspace` (v0.5) | `cmd.search.workspace` | Ui | `query?` | — | `ui` | `editor`, `search` | `mod+shift+f` [E][横], `ctrl+k f` (alt) (横断検索、FR-405。03 §12.7.5。`search` から開くと検索バーの検索語とトグルを引き継ぐ。Windows Terminal は `ctrl+shift+f` を横取りする、04 §7.3a) | - |
 | `view.toggle_wrap` (v0.2、OQ-110) | `cmd.view.toggle_wrap` | Ui | — | — | `ui` | `editor` | `alt+z`, `ctrl+k o` (alt) | - |
 

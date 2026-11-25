@@ -90,7 +90,7 @@
 | `search.open` | 検索 | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+F`<br>`search`: `Ctrl+F` | 出す |
 | `search.prev` | 前を検索 | Motion | — | `search.active` | `read` | `search`: `↑`, `Shift+F3` [E], `Shift+Enter` [E] | 出す |
 | `search.replace` | 置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Enter` | 出す |
-| `search.replace_all` | すべて置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Alt+A` | 出す |
+| `search.replace_all` | すべて置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Enter`, `Alt+A` | 出す |
 | `search.replace_open` | 置換 | Ui | — | `!doc.read_only` | `ui` | `editor`: `Ctrl+R`, `Ctrl+H` [E]<br>`search`: `Ctrl+R`, `Ctrl+H` [E] | 出す |
 | `search.toggle_case` | 大小文字の区別を切替 | Ui | — | `search.active \|\| overlay.active == "workspace_search"` | `ui` | `search`: `Alt+C`, `Ctrl+K C`<br>`finder`: `Alt+C`, `Ctrl+K C` | 出す |
 | `search.toggle_regex` | 正規表現を切替 | Ui | — | `search.active \|\| overlay.active == "workspace_search"` | `ui` | `search`: `Alt+R`, `Ctrl+K X`<br>`finder`: `Alt+R`, `Ctrl+K X` | 出す |

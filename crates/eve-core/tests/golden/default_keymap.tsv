@@ -1,5 +1,6 @@
 # context	keys	command	args	when	enhanced
 search	Enter	search.replace	Args({})	ContextExpr(Some(Var("search.replace_focused")))	false
+search	Enter	search.replace_all	Args({})	ContextExpr(Some(Var("search.replace_all_focused")))	false
 global	Ctrl+Q	app.quit	Args({})	ContextExpr(None)	false
 global	Ctrl+P	ui.palette_open	Args({})	ContextExpr(None)	false
 global	F1	ui.palette_open	Args({})	ContextExpr(None)	false
