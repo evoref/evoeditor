@@ -1,0 +1,17 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-103b-search-multiline",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-103b-search-multiline",
+      "max_ms": 4.12,
+      "n": 1000,
+      "p50_ms": 2.32,
+      "p999_ms": 3.88,
+      "p99_ms": 3.51,
+      "quick": false
+    }
+  ]
+}
