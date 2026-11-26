@@ -1,0 +1,22 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-109m-nl-none",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-nl-none",
+      "matches": 0,
+      "max_ms": 89.0,
+      "mb": 100,
+      "min_ms": 42.3,
+      "n": 5,
+      "p50_ms": 52.3,
+      "quick": false,
+      "ratio": 0.51,
+      "ratio_max": 0.67,
+      "ratio_min": 0.23,
+      "ref_p50_ms": 129.2
+    }
+  ]
+}

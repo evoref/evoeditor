@@ -1,0 +1,17 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-103b-bracket-ja",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-103b-bracket-ja",
+      "max_ms": 6.25,
+      "n": 1000,
+      "p50_ms": 2.05,
+      "p999_ms": 5.86,
+      "p99_ms": 5.03,
+      "quick": false
+    }
+  ]
+}

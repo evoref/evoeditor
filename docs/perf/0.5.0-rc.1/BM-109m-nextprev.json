@@ -1,0 +1,29 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-109m-nextprev",
+  "quick": false,
+  "results": [
+    {
+      "burst5_max_ms": 5.115,
+      "burst5_n": 10,
+      "burst5_p50_ms": 3.884,
+      "burst5_p99_ms": 5.115,
+      "id": "BM-109m-nextprev",
+      "matches": 453929,
+      "mb": 100,
+      "n": 10,
+      "next_max_ms": 8.769,
+      "next_n": 10,
+      "next_p50_ms": 7.669,
+      "next_p99_ms": 8.769,
+      "p50_ms": 7.669,
+      "prev_max_ms": 8.354,
+      "prev_n": 10,
+      "prev_p50_ms": 5.693,
+      "prev_p99_ms": 8.354,
+      "quick": false,
+      "scan_ms": 699.9
+    }
+  ]
+}

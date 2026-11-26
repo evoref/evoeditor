@@ -1,0 +1,22 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-109m-unbounded-16m",
+  "quick": false,
+  "results": [
+    {
+      "bytes": 16711757,
+      "id": "BM-109m-unbounded-16m",
+      "matches": 1,
+      "max_ms": 44.3,
+      "min_ms": 41.1,
+      "n": 5,
+      "p50_ms": 43.7,
+      "quick": false,
+      "ratio": 0.81,
+      "ratio_max": 0.83,
+      "ratio_min": 0.72,
+      "ref_p50_ms": 54.9
+    }
+  ]
+}

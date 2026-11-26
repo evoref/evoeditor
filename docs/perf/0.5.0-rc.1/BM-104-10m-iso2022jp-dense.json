@@ -1,0 +1,21 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-104-10m-iso2022jp-dense",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104-10m-iso2022jp-dense",
+      "max_ms": 288.0,
+      "mem_delta_bytes": 28729344,
+      "mem_limit_bytes": 35571000,
+      "p50_ms": 281.0,
+      "p99_ms": 288.0,
+      "partial": false,
+      "quick": false,
+      "records": 161320,
+      "runs": 30,
+      "size_bytes": 10485800
+    }
+  ]
+}

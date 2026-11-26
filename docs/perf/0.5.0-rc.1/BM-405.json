@@ -1,0 +1,80 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-405",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-405-literal-first",
+      "max_ms": 27.92,
+      "n": 5,
+      "p50_ms": 21.73,
+      "p999_ms": 27.92,
+      "p99_ms": 27.92,
+      "quick": true
+    },
+    {
+      "id": "BM-405-literal-done",
+      "max_ms": 31053.4,
+      "n": 5,
+      "p50_ms": 18348.93,
+      "p999_ms": 31053.4,
+      "p99_ms": 31053.4,
+      "quick": true
+    },
+    {
+      "id": "BM-405-regex-first",
+      "max_ms": 17.92,
+      "n": 5,
+      "p50_ms": 17.8,
+      "p999_ms": 17.92,
+      "p99_ms": 17.92,
+      "quick": true
+    },
+    {
+      "id": "BM-405-regex-done",
+      "max_ms": 20420.42,
+      "n": 5,
+      "p50_ms": 17897.74,
+      "p999_ms": 20420.42,
+      "p99_ms": 20420.42,
+      "quick": true
+    },
+    {
+      "id": "BM-405-many-first",
+      "max_ms": 2558.14,
+      "n": 5,
+      "p50_ms": 2239.16,
+      "p999_ms": 2558.14,
+      "p99_ms": 2558.14,
+      "quick": true
+    },
+    {
+      "id": "BM-405-many-done",
+      "max_ms": 7271.9,
+      "n": 5,
+      "p50_ms": 7248.89,
+      "p999_ms": 7271.9,
+      "p99_ms": 7271.9,
+      "quick": true
+    },
+    {
+      "id": "BM-405-sjis-first",
+      "max_ms": 2319.17,
+      "n": 5,
+      "p50_ms": 2263.17,
+      "p999_ms": 2319.17,
+      "p99_ms": 2319.17,
+      "quick": true
+    },
+    {
+      "id": "BM-405-sjis-done",
+      "max_ms": 20295.91,
+      "n": 5,
+      "p50_ms": 18635.27,
+      "p999_ms": 20295.91,
+      "p99_ms": 20295.91,
+      "quick": true
+    }
+  ]
+}

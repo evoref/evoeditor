@@ -1,0 +1,22 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-109-compat",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109-compat",
+      "matches": 0,
+      "max_ms": 25.2,
+      "mb": 100,
+      "min_ms": 20.9,
+      "n": 5,
+      "p50_ms": 21.8,
+      "quick": false,
+      "ratio": 0.84,
+      "ratio_max": 0.88,
+      "ratio_min": 0.8,
+      "ref_p50_ms": 26.6
+    }
+  ]
+}

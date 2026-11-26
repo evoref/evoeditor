@@ -1,0 +1,17 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-104p-10m",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104p-10m",
+      "max_ms": 2.94,
+      "n": 1000,
+      "p50_ms": 1.25,
+      "p999_ms": 2.91,
+      "p99_ms": 2.05,
+      "quick": false
+    }
+  ]
+}

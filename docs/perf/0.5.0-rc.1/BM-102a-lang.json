@@ -1,0 +1,20 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-102a-lang",
+  "quick": false,
+  "results": [
+    {
+      "diff_p50_ms": 4.8,
+      "id": "BM-102a-lang",
+      "max_ms": 20.9,
+      "n": 1000,
+      "p50_ms": 15.22,
+      "p999_ms": 20.63,
+      "p99_ms": 19.27,
+      "pair_id": "BM-102a",
+      "pair_p50_ms": 10.51,
+      "quick": false
+    }
+  ]
+}

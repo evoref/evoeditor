@@ -1,0 +1,16 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-109r-digits-1line",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109r-digits-1line",
+      "matches": 90786,
+      "mb": 10,
+      "n": 3,
+      "p50_ms": 39.3,
+      "quick": false
+    }
+  ]
+}

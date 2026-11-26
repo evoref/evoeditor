@@ -1,0 +1,22 @@
+{
+  "commit": "4327f18",
+  "env": "ENV-W1",
+  "id": "BM-109m-bigk",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-bigk",
+      "matches": 0,
+      "max_ms": 514.8,
+      "mb": 100,
+      "min_ms": 227.6,
+      "n": 5,
+      "p50_ms": 264.0,
+      "quick": false,
+      "ratio": 0.8,
+      "ratio_max": 1.5,
+      "ratio_min": 0.75,
+      "ref_p50_ms": 328.3
+    }
+  ]
+}
